@@ -7,7 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Configuración de las cuentas de MercadoLibre
 const accounts = [
   {
     name: 'TIENDA',
@@ -32,37 +31,24 @@ const accounts = [
   }
 ];
 
-// Función para parsear SKU y separar componentes
 function parseSKU(sku) {
   if (!sku) return [];
-  
   const parts = sku.split('/');
   const components = [];
-  
   for (const part of parts) {
-    // Ignorar si empieza con "5" (es ubicación)
     if (part.startsWith('5')) continue;
-    // Ignorar partes vacías
     if (part.trim() === '') continue;
-    
     components.push(part.trim());
   }
-  
   return components;
 }
 
-// Buscar envío en una cuenta específica
 async function findShipmentInAccount(account, shipmentId) {
   if (!account.accessToken) return null;
-  
   try {
     const response = await axios.get(
       `https://api.mercadolibre.com/shipments/${shipmentId}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${account.accessToken}`
-        }
-      }
+      { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
     );
     return { account: account.name, shipment: response.data };
   } catch (error) {
@@ -70,42 +56,31 @@ async function findShipmentInAccount(account, shipmentId) {
   }
 }
 
-// Obtener items de un envío
 async function getShipmentItems(account, shipmentId) {
   try {
     const response = await axios.get(
       `https://api.mercadolibre.com/shipments/${shipmentId}/items`,
-      {
-        headers: {
-          'Authorization': `Bearer ${account.accessToken}`
-        }
-      }
+      { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
     );
     return response.data;
   } catch (error) {
-    console.error('Error getting shipment items:', error.message);
     return [];
   }
 }
 
-// Endpoint de debug para ver respuesta cruda
 app.get('/api/debug/shipment/:shipmentId', async (req, res) => {
   const { shipmentId } = req.params;
-  
   for (const account of accounts) {
     if (!account.accessToken) continue;
-    
     try {
       const shipmentResponse = await axios.get(
         `https://api.mercadolibre.com/shipments/${shipmentId}`,
         { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
       );
-      
       const itemsResponse = await axios.get(
         `https://api.mercadolibre.com/shipments/${shipmentId}/items`,
         { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
       );
-      
       return res.json({
         account: account.name,
         shipment: shipmentResponse.data,
@@ -115,40 +90,24 @@ app.get('/api/debug/shipment/:shipmentId', async (req, res) => {
       continue;
     }
   }
-  
   res.status(404).json({ error: 'No encontrado' });
 });
 
-// Endpoint principal: buscar envío por ID
 app.get('/api/shipment/:shipmentId', async (req, res) => {
   const { shipmentId } = req.params;
-  
-  // Buscar en todas las cuentas en paralelo
   const promises = accounts.map(account => findShipmentInAccount(account, shipmentId));
   const results = await Promise.all(promises);
-  
-  // Encontrar la cuenta que tiene el envío
   const found = results.find(r => r !== null);
-  
   if (!found) {
     return res.status(404).json({ error: 'Envío no encontrado en ninguna cuenta' });
   }
-  
-  // Obtener la cuenta que encontró el envío
   const account = accounts.find(a => a.name === found.account);
-  
-  // Obtener los items del envío
   const items = await getShipmentItems(account, shipmentId);
-  
-  // Procesar items y expandir SKUs
   const processedItems = [];
   for (const item of items) {
-    // Buscar SKU en varios campos posibles
     const sku = item.seller_sku || item.seller_custom_field || item.sku || '';
     const components = parseSKU(sku);
-    
     if (components.length > 1) {
-      // Es un kit, agregar cada componente
       for (const component of components) {
         processedItems.push({
           id: `${item.id}-${component}`,
@@ -160,7 +119,6 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
         });
       }
     } else if (components.length === 1) {
-      // Producto individual
       processedItems.push({
         id: item.id,
         title: item.title || item.description || 'Sin título',
@@ -169,18 +127,15 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
         isKit: false
       });
     } else {
-      // Sin SKU, mostrar info disponible
       processedItems.push({
         id: item.id,
         title: item.title || item.description || 'Sin título',
         sku: sku || 'SIN SKU',
         quantity: item.quantity,
-        isKit: false,
-        variation_id: item.variation_id || null
+        isKit: false
       });
     }
   }
-  
   res.json({
     account: found.account,
     shipmentId: shipmentId,
@@ -189,52 +144,32 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
   });
 });
 
-// Endpoint para obtener URL de autorización
 app.get('/api/auth/url/:accountName', (req, res) => {
   const { accountName } = req.params;
   const account = accounts.find(a => a.name === accountName.toUpperCase());
-  
   if (!account) {
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   }
-  
   const redirectUri = process.env.REDIRECT_URI || 'https://verificador-envios-ml.onrender.com/auth/callback';
   const authUrl = `https://auth.mercadolibre.com.ar/authorization?response_type=code&client_id=${account.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-  
   res.json({ url: authUrl, account: account.name });
 });
 
-// Callback de autorización
 app.get('/auth/callback', async (req, res) => {
   const { code } = req.query;
-  
   if (!code) {
     return res.send('Error: No se recibió código de autorización');
   }
-  
-  res.send(`
-    <html>
-      <body style="font-family: Arial; padding: 40px; text-align: center;">
-        <h1>✅ Código recibido</h1>
-        <p>Código de autorización:</p>
-        <code style="background: #f0f0f0; padding: 10px; display: block; margin: 20px;">${code}</code>
-        <p>Guardá este código, lo necesitás para obtener el Access Token.</p>
-      </body>
-    </html>
-  `);
+  res.send(`<html><body style="font-family: Arial; padding: 40px; text-align: center;"><h1>Código recibido</h1><p>Código de autorización:</p><code style="background: #f0f0f0; padding: 10px; display: block; margin: 20px;">${code}</code><p>Guardá este código.</p></body></html>`);
 });
 
-// Endpoint para intercambiar código por token
 app.post('/api/auth/token', async (req, res) => {
   const { accountName, code } = req.body;
   const account = accounts.find(a => a.name === accountName.toUpperCase());
-  
   if (!account) {
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   }
-  
   const redirectUri = process.env.REDIRECT_URI || 'https://verificador-envios-ml.onrender.com/auth/callback';
-  
   try {
     const response = await axios.post('https://api.mercadolibre.com/oauth/token', null, {
       params: {
@@ -244,12 +179,8 @@ app.post('/api/auth/token', async (req, res) => {
         code: code,
         redirect_uri: redirectUri
       },
-      headers: {
-        'accept': 'application/json',
-        'content-type': 'application/x-www-form-urlencoded'
-      }
+      headers: { 'accept': 'application/json', 'content-type': 'application/x-www-form-urlencoded' }
     });
-    
     res.json({
       account: account.name,
       access_token: response.data.access_token,
@@ -257,14 +188,10 @@ app.post('/api/auth/token', async (req, res) => {
       expires_in: response.data.expires_in
     });
   } catch (error) {
-    res.status(400).json({ 
-      error: 'Error al obtener token',
-      details: error.response?.data || error.message 
-    });
+    res.status(400).json({ error: 'Error al obtener token', details: error.response?.data || error.message });
   }
 });
 
-// Health check
 app.get('/', (req, res) => {
   res.json({ status: 'OK', message: 'Verificador de Envíos ML - Backend funcionando' });
 });
@@ -273,12 +200,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
 });
-```
-
-5. Click en **"Commit changes"** y confirmá
-
----
-
-Render va a hacer deploy automáticamente. Esperá 1-2 minutos y después probá:
-```
-https://verificador-envios-ml.onrender.com/api/debug/shipment/46198123499
