@@ -50,21 +50,41 @@ async function findShipmentInAccount(account, shipmentId) {
       `https://api.mercadolibre.com/shipments/${shipmentId}`,
       { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
     );
-    return { account: account.name, shipment: response.data };
+    return { account: account.name, shipment: response.data, token: account.accessToken };
   } catch (error) {
     return null;
   }
 }
 
-async function getShipmentItems(account, shipmentId) {
+async function getShipmentItems(token, shipmentId) {
   try {
     const response = await axios.get(
       `https://api.mercadolibre.com/shipments/${shipmentId}/items`,
-      { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
+      { headers: { 'Authorization': `Bearer ${token}` } }
     );
     return response.data;
   } catch (error) {
     return [];
+  }
+}
+
+async function getItemSKU(token, itemId, variationId) {
+  try {
+    if (variationId) {
+      const response = await axios.get(
+        `https://api.mercadolibre.com/items/${itemId}/variations/${variationId}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      return response.data.seller_custom_field || response.data.seller_sku || null;
+    } else {
+      const response = await axios.get(
+        `https://api.mercadolibre.com/items/${itemId}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      return response.data.seller_custom_field || response.data.seller_sku || null;
+    }
+  } catch (error) {
+    return null;
   }
 }
 
@@ -101,17 +121,20 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
   if (!found) {
     return res.status(404).json({ error: 'Envío no encontrado en ninguna cuenta' });
   }
-  const account = accounts.find(a => a.name === found.account);
-  const items = await getShipmentItems(account, shipmentId);
+  const token = found.token;
+  const items = await getShipmentItems(token, shipmentId);
   const processedItems = [];
+  
   for (const item of items) {
-    const sku = item.seller_sku || item.seller_custom_field || item.sku || '';
+    const sku = await getItemSKU(token, item.item_id, item.variation_id);
     const components = parseSKU(sku);
+    const title = item.description || 'Sin título';
+    
     if (components.length > 1) {
       for (const component of components) {
         processedItems.push({
-          id: `${item.id}-${component}`,
-          title: item.title || item.description || 'Sin título',
+          id: `${item.item_id}-${component}`,
+          title: title,
           sku: component,
           quantity: item.quantity,
           isKit: true,
@@ -120,22 +143,23 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
       }
     } else if (components.length === 1) {
       processedItems.push({
-        id: item.id,
-        title: item.title || item.description || 'Sin título',
+        id: item.item_id,
+        title: title,
         sku: components[0],
         quantity: item.quantity,
         isKit: false
       });
     } else {
       processedItems.push({
-        id: item.id,
-        title: item.title || item.description || 'Sin título',
+        id: item.item_id,
+        title: title,
         sku: sku || 'SIN SKU',
         quantity: item.quantity,
         isKit: false
       });
     }
   }
+  
   res.json({
     account: found.account,
     shipmentId: shipmentId,
@@ -160,7 +184,7 @@ app.get('/auth/callback', async (req, res) => {
   if (!code) {
     return res.send('Error: No se recibió código de autorización');
   }
-  res.send(`<html><body style="font-family: Arial; padding: 40px; text-align: center;"><h1>Código recibido</h1><p>Código de autorización:</p><code style="background: #f0f0f0; padding: 10px; display: block; margin: 20px;">${code}</code><p>Guardá este código.</p></body></html>`);
+  res.send(`<html><body style="font-family: Arial; padding: 40px; text-align: center;"><h1>Código recibido</h1><code style="background: #f0f0f0; padding: 10px; display: block; margin: 20px;">${code}</code></body></html>`);
 });
 
 app.post('/api/auth/token', async (req, res) => {
@@ -200,3 +224,8 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
 });
+```
+
+Hacé **Commit changes**, esperá 2 minutos, y probá:
+```
+https://verificador-envios-ml.onrender.com/api/shipment/46198123499
