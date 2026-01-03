@@ -119,7 +119,7 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
   const results = await Promise.all(promises);
   const found = results.find(r => r !== null);
   if (!found) {
-    return res.status(404).json({ error: 'Envío no encontrado en ninguna cuenta' });
+    return res.status(404).json({ error: 'Envio no encontrado en ninguna cuenta' });
   }
   const token = found.token;
   const items = await getShipmentItems(token, shipmentId);
@@ -128,12 +128,12 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
   for (const item of items) {
     const sku = await getItemSKU(token, item.item_id, item.variation_id);
     const components = parseSKU(sku);
-    const title = item.description || 'Sin título';
+    const title = item.description || 'Sin titulo';
     
     if (components.length > 1) {
       for (const component of components) {
         processedItems.push({
-          id: `${item.item_id}-${component}`,
+          id: item.item_id + '-' + component,
           title: title,
           sku: component,
           quantity: item.quantity,
@@ -175,16 +175,16 @@ app.get('/api/auth/url/:accountName', (req, res) => {
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   }
   const redirectUri = process.env.REDIRECT_URI || 'https://verificador-envios-ml.onrender.com/auth/callback';
-  const authUrl = `https://auth.mercadolibre.com.ar/authorization?response_type=code&client_id=${account.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  const authUrl = 'https://auth.mercadolibre.com.ar/authorization?response_type=code&client_id=' + account.clientId + '&redirect_uri=' + encodeURIComponent(redirectUri);
   res.json({ url: authUrl, account: account.name });
 });
 
 app.get('/auth/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) {
-    return res.send('Error: No se recibió código de autorización');
+    return res.send('Error: No se recibio codigo de autorizacion');
   }
-  res.send(`<html><body style="font-family: Arial; padding: 40px; text-align: center;"><h1>Código recibido</h1><code style="background: #f0f0f0; padding: 10px; display: block; margin: 20px;">${code}</code></body></html>`);
+  res.send('<html><body style="font-family: Arial; padding: 40px; text-align: center;"><h1>Codigo recibido</h1><code style="background: #f0f0f0; padding: 10px; display: block; margin: 20px;">' + code + '</code></body></html>');
 });
 
 app.post('/api/auth/token', async (req, res) => {
@@ -212,20 +212,15 @@ app.post('/api/auth/token', async (req, res) => {
       expires_in: response.data.expires_in
     });
   } catch (error) {
-    res.status(400).json({ error: 'Error al obtener token', details: error.response?.data || error.message });
+    res.status(400).json({ error: 'Error al obtener token', details: error.response ? error.response.data : error.message });
   }
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'OK', message: 'Verificador de Envíos ML - Backend funcionando' });
+  res.json({ status: 'OK', message: 'Verificador de Envios ML - Backend funcionando' });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+app.listen(PORT, function() {
+  console.log('Servidor corriendo en puerto ' + PORT);
 });
-```
-
-Hacé **Commit changes**, esperá 2 minutos, y probá:
-```
-https://verificador-envios-ml.onrender.com/api/shipment/46198123499
