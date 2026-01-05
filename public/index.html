@@ -321,6 +321,17 @@
     var codeReader = null;
     var isScanning = false;
     
+    // Configurar hints para leer QR y códigos de barras
+    var hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.ITF
+    ]);
+    
     var shipmentInput = document.getElementById('shipmentInput');
     var searchBtn = document.getElementById('searchBtn');
     var cameraBtn = document.getElementById('cameraBtn');
@@ -476,7 +487,7 @@
     
     function startCamera() {
       if (!codeReader) {
-        codeReader = new ZXing.BrowserBarcodeReader();
+        codeReader = new ZXing.BrowserMultiFormatReader(hints);
       }
       
       cameraContainer.classList.add('active');
@@ -485,9 +496,18 @@
       codeReader.decodeFromVideoDevice(null, 'video', function(result, error) {
         if (result && isScanning) {
           isScanning = false;
-          shipmentInput.value = result.getText();
+          var texto = result.getText();
+          // Si es QR de ML, extraer el numero de envio
+          if (texto.indexOf('shipment_id=') > -1) {
+            var match = texto.match(/shipment_id=(\d+)/);
+            if (match) texto = match[1];
+          } else if (texto.indexOf('/shipments/') > -1) {
+            var match = texto.match(/\/shipments\/(\d+)/);
+            if (match) texto = match[1];
+          }
+          shipmentInput.value = texto;
           stopCamera();
-          searchShipment(result.getText());
+          searchShipment(texto);
         }
       }).catch(function(err) {
         showStatus('No se pudo acceder a la camara', 'error');
