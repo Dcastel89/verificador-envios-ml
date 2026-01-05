@@ -2,32 +2,36 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#2563eb">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Verificador de Envios</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-192.png">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #f3f4f6;
       min-height: 100vh;
-      padding-bottom: 100px;
     }
+    
     .header {
       background: #2563eb;
       color: white;
       padding: 16px;
       text-align: center;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .header h1 { font-size: 18px; font-weight: 600; }
+    
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
     .account-badge {
       display: inline-block;
       background: rgba(255,255,255,0.2);
@@ -36,7 +40,13 @@
       font-size: 12px;
       margin-top: 8px;
     }
-    .container { padding: 16px; max-width: 500px; margin: 0 auto; }
+    
+    .container {
+      padding: 16px;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    
     .scan-section {
       background: white;
       border-radius: 12px;
@@ -44,15 +54,20 @@
       margin-bottom: 16px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-    .scan-input-group { display: flex; gap: 8px; }
+    
+    .scan-input-group {
+      display: flex;
+      gap: 8px;
+    }
+    
     .scan-input {
       flex: 1;
       padding: 14px 16px;
       font-size: 16px;
       border: 2px solid #e5e7eb;
       border-radius: 8px;
-      outline: none;
     }
+    
     .scan-btn {
       padding: 14px 20px;
       background: #2563eb;
@@ -61,7 +76,13 @@
       border-radius: 8px;
       font-size: 16px;
       font-weight: 600;
+      cursor: pointer;
     }
+    
+    .scan-btn:disabled {
+      background: #9ca3af;
+    }
+    
     .camera-btn {
       width: 100%;
       padding: 14px;
@@ -72,34 +93,151 @@
       border-radius: 8px;
       font-size: 16px;
       font-weight: 600;
+      cursor: pointer;
     }
-    .camera-container { display: none; margin-top: 16px; position: relative; }
-    .camera-container.active { display: block; }
-    #video { width: 100%; border-radius: 8px; }
-    .camera-overlay {
+    
+    .camera-container {
+      display: none;
+      margin-top: 16px;
+      position: relative;
+    }
+    
+    .camera-container.active {
+      display: block;
+    }
+    
+    #video {
+      width: 100%;
+      border-radius: 8px;
+    }
+    
+    .close-camera {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 80%;
-      height: 100px;
-      border: 3px solid #22c55e;
-      box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      font-size: 20px;
+      cursor: pointer;
     }
-    .status-message { padding: 12px 16px; border-radius: 8px; display: none; }
-    .status-message.show { display: block; }
-    .items-section { background: white; border-radius: 12px; overflow: hidden; }
+    
+    .status-message {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      display: none;
+    }
+    
+    .status-message.show {
+      display: block;
+    }
+    
+    .status-message.error {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+    
+    .status-message.success {
+      background: #f0fdf4;
+      color: #16a34a;
+      border: 1px solid #bbf7d0;
+    }
+    
+    .status-message.loading {
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+    }
+    
+    .items-section {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
     .items-header {
       padding: 16px;
       background: #f9fafb;
       border-bottom: 1px solid #e5e7eb;
       display: flex;
       justify-content: space-between;
+      align-items: center;
     }
-    .item-card { padding: 16px; border-bottom: 1px solid #e5e7eb; display: flex; gap: 12px; }
-    .item-card.checked { background: #f0fdf4; }
-    .item-checkbox { width: 28px; height: 28px; }
-    .item-sku { font-size: 18px; font-weight: 700; font-family: monospace; }
+    
+    .items-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+    }
+    
+    .items-count {
+      font-size: 14px;
+      color: #6b7280;
+    }
+    
+    .item-card {
+      padding: 16px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      cursor: pointer;
+    }
+    
+    .item-card:last-child {
+      border-bottom: none;
+    }
+    
+    .item-card.checked {
+      background: #f0fdf4;
+    }
+    
+    .item-checkbox {
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+    }
+    
+    .item-info {
+      flex: 1;
+    }
+    
+    .item-sku {
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+    }
+    
+    .item-description {
+      font-size: 14px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+    
+    .item-quantity {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+    
+    .item-kit-badge {
+      display: inline-block;
+      background: #dbeafe;
+      color: #1d4ed8;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    
     .complete-banner {
       display: none;
       position: fixed;
@@ -113,7 +251,11 @@
       font-size: 18px;
       font-weight: 600;
     }
-    .complete-banner.show { display: block; }
+    
+    .complete-banner.show {
+      display: block;
+    }
+    
     .reset-btn {
       width: 100%;
       padding: 14px;
@@ -124,8 +266,12 @@
       border-radius: 8px;
       font-size: 16px;
       font-weight: 600;
+      cursor: pointer;
     }
-    .hidden { display: none !important; }
+    
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -133,40 +279,257 @@
     <h1>Verificador de Envios</h1>
     <div class="account-badge" id="accountBadge">Sin conexion</div>
   </div>
-
+  
   <div class="container">
     <div class="scan-section">
       <div class="scan-input-group">
         <input type="text" id="shipmentInput" class="scan-input" placeholder="Numero de envio...">
-        <button id="searchBtn" class="scan-btn">Buscar</button>
+        <button type="button" id="searchBtn" class="scan-btn">Buscar</button>
       </div>
-      <button id="cameraBtn" class="camera-btn">Escanear con camara</button>
+      
+      <button type="button" id="cameraBtn" class="camera-btn">Escanear con camara</button>
+      
       <div class="camera-container" id="cameraContainer">
         <video id="video" playsinline></video>
-        <div class="camera-overlay"></div>
+        <button type="button" class="close-camera" id="closeCamera">✕</button>
       </div>
     </div>
-
+    
     <div class="status-message" id="statusMessage"></div>
-
+    
     <div class="items-section hidden" id="itemsSection">
       <div class="items-header">
         <h2>Productos a verificar</h2>
-        <span id="itemsCount">0/0</span>
+        <span class="items-count" id="itemsCount">0/0</span>
       </div>
       <div id="itemsList"></div>
     </div>
-
-    <button class="reset-btn hidden" id="resetBtn">Nuevo envio</button>
+    
+    <button type="button" class="reset-btn hidden" id="resetBtn">Nuevo envio</button>
   </div>
-
+  
   <div class="complete-banner" id="completeBanner">
     ✓ Envio verificado correctamente
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
   <script>
-    const API_URL = window.location.origin;
+    var API_URL = '';
+    
+    var currentItems = [];
+    var checkedItems = {};
+    var codeReader = null;
+    var isScanning = false;
+    
+    var shipmentInput = document.getElementById('shipmentInput');
+    var searchBtn = document.getElementById('searchBtn');
+    var cameraBtn = document.getElementById('cameraBtn');
+    var cameraContainer = document.getElementById('cameraContainer');
+    var closeCamera = document.getElementById('closeCamera');
+    var video = document.getElementById('video');
+    var statusMessage = document.getElementById('statusMessage');
+    var itemsSection = document.getElementById('itemsSection');
+    var itemsList = document.getElementById('itemsList');
+    var itemsCount = document.getElementById('itemsCount');
+    var completeBanner = document.getElementById('completeBanner');
+    var resetBtn = document.getElementById('resetBtn');
+    var accountBadge = document.getElementById('accountBadge');
+    
+    function showStatus(message, type) {
+      statusMessage.textContent = message;
+      statusMessage.className = 'status-message show ' + type;
+    }
+    
+    function hideStatus() {
+      statusMessage.className = 'status-message';
+    }
+    
+    function countChecked() {
+      var count = 0;
+      for (var key in checkedItems) {
+        if (checkedItems[key]) count++;
+      }
+      return count;
+    }
+    
+    function updateItemsCount() {
+      var total = currentItems.length;
+      var checked = countChecked();
+      itemsCount.textContent = checked + '/' + total;
+      
+      if (checked === total && total > 0) {
+        completeBanner.classList.add('show');
+        if (navigator.vibrate) {
+          navigator.vibrate([100, 50, 100]);
+        }
+      } else {
+        completeBanner.classList.remove('show');
+      }
+    }
+    
+    function renderItems() {
+      itemsList.innerHTML = '';
+      
+      for (var i = 0; i < currentItems.length; i++) {
+        var item = currentItems[i];
+        var isChecked = checkedItems[i] === true;
+        
+        var card = document.createElement('div');
+        card.className = 'item-card' + (isChecked ? ' checked' : '');
+        card.setAttribute('data-index', i);
+        
+        var checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'item-checkbox';
+        checkbox.checked = isChecked;
+        checkbox.setAttribute('data-index', i);
+        
+        var info = document.createElement('div');
+        info.className = 'item-info';
+        
+        var skuDiv = document.createElement('div');
+        skuDiv.className = 'item-sku';
+        skuDiv.textContent = item.sku;
+        if (item.isKit) {
+          var badge = document.createElement('span');
+          badge.className = 'item-kit-badge';
+          badge.textContent = 'KIT';
+          skuDiv.appendChild(badge);
+        }
+        
+        var descDiv = document.createElement('div');
+        descDiv.className = 'item-description';
+        descDiv.textContent = item.description;
+        
+        var qtyDiv = document.createElement('div');
+        qtyDiv.className = 'item-quantity';
+        qtyDiv.textContent = 'Cantidad: ' + item.quantity;
+        
+        info.appendChild(skuDiv);
+        info.appendChild(descDiv);
+        info.appendChild(qtyDiv);
+        
+        card.appendChild(checkbox);
+        card.appendChild(info);
+        itemsList.appendChild(card);
+      }
+      
+      updateItemsCount();
+    }
+    
+    itemsList.addEventListener('click', function(e) {
+      var card = e.target.closest('.item-card');
+      if (!card) return;
+      
+      var index = parseInt(card.getAttribute('data-index'));
+      var checkbox = card.querySelector('.item-checkbox');
+      
+      if (e.target !== checkbox) {
+        checkbox.checked = !checkbox.checked;
+      }
+      
+      checkedItems[index] = checkbox.checked;
+      card.className = 'item-card' + (checkbox.checked ? ' checked' : '');
+      updateItemsCount();
+    });
+    
+    function searchShipment(shipmentId) {
+      if (!shipmentId || shipmentId.trim() === '') {
+        showStatus('Ingresa un numero de envio', 'error');
+        return;
+      }
+      
+      showStatus('Buscando envio...', 'loading');
+      searchBtn.disabled = true;
+      searchBtn.textContent = '...';
+      
+      fetch(API_URL + '/api/shipment/' + shipmentId.trim())
+        .then(function(response) {
+          return response.json().then(function(data) {
+            if (!response.ok) {
+              throw new Error(data.error || 'Error al buscar envio');
+            }
+            return data;
+          });
+        })
+        .then(function(data) {
+          currentItems = data.items;
+          checkedItems = {};
+          
+          accountBadge.textContent = data.account;
+          hideStatus();
+          itemsSection.classList.remove('hidden');
+          resetBtn.classList.remove('hidden');
+          renderItems();
+          
+          stopCamera();
+        })
+        .catch(function(error) {
+          showStatus(error.message, 'error');
+          itemsSection.classList.add('hidden');
+        })
+        .finally(function() {
+          searchBtn.disabled = false;
+          searchBtn.textContent = 'Buscar';
+        });
+    }
+    
+    function startCamera() {
+      if (!codeReader) {
+        codeReader = new ZXing.BrowserBarcodeReader();
+      }
+      
+      cameraContainer.classList.add('active');
+      isScanning = true;
+      
+      codeReader.decodeFromVideoDevice(null, 'video', function(result, error) {
+        if (result && isScanning) {
+          isScanning = false;
+          shipmentInput.value = result.getText();
+          stopCamera();
+          searchShipment(result.getText());
+        }
+      }).catch(function(err) {
+        showStatus('No se pudo acceder a la camara', 'error');
+        stopCamera();
+      });
+    }
+    
+    function stopCamera() {
+      isScanning = false;
+      cameraContainer.classList.remove('active');
+      if (codeReader) {
+        codeReader.reset();
+      }
+    }
+    
+    function reset() {
+      currentItems = [];
+      checkedItems = {};
+      shipmentInput.value = '';
+      itemsSection.classList.add('hidden');
+      resetBtn.classList.add('hidden');
+      completeBanner.classList.remove('show');
+      hideStatus();
+      accountBadge.textContent = 'Sin conexion';
+      shipmentInput.focus();
+    }
+    
+    searchBtn.onclick = function() {
+      searchShipment(shipmentInput.value);
+    };
+    
+    shipmentInput.onkeypress = function(e) {
+      if (e.key === 'Enter') {
+        searchShipment(shipmentInput.value);
+      }
+    };
+    
+    cameraBtn.onclick = startCamera;
+    closeCamera.onclick = stopCamera;
+    resetBtn.onclick = reset;
+    
+    console.log('App iniciada');
   </script>
 </body>
 </html>
