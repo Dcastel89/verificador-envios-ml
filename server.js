@@ -3,11 +3,26 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
+const { google } = require('googleapis');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Google Sheets setup
+var sheets = null;
+var SHEET_ID = process.env.GOOGLE_SHEET_ID;
+
+if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+  var auth = new google.auth.JWT(
+    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    null,
+    process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    ['https://www.googleapis.com/auth/spreadsheets']
+  );
+  sheets = google.sheets({ version: 'v4', auth: auth });
+}
 
 const accounts = [
   {
@@ -32,6 +47,202 @@ const accounts = [
     refreshToken: process.env.FURST_REFRESH_TOKEN
   }
 ];
+
+// Verificar si estamos en horario laboral (Lun-Vie 8:30-19:00 Argentina)
+function isWorkingHours() {
+  var now = new Date();
+  var argentinaOffset = -3 * 60;
+  var localOffset = now.getTimezoneOffset();
+  var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+  
+  var day = argentinaTime.getDay();
+  var hour = argentinaTime.getHours();
+  var minute = argentinaTime.getMinutes();
+  var timeInMinutes = hour * 60 + minute;
+  
+  // Lunes (1) a Viernes (5), 8:30 (510) a 19:00 (1140)
+  if (day >= 1 && day <= 5 && timeInMinutes >= 510 && timeInMinutes < 1140) {
+    return true;
+  }
+  return false;
+}
+
+// Obtener envíos ready_to_ship de una cuenta
+async function getReadyToShipOrders(account) {
+  if (!account.accessToken) return [];
+  try {
+    var response = await axios.get(
+      'https://api.mercadolibre.com/shipments/search',
+      {
+        params: {
+          seller_id: 'me',
+          status: 'ready_to_ship',
+          limit: 50
+        },
+        headers: { 'Authorization': 'Bearer ' + account.accessToken }
+      }
+    );
+    
+    var shipments = response.data.results || [];
+    
+    // Filtrar: excluir fulfillment (FULL) y self_service sin carrier (acordar)
+    var filtered = shipments.filter(function(s) {
+      if (s.logistic_type === 'fulfillment') return false;
+      if (s.logistic_type === 'self_service' && !s.tracking_method) return false;
+      return true;
+    });
+    
+    return filtered.map(function(s) {
+      return {
+        id: s.id.toString(),
+        account: account.name,
+        dateCreated: s.date_created,
+        receiverName: s.receiver_address ? s.receiver_address.receiver_name : 'N/A',
+        logisticType: s.logistic_type
+      };
+    });
+  } catch (error) {
+    console.error('Error obteniendo envios de ' + account.name + ':', error.message);
+    return [];
+  }
+}
+
+// Obtener envíos existentes en la hoja
+async function getExistingShipmentIds() {
+  if (!sheets || !SHEET_ID) return [];
+  try {
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'A:C'
+    });
+    var rows = response.data.values || [];
+    var ids = [];
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][2]) ids.push(rows[i][2].toString());
+    }
+    return ids;
+  } catch (error) {
+    console.error('Error leyendo sheet:', error.message);
+    return [];
+  }
+}
+
+// Agregar envíos pendientes a la hoja
+async function addPendingShipments(shipments) {
+  if (!sheets || !SHEET_ID || shipments.length === 0) return;
+  try {
+    var rows = shipments.map(function(s) {
+      var date = new Date(s.dateCreated);
+      var argentinaOffset = -3 * 60;
+      var localOffset = date.getTimezoneOffset();
+      var argentinaDate = new Date(date.getTime() + (localOffset + argentinaOffset) * 60000);
+      
+      var fecha = argentinaDate.toLocaleDateString('es-AR');
+      var hora = argentinaDate.toLocaleTimeString('es-AR');
+      
+      return [fecha, hora, s.id, s.account, s.receiverName, '', 'Pendiente', ''];
+    });
+    
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: 'A:H',
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: rows }
+    });
+    
+    console.log('Agregados ' + shipments.length + ' envios pendientes');
+  } catch (error) {
+    console.error('Error agregando envios:', error.message);
+  }
+}
+
+// Marcar envío como verificado
+async function markAsVerified(shipmentId, items) {
+  if (!sheets || !SHEET_ID) return;
+  try {
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'A:H'
+    });
+    var rows = response.data.values || [];
+    var rowIndex = -1;
+    
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][2] && rows[i][2].toString() === shipmentId.toString()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+    
+    if (rowIndex === -1) {
+      // Si no existe, agregar nueva fila
+      var now = new Date();
+      var argentinaOffset = -3 * 60;
+      var localOffset = now.getTimezoneOffset();
+      var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+      var fecha = argentinaTime.toLocaleDateString('es-AR');
+      var hora = argentinaTime.toLocaleTimeString('es-AR');
+      var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
+      
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: 'A:H',
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora]] }
+      });
+    } else {
+      // Actualizar fila existente
+      var now = new Date();
+      var argentinaOffset = -3 * 60;
+      var localOffset = now.getTimezoneOffset();
+      var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+      var horaVerif = argentinaTime.toLocaleTimeString('es-AR');
+      var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
+      
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: 'F' + rowIndex + ':H' + rowIndex,
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [[itemsStr, 'Verificado', horaVerif]] }
+      });
+    }
+    
+    console.log('Envio ' + shipmentId + ' marcado como verificado');
+  } catch (error) {
+    console.error('Error marcando verificado:', error.message);
+  }
+}
+
+// Sincronizar envíos pendientes
+async function syncPendingShipments() {
+  if (!isWorkingHours()) {
+    return;
+  }
+  
+  console.log('Sincronizando envios pendientes...');
+  
+  var existingIds = await getExistingShipmentIds();
+  var allShipments = [];
+  
+  for (var i = 0; i < accounts.length; i++) {
+    var shipments = await getReadyToShipOrders(accounts[i]);
+    allShipments = allShipments.concat(shipments);
+  }
+  
+  var newShipments = allShipments.filter(function(s) {
+    return existingIds.indexOf(s.id) === -1;
+  });
+  
+  if (newShipments.length > 0) {
+    await addPendingShipments(newShipments);
+  }
+  
+  console.log('Sync completado. Nuevos: ' + newShipments.length);
+}
+
+// Iniciar sincronización cada 1 minuto
+setInterval(syncPendingShipments, 60000);
+setTimeout(syncPendingShipments, 5000); // Primera sync 5 segundos después de iniciar
 
 function describeSKU(sku) {
   if (!sku) return '';
@@ -208,13 +419,11 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     var item = items[i];
     var sku = null;
     
-    // Primero intentar obtener SKU de la variación
     if (item.variation_id) {
       var itemData = await getItemWithVariations(token, item.item_id);
       sku = findSKUInVariation(itemData, item.variation_id);
     }
     
-    // Si no hay variación o no se encontró SKU, buscar en user_product_id (catálogo)
     if (!sku && item.user_product_id) {
       sku = await getUserProductSKU(token, item.user_product_id);
     }
@@ -262,6 +471,20 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     status: found.shipment.status,
     items: processedItems
   });
+});
+
+app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
+  var shipmentId = req.params.shipmentId;
+  var items = req.body.items || [];
+  
+  await markAsVerified(shipmentId, items);
+  
+  res.json({ success: true, message: 'Registro guardado' });
+});
+
+app.get('/api/sync', async function(req, res) {
+  await syncPendingShipments();
+  res.json({ success: true, message: 'Sincronizacion ejecutada' });
 });
 
 app.get('/api/auth/url/:accountName', function(req, res) {
@@ -314,7 +537,12 @@ app.post('/api/auth/token', async function(req, res) {
 });
 
 app.get('/api/status', function(req, res) {
-  res.json({ status: 'OK', message: 'Verificador de Envios ML - Backend funcionando' });
+  res.json({ 
+    status: 'OK', 
+    message: 'Verificador de Envios ML', 
+    sheets: sheets ? 'conectado' : 'no configurado',
+    workingHours: isWorkingHours()
+  });
 });
 
 var PORT = process.env.PORT || 3000;
