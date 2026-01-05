@@ -85,6 +85,9 @@
       var unitChecks = {};
       var codeReader = null;
       var isScanning = false;
+      var currentShipmentId = '';
+      var currentAccount = '';
+      var alreadySaved = false;
 
       var shipmentInput = document.getElementById('shipmentInput');
       var searchBtn = document.getElementById('searchBtn');
@@ -126,6 +129,19 @@
         return count;
       }
 
+      function saveVerification() {
+        if (alreadySaved) return;
+        alreadySaved = true;
+        
+        fetch(API_URL + '/api/shipment/' + currentShipmentId + '/verificado', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: currentItems, cuenta: currentAccount })
+        }).catch(function(err) {
+          console.error('Error guardando verificacion:', err);
+        });
+      }
+
       function updateItemsCount() {
         var total = currentItems.length;
         var checked = countCompletedItems();
@@ -133,6 +149,7 @@
         if (checked === total && total > 0) {
           completeBanner.classList.add('show');
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+          saveVerification();
         } else {
           completeBanner.classList.remove('show');
         }
@@ -235,6 +252,9 @@
           .then(function(data) {
             currentItems = data.items;
             unitChecks = {};
+            currentShipmentId = shipmentId.trim();
+            currentAccount = data.account;
+            alreadySaved = false;
             accountBadge.textContent = data.account;
             hideStatus();
             itemsSection.classList.remove('hidden');
@@ -309,6 +329,9 @@
       function reset() {
         currentItems = [];
         unitChecks = {};
+        currentShipmentId = '';
+        currentAccount = '';
+        alreadySaved = false;
         shipmentInput.value = '';
         itemsSection.classList.add('hidden');
         resetBtn.classList.add('hidden');
@@ -324,7 +347,7 @@
       closeCameraBtn.onclick = stopCamera;
       resetBtn.onclick = reset;
 
-      console.log('App iniciada v4');
+      console.log('App iniciada v5');
     })();
   </script>
 </body>
