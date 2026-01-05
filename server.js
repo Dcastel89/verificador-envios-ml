@@ -119,6 +119,28 @@ async function getItemWithVariations(token, itemId) {
   }
 }
 
+async function getUserProductSKU(token, userProductId) {
+  if (!userProductId) return null;
+  try {
+    var response = await axios.get(
+      'https://api.mercadolibre.com/user-products/' + userProductId,
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    );
+    var data = response.data;
+    if (data && data.attributes) {
+      for (var i = 0; i < data.attributes.length; i++) {
+        var attr = data.attributes[i];
+        if (attr.id === 'SELLER_SKU' && attr.values && attr.values[0] && attr.values[0].name) {
+          return attr.values[0].name;
+        }
+      }
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function findSKUInVariation(item, variationId) {
   if (!item || !item.variations) return null;
   for (var i = 0; i < item.variations.length; i++) {
@@ -184,8 +206,19 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
   
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
-    var itemData = await getItemWithVariations(token, item.item_id);
-    var sku = findSKUInVariation(itemData, item.variation_id);
+    var sku = null;
+    
+    // Primero intentar obtener SKU de la variación
+    if (item.variation_id) {
+      var itemData = await getItemWithVariations(token, item.item_id);
+      sku = findSKUInVariation(itemData, item.variation_id);
+    }
+    
+    // Si no hay variación o no se encontró SKU, buscar en user_product_id (catálogo)
+    if (!sku && item.user_product_id) {
+      sku = await getUserProductSKU(token, item.user_product_id);
+    }
+    
     var components = parseSKU(sku);
     var title = item.description || 'Sin titulo';
     
