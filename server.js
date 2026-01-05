@@ -33,12 +33,13 @@ const accounts = [
 
 function parseSKU(sku) {
   if (!sku) return [];
-  const parts = sku.split('/');
-  const components = [];
-  for (const part of parts) {
-    if (part.startsWith('5')) continue;
-    if (part.trim() === '') continue;
-    components.push(part.trim());
+  var parts = sku.split('/');
+  var components = [];
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i].trim();
+    if (part.match(/^5[A-Z0-9]/)) continue;
+    if (part === '') continue;
+    components.push(part);
   }
   return components;
 }
@@ -46,9 +47,9 @@ function parseSKU(sku) {
 async function findShipmentInAccount(account, shipmentId) {
   if (!account.accessToken) return null;
   try {
-    const response = await axios.get(
-      `https://api.mercadolibre.com/shipments/${shipmentId}`,
-      { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
+    var response = await axios.get(
+      'https://api.mercadolibre.com/shipments/' + shipmentId,
+      { headers: { 'Authorization': 'Bearer ' + account.accessToken } }
     );
     return { account: account.name, shipment: response.data, token: account.accessToken };
   } catch (error) {
@@ -58,9 +59,9 @@ async function findShipmentInAccount(account, shipmentId) {
 
 async function getShipmentItems(token, shipmentId) {
   try {
-    const response = await axios.get(
-      `https://api.mercadolibre.com/shipments/${shipmentId}/items`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
+    var response = await axios.get(
+      'https://api.mercadolibre.com/shipments/' + shipmentId + '/items',
+      { headers: { 'Authorization': 'Bearer ' + token } }
     );
     return response.data;
   } catch (error) {
@@ -68,38 +69,52 @@ async function getShipmentItems(token, shipmentId) {
   }
 }
 
-async function getItemSKU(token, itemId, variationId) {
+async function getItemWithVariations(token, itemId) {
   try {
-    if (variationId) {
-      const response = await axios.get(
-        `https://api.mercadolibre.com/items/${itemId}/variations/${variationId}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      return response.data.seller_custom_field || response.data.seller_sku || null;
-    } else {
-      const response = await axios.get(
-        `https://api.mercadolibre.com/items/${itemId}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      return response.data.seller_custom_field || response.data.seller_sku || null;
-    }
+    var response = await axios.get(
+      'https://api.mercadolibre.com/items/' + itemId + '?include_attributes=all',
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    );
+    return response.data;
   } catch (error) {
     return null;
   }
 }
 
-app.get('/api/debug/shipment/:shipmentId', async (req, res) => {
-  const { shipmentId } = req.params;
-  for (const account of accounts) {
+function findSKUInVariation(item, variationId) {
+  if (!item || !item.variations) return null;
+  for (var i = 0; i < item.variations.length; i++) {
+    var variation = item.variations[i];
+    if (variation.id === variationId) {
+      if (variation.attributes) {
+        for (var j = 0; j < variation.attributes.length; j++) {
+          var attr = variation.attributes[j];
+          if (attr.id === 'SELLER_SKU' && attr.value_name) {
+            return attr.value_name;
+          }
+        }
+      }
+      if (variation.seller_custom_field) {
+        return variation.seller_custom_field;
+      }
+    }
+  }
+  return null;
+}
+
+app.get('/api/debug/shipment/:shipmentId', async function(req, res) {
+  var shipmentId = req.params.shipmentId;
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
     if (!account.accessToken) continue;
     try {
-      const shipmentResponse = await axios.get(
-        `https://api.mercadolibre.com/shipments/${shipmentId}`,
-        { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
+      var shipmentResponse = await axios.get(
+        'https://api.mercadolibre.com/shipments/' + shipmentId,
+        { headers: { 'Authorization': 'Bearer ' + account.accessToken } }
       );
-      const itemsResponse = await axios.get(
-        `https://api.mercadolibre.com/shipments/${shipmentId}/items`,
-        { headers: { 'Authorization': `Bearer ${account.accessToken}` } }
+      var itemsResponse = await axios.get(
+        'https://api.mercadolibre.com/shipments/' + shipmentId + '/items',
+        { headers: { 'Authorization': 'Bearer ' + account.accessToken } }
       );
       return res.json({
         account: account.name,
@@ -113,25 +128,32 @@ app.get('/api/debug/shipment/:shipmentId', async (req, res) => {
   res.status(404).json({ error: 'No encontrado' });
 });
 
-app.get('/api/shipment/:shipmentId', async (req, res) => {
-  const { shipmentId } = req.params;
-  const promises = accounts.map(account => findShipmentInAccount(account, shipmentId));
-  const results = await Promise.all(promises);
-  const found = results.find(r => r !== null);
+app.get('/api/shipment/:shipmentId', async function(req, res) {
+  var shipmentId = req.params.shipmentId;
+  var promises = accounts.map(function(account) {
+    return findShipmentInAccount(account, shipmentId);
+  });
+  var results = await Promise.all(promises);
+  var found = results.find(function(r) { return r !== null; });
+  
   if (!found) {
     return res.status(404).json({ error: 'Envio no encontrado en ninguna cuenta' });
   }
-  const token = found.token;
-  const items = await getShipmentItems(token, shipmentId);
-  const processedItems = [];
   
-  for (const item of items) {
-    const sku = await getItemSKU(token, item.item_id, item.variation_id);
-    const components = parseSKU(sku);
-    const title = item.description || 'Sin titulo';
+  var token = found.token;
+  var items = await getShipmentItems(token, shipmentId);
+  var processedItems = [];
+  
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var itemData = await getItemWithVariations(token, item.item_id);
+    var sku = findSKUInVariation(itemData, item.variation_id);
+    var components = parseSKU(sku);
+    var title = item.description || 'Sin titulo';
     
     if (components.length > 1) {
-      for (const component of components) {
+      for (var j = 0; j < components.length; j++) {
+        var component = components[j];
         processedItems.push({
           id: item.item_id + '-' + component,
           title: title,
@@ -168,34 +190,35 @@ app.get('/api/shipment/:shipmentId', async (req, res) => {
   });
 });
 
-app.get('/api/auth/url/:accountName', (req, res) => {
-  const { accountName } = req.params;
-  const account = accounts.find(a => a.name === accountName.toUpperCase());
+app.get('/api/auth/url/:accountName', function(req, res) {
+  var accountName = req.params.accountName;
+  var account = accounts.find(function(a) { return a.name === accountName.toUpperCase(); });
   if (!account) {
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   }
-  const redirectUri = process.env.REDIRECT_URI || 'https://verificador-envios-ml.onrender.com/auth/callback';
-  const authUrl = 'https://auth.mercadolibre.com.ar/authorization?response_type=code&client_id=' + account.clientId + '&redirect_uri=' + encodeURIComponent(redirectUri);
+  var redirectUri = process.env.REDIRECT_URI || 'https://verificador-envios-ml.onrender.com/auth/callback';
+  var authUrl = 'https://auth.mercadolibre.com.ar/authorization?response_type=code&client_id=' + account.clientId + '&redirect_uri=' + encodeURIComponent(redirectUri);
   res.json({ url: authUrl, account: account.name });
 });
 
-app.get('/auth/callback', async (req, res) => {
-  const { code } = req.query;
+app.get('/auth/callback', function(req, res) {
+  var code = req.query.code;
   if (!code) {
     return res.send('Error: No se recibio codigo de autorizacion');
   }
   res.send('<html><body style="font-family: Arial; padding: 40px; text-align: center;"><h1>Codigo recibido</h1><code style="background: #f0f0f0; padding: 10px; display: block; margin: 20px;">' + code + '</code></body></html>');
 });
 
-app.post('/api/auth/token', async (req, res) => {
-  const { accountName, code } = req.body;
-  const account = accounts.find(a => a.name === accountName.toUpperCase());
+app.post('/api/auth/token', async function(req, res) {
+  var accountName = req.body.accountName;
+  var code = req.body.code;
+  var account = accounts.find(function(a) { return a.name === accountName.toUpperCase(); });
   if (!account) {
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   }
-  const redirectUri = process.env.REDIRECT_URI || 'https://verificador-envios-ml.onrender.com/auth/callback';
+  var redirectUri = process.env.REDIRECT_URI || 'https://verificador-envios-ml.onrender.com/auth/callback';
   try {
-    const response = await axios.post('https://api.mercadolibre.com/oauth/token', null, {
+    var response = await axios.post('https://api.mercadolibre.com/oauth/token', null, {
       params: {
         grant_type: 'authorization_code',
         client_id: account.clientId,
@@ -216,11 +239,11 @@ app.post('/api/auth/token', async (req, res) => {
   }
 });
 
-app.get('/', (req, res) => {
+app.get('/', function(req, res) {
   res.json({ status: 'OK', message: 'Verificador de Envios ML - Backend funcionando' });
 });
 
-const PORT = process.env.PORT || 3000;
+var PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {
   console.log('Servidor corriendo en puerto ' + PORT);
 });
