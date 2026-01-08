@@ -1,11 +1,11 @@
 require('dotenv').config();
-var express = require('express');
-var cors = require('cors');
-var axios = require('axios');
-var path = require('path');
-var { google } = require('googleapis');
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
+const path = require('path');
+const { google } = require('googleapis');
 
-var app = express();
+const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -24,7 +24,8 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) 
   sheets = google.sheets({ version: 'v4', auth: auth });
 }
 
-var accounts = [
+// Cuentas de MercadoLibre - los tokens se actualizan desde Google Sheets
+const accounts = [
   {
     name: 'TIENDA',
     clientId: process.env.TIENDA_CLIENT_ID,
@@ -45,69 +46,34 @@ var accounts = [
     clientSecret: process.env.FURST_CLIENT_SECRET,
     accessToken: process.env.FURST_ACCESS_TOKEN,
     refreshToken: process.env.FURST_REFRESH_TOKEN
+  },
+  {
+    name: 'MUN1',
+    clientId: process.env.MUN1_CLIENT_ID,
+    clientSecret: process.env.MUN1_CLIENT_SECRET,
+    accessToken: process.env.MUN1_ACCESS_TOKEN,
+    refreshToken: process.env.MUN1_REFRESH_TOKEN
+  },
+  {
+    name: 'MUN2',
+    clientId: process.env.MUN2_CLIENT_ID,
+    clientSecret: process.env.MUN2_CLIENT_SECRET,
+    accessToken: process.env.MUN2_ACCESS_TOKEN,
+    refreshToken: process.env.MUN2_REFRESH_TOKEN
   }
 ];
 
-// ==================== GESTION DE TOKENS ====================
+// ============================================
+// SISTEMA DE TOKENS CON GOOGLE SHEETS
+// ============================================
 
-// Crear hoja "Tokens" si no existe
-async function createTokensSheet() {
-  if (!sheets || !SHEET_ID) return false;
-  try {
-    // Obtener lista de hojas existentes
-    var spreadsheet = await sheets.spreadsheets.get({
-      spreadsheetId: SHEET_ID
-    });
-
-    var tokensSheetExists = spreadsheet.data.sheets.some(function(sheet) {
-      return sheet.properties.title === 'Tokens';
-    });
-
-    if (!tokensSheetExists) {
-      // Crear la hoja "Tokens"
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId: SHEET_ID,
-        resource: {
-          requests: [{
-            addSheet: {
-              properties: {
-                title: 'Tokens'
-              }
-            }
-          }]
-        }
-      });
-
-      // Agregar encabezados
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
-        range: 'Tokens!A1:D1',
-        valueInputOption: 'USER_ENTERED',
-        resource: {
-          values: [['Cuenta', 'AccessToken', 'RefreshToken', 'UltimaActualizacion']]
-        }
-      });
-
-      console.log('Hoja "Tokens" creada exitosamente');
-    }
-    return true;
-  } catch (error) {
-    console.error('Error creando hoja Tokens:', error.message);
-    return false;
-  }
-}
-
-// Cargar tokens desde Google Sheets al iniciar
 async function loadTokensFromSheets() {
   if (!sheets || !SHEET_ID) {
-    console.log('Google Sheets no configurado, usando tokens de variables de entorno');
+    console.log('Sheets no configurado, usando tokens de variables de entorno');
     return;
   }
 
   try {
-    // Asegurar que la hoja existe
-    await createTokensSheet();
-
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
       range: 'Tokens!A:D'
@@ -115,44 +81,76 @@ async function loadTokensFromSheets() {
 
     var rows = response.data.values || [];
 
-    // Saltar encabezado
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
       if (!row[0]) continue;
 
       var accountName = row[0].toUpperCase();
-      var accessToken = row[1] || '';
-      var refreshToken = row[2] || '';
+      var accessToken = row[1];
+      var refreshToken = row[2];
 
-      // Buscar cuenta y actualizar tokens
-      for (var j = 0; j < accounts.length; j++) {
-        if (accounts[j].name === accountName) {
-          if (accessToken) {
-            accounts[j].accessToken = accessToken;
-          }
-          if (refreshToken) {
-            accounts[j].refreshToken = refreshToken;
-          }
-          console.log('Tokens cargados para cuenta ' + accountName + ' desde Sheets');
-          break;
-        }
+      var account = accounts.find(function(a) { return a.name === accountName; });
+      if (account && accessToken) {
+        account.accessToken = accessToken;
+        if (refreshToken) account.refreshToken = refreshToken;
+        console.log('Token cargado desde Sheets para ' + accountName);
       }
     }
-
-    console.log('Carga de tokens desde Sheets completada');
   } catch (error) {
-    console.error('Error cargando tokens desde Sheets:', error.message);
+    if (error.message && error.message.includes('Unable to parse range')) {
+      console.log('Hoja Tokens no existe, creándola...');
+      await createTokensSheet();
+    } else {
+      console.error('Error cargando tokens desde Sheets:', error.message);
+    }
   }
 }
 
-// Guardar token en Google Sheets
-async function saveTokenToSheets(accountName, accessToken, refreshToken) {
-  if (!sheets || !SHEET_ID) return false;
+async function createTokensSheet() {
+  if (!sheets || !SHEET_ID) return;
 
   try {
-    // Asegurar que la hoja existe
-    await createTokensSheet();
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      resource: {
+        requests: [{
+          addSheet: {
+            properties: { title: 'Tokens' }
+          }
+        }]
+      }
+    });
 
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: 'Tokens!A1:D1',
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [['Cuenta', 'AccessToken', 'RefreshToken', 'UltimaActualizacion']]
+      }
+    });
+
+    var rows = accounts.map(function(a) {
+      return [a.name, a.accessToken || '', a.refreshToken || '', new Date().toISOString()];
+    });
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: 'Tokens!A2:D' + (accounts.length + 1),
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: rows }
+    });
+
+    console.log('Hoja Tokens creada exitosamente');
+  } catch (error) {
+    console.error('Error creando hoja Tokens:', error.message);
+  }
+}
+
+async function saveTokenToSheets(accountName, accessToken, refreshToken) {
+  if (!sheets || !SHEET_ID) return;
+
+  try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
       range: 'Tokens!A:D'
@@ -161,10 +159,9 @@ async function saveTokenToSheets(accountName, accessToken, refreshToken) {
     var rows = response.data.values || [];
     var rowIndex = -1;
 
-    // Buscar fila existente para la cuenta
     for (var i = 1; i < rows.length; i++) {
       if (rows[i][0] && rows[i][0].toUpperCase() === accountName.toUpperCase()) {
-        rowIndex = i + 1; // +1 porque Sheets es 1-indexed
+        rowIndex = i + 1;
         break;
       }
     }
@@ -175,43 +172,40 @@ async function saveTokenToSheets(accountName, accessToken, refreshToken) {
     var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
     var timestamp = argentinaTime.toLocaleString('es-AR');
 
-    var rowData = [accountName.toUpperCase(), accessToken, refreshToken, timestamp];
-
     if (rowIndex === -1) {
-      // Agregar nueva fila
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'Tokens!A:D',
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [rowData] }
+        resource: {
+          values: [[accountName, accessToken, refreshToken, timestamp]]
+        }
       });
     } else {
-      // Actualizar fila existente
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: 'Tokens!A' + rowIndex + ':D' + rowIndex,
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [rowData] }
+        resource: {
+          values: [[accountName, accessToken, refreshToken, timestamp]]
+        }
       });
     }
 
-    console.log('Token guardado en Sheets para cuenta ' + accountName);
-    return true;
+    console.log('Token guardado en Sheets para ' + accountName);
   } catch (error) {
     console.error('Error guardando token en Sheets:', error.message);
-    return false;
   }
 }
 
-// Renovar access token usando refresh token
 async function refreshAccessToken(account) {
   if (!account.refreshToken || !account.clientId || !account.clientSecret) {
-    console.error('Faltan credenciales para renovar token de ' + account.name);
+    console.log('No se puede renovar token de ' + account.name + ': faltan credenciales');
     return false;
   }
 
   try {
-    console.log('Renovando token para cuenta ' + account.name + '...');
+    console.log('Renovando token para ' + account.name + '...');
 
     var response = await axios.post('https://api.mercadolibre.com/oauth/token', null, {
       params: {
@@ -226,59 +220,23 @@ async function refreshAccessToken(account) {
       }
     });
 
-    var newAccessToken = response.data.access_token;
-    var newRefreshToken = response.data.refresh_token;
+    account.accessToken = response.data.access_token;
+    account.refreshToken = response.data.refresh_token;
 
-    // Actualizar en memoria
-    account.accessToken = newAccessToken;
-    if (newRefreshToken) {
-      account.refreshToken = newRefreshToken;
-    }
-
-    // Guardar en Sheets
-    await saveTokenToSheets(account.name, newAccessToken, account.refreshToken);
+    await saveTokenToSheets(account.name, account.accessToken, account.refreshToken);
 
     console.log('Token renovado exitosamente para ' + account.name);
     return true;
   } catch (error) {
-    console.error('Error renovando token de ' + account.name + ':', error.response ? error.response.data : error.message);
+    console.error('Error renovando token de ' + account.name + ':', error.response?.data || error.message);
     return false;
   }
 }
 
-// Request a ML API con auto-renovacion de token
-async function mlApiRequest(account, url, options) {
-  if (!account.accessToken) {
-    throw new Error('No hay access token para ' + account.name);
-  }
+// ============================================
+// FUNCIONES CON AUTO-RENOVACIÓN
+// ============================================
 
-  options = options || {};
-  options.headers = options.headers || {};
-  options.headers['Authorization'] = 'Bearer ' + account.accessToken;
-
-  try {
-    var response = await axios.get(url, options);
-    return response;
-  } catch (error) {
-    // Si es error 401 o 403, intentar renovar token y reintentar
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.log('Token expirado para ' + account.name + ', intentando renovar...');
-
-      var renewed = await refreshAccessToken(account);
-      if (renewed) {
-        // Reintentar con nuevo token
-        options.headers['Authorization'] = 'Bearer ' + account.accessToken;
-        return await axios.get(url, options);
-      }
-    }
-
-    throw error;
-  }
-}
-
-// ==================== FIN GESTION DE TOKENS ====================
-
-// Verificar si estamos en horario laboral (Lun-Vie 8:30-19:00 Argentina)
 function isWorkingHours() {
   var now = new Date();
   var argentinaOffset = -3 * 60;
@@ -290,54 +248,78 @@ function isWorkingHours() {
   var minute = argentinaTime.getMinutes();
   var timeInMinutes = hour * 60 + minute;
 
-  // Lunes (1) a Viernes (5), 8:30 (510) a 19:00 (1140)
   if (day >= 1 && day <= 5 && timeInMinutes >= 510 && timeInMinutes < 1140) {
     return true;
   }
   return false;
 }
 
-// Obtener envios ready_to_ship de una cuenta
-async function getReadyToShipOrders(account) {
-  if (!account.accessToken) return [];
+async function mlApiRequest(account, url, options = {}) {
+  if (!account.accessToken) return null;
+
+  var config = {
+    ...options,
+    headers: {
+      'Authorization': 'Bearer ' + account.accessToken,
+      ...(options.headers || {})
+    }
+  };
+
   try {
-    var response = await mlApiRequest(
-      account,
-      'https://api.mercadolibre.com/shipments/search',
-      {
-        params: {
-          seller_id: 'me',
-          status: 'ready_to_ship',
-          limit: 50
+    var response = await axios.get(url, config);
+    return response.data;
+  } catch (error) {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.log('Token expirado para ' + account.name + ', intentando renovar...');
+      var renewed = await refreshAccessToken(account);
+
+      if (renewed) {
+        config.headers['Authorization'] = 'Bearer ' + account.accessToken;
+        try {
+          var retryResponse = await axios.get(url, config);
+          return retryResponse.data;
+        } catch (retryError) {
+          console.error('Error después de renovar token:', retryError.message);
+          return null;
         }
       }
-    );
-
-    var shipments = response.data.results || [];
-
-    // Filtrar: excluir fulfillment (FULL) y self_service sin carrier (acordar)
-    var filtered = shipments.filter(function(s) {
-      if (s.logistic_type === 'fulfillment') return false;
-      if (s.logistic_type === 'self_service' && !s.tracking_method) return false;
-      return true;
-    });
-
-    return filtered.map(function(s) {
-      return {
-        id: s.id.toString(),
-        account: account.name,
-        dateCreated: s.date_created,
-        receiverName: s.receiver_address ? s.receiver_address.receiver_name : 'N/A',
-        logisticType: s.logistic_type
-      };
-    });
-  } catch (error) {
-    console.error('Error obteniendo envios de ' + account.name + ':', error.message);
-    return [];
+    }
+    return null;
   }
 }
 
-// Obtener envios existentes en la hoja
+async function getReadyToShipOrders(account) {
+  if (!account.accessToken) return [];
+
+  var data = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/search', {
+    params: {
+      seller_id: 'me',
+      status: 'ready_to_ship',
+      limit: 50
+    }
+  });
+
+  if (!data) return [];
+
+  var shipments = data.results || [];
+
+  var filtered = shipments.filter(function(s) {
+    if (s.logistic_type === 'fulfillment') return false;
+    if (s.logistic_type === 'self_service' && !s.tracking_method) return false;
+    return true;
+  });
+
+  return filtered.map(function(s) {
+    return {
+      id: s.id.toString(),
+      account: account.name,
+      dateCreated: s.date_created,
+      receiverName: s.receiver_address ? s.receiver_address.receiver_name : 'N/A',
+      logisticType: s.logistic_type
+    };
+  });
+}
+
 async function getExistingShipmentIds() {
   if (!sheets || !SHEET_ID) return [];
   try {
@@ -357,7 +339,6 @@ async function getExistingShipmentIds() {
   }
 }
 
-// Agregar envios pendientes a la hoja
 async function addPendingShipments(shipments) {
   if (!sheets || !SHEET_ID || shipments.length === 0) return;
   try {
@@ -386,7 +367,6 @@ async function addPendingShipments(shipments) {
   }
 }
 
-// Marcar envio como verificado
 async function markAsVerified(shipmentId, items) {
   if (!sheets || !SHEET_ID) return;
   try {
@@ -404,16 +384,15 @@ async function markAsVerified(shipmentId, items) {
       }
     }
 
-    if (rowIndex === -1) {
-      // Si no existe, agregar nueva fila
-      var now = new Date();
-      var argentinaOffset = -3 * 60;
-      var localOffset = now.getTimezoneOffset();
-      var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
-      var fecha = argentinaTime.toLocaleDateString('es-AR');
-      var hora = argentinaTime.toLocaleTimeString('es-AR');
-      var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
+    var now = new Date();
+    var argentinaOffset = -3 * 60;
+    var localOffset = now.getTimezoneOffset();
+    var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+    var fecha = argentinaTime.toLocaleDateString('es-AR');
+    var hora = argentinaTime.toLocaleTimeString('es-AR');
+    var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
 
+    if (rowIndex === -1) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'A:H',
@@ -421,19 +400,11 @@ async function markAsVerified(shipmentId, items) {
         resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora]] }
       });
     } else {
-      // Actualizar fila existente
-      var now = new Date();
-      var argentinaOffset = -3 * 60;
-      var localOffset = now.getTimezoneOffset();
-      var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
-      var horaVerif = argentinaTime.toLocaleTimeString('es-AR');
-      var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
-
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: 'F' + rowIndex + ':H' + rowIndex,
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[itemsStr, 'Verificado', horaVerif]] }
+        resource: { values: [[itemsStr, 'Verificado', hora]] }
       });
     }
 
@@ -443,7 +414,6 @@ async function markAsVerified(shipmentId, items) {
   }
 }
 
-// Sincronizar envios pendientes
 async function syncPendingShipments() {
   if (!isWorkingHours()) {
     return;
@@ -470,9 +440,7 @@ async function syncPendingShipments() {
   console.log('Sync completado. Nuevos: ' + newShipments.length);
 }
 
-// Iniciar sincronizacion cada 1 minuto
 setInterval(syncPendingShipments, 60000);
-setTimeout(syncPendingShipments, 5000); // Primera sync 5 segundos despues de iniciar
 
 function describeSKU(sku) {
   if (!sku) return '';
@@ -525,15 +493,13 @@ function parseSKU(sku) {
 
 async function findShipmentInAccount(account, shipmentId) {
   if (!account.accessToken) return null;
-  try {
-    var response = await mlApiRequest(
-      account,
-      'https://api.mercadolibre.com/shipments/' + shipmentId
-    );
-    return { account: account.name, shipment: response.data, token: account.accessToken };
-  } catch (error) {
-    return null;
+
+  var data = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId);
+
+  if (data) {
+    return { account: account.name, shipment: data, token: account.accessToken };
   }
+  return null;
 }
 
 async function getShipmentItems(token, shipmentId) {
@@ -603,27 +569,25 @@ function findSKUInVariation(item, variationId) {
   return null;
 }
 
+// ============================================
+// ENDPOINTS
+// ============================================
+
 app.get('/api/debug/shipment/:shipmentId', async function(req, res) {
   var shipmentId = req.params.shipmentId;
   for (var i = 0; i < accounts.length; i++) {
     var account = accounts[i];
     if (!account.accessToken) continue;
-    try {
-      var shipmentResponse = await mlApiRequest(
-        account,
-        'https://api.mercadolibre.com/shipments/' + shipmentId
-      );
-      var itemsResponse = await axios.get(
-        'https://api.mercadolibre.com/shipments/' + shipmentId + '/items',
-        { headers: { 'Authorization': 'Bearer ' + account.accessToken } }
-      );
+
+    var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId);
+
+    if (shipmentData) {
+      var itemsData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId + '/items');
       return res.json({
         account: account.name,
-        shipment: shipmentResponse.data,
-        items: itemsResponse.data
+        shipment: shipmentData,
+        items: itemsData || []
       });
-    } catch (error) {
-      continue;
     }
   }
   res.status(404).json({ error: 'No encontrado' });
@@ -756,20 +720,14 @@ app.post('/api/auth/token', async function(req, res) {
       headers: { 'accept': 'application/json', 'content-type': 'application/x-www-form-urlencoded' }
     });
 
-    var accessToken = response.data.access_token;
-    var refreshToken = response.data.refresh_token;
-
-    // Actualizar en memoria
-    account.accessToken = accessToken;
-    account.refreshToken = refreshToken;
-
-    // Guardar en Google Sheets
-    await saveTokenToSheets(account.name, accessToken, refreshToken);
+    account.accessToken = response.data.access_token;
+    account.refreshToken = response.data.refresh_token;
+    await saveTokenToSheets(account.name, account.accessToken, account.refreshToken);
 
     res.json({
       account: account.name,
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token,
       expires_in: response.data.expires_in,
       saved_to_sheets: true
     });
@@ -778,46 +736,36 @@ app.post('/api/auth/token', async function(req, res) {
   }
 });
 
-// ==================== ENDPOINTS DE TOKENS ====================
-
-// Estado de tokens de todas las cuentas
 app.get('/api/tokens/status', async function(req, res) {
-  var results = [];
+  var status = [];
 
   for (var i = 0; i < accounts.length; i++) {
     var account = accounts[i];
-    var status = {
+    var tokenStatus = {
       account: account.name,
       hasAccessToken: !!account.accessToken,
       hasRefreshToken: !!account.refreshToken,
-      hasCredentials: !!(account.clientId && account.clientSecret),
-      tokenValid: false,
-      error: null
+      tokenPreview: account.accessToken ? account.accessToken.substring(0, 20) + '...' : 'N/A'
     };
 
     if (account.accessToken) {
       try {
-        // Verificar token haciendo una llamada simple
         await axios.get('https://api.mercadolibre.com/users/me', {
           headers: { 'Authorization': 'Bearer ' + account.accessToken }
         });
-        status.tokenValid = true;
+        tokenStatus.valid = true;
       } catch (error) {
-        status.tokenValid = false;
-        status.error = error.response ? error.response.status + ': ' + (error.response.data.message || 'Token invalido') : error.message;
+        tokenStatus.valid = false;
+        tokenStatus.error = error.response?.status || error.message;
       }
     }
 
-    results.push(status);
+    status.push(tokenStatus);
   }
 
-  res.json({
-    timestamp: new Date().toISOString(),
-    accounts: results
-  });
+  res.json({ accounts: status });
 });
 
-// Forzar renovacion de token para una cuenta
 app.post('/api/tokens/refresh/:accountName', async function(req, res) {
   var accountName = req.params.accountName;
   var account = accounts.find(function(a) { return a.name === accountName.toUpperCase(); });
@@ -826,28 +774,21 @@ app.post('/api/tokens/refresh/:accountName', async function(req, res) {
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   }
 
-  if (!account.refreshToken) {
-    return res.status(400).json({ error: 'No hay refresh token disponible para esta cuenta' });
-  }
-
   var success = await refreshAccessToken(account);
 
   if (success) {
     res.json({
       success: true,
-      account: account.name,
-      message: 'Token renovado exitosamente'
+      message: 'Token renovado para ' + account.name,
+      tokenPreview: account.accessToken.substring(0, 20) + '...'
     });
   } else {
-    res.status(500).json({
+    res.status(400).json({
       success: false,
-      account: account.name,
-      error: 'Error al renovar token'
+      message: 'No se pudo renovar el token. Puede que necesites re-autorizar la cuenta.'
     });
   }
 });
-
-// ==================== FIN ENDPOINTS DE TOKENS ====================
 
 app.get('/api/status', function(req, res) {
   res.json({
@@ -856,25 +797,30 @@ app.get('/api/status', function(req, res) {
     sheets: sheets ? 'conectado' : 'no configurado',
     workingHours: isWorkingHours(),
     accounts: accounts.map(function(a) {
-      return {
-        name: a.name,
-        hasToken: !!a.accessToken,
-        hasRefreshToken: !!a.refreshToken
-      };
+      return { name: a.name, hasToken: !!a.accessToken };
     })
   });
 });
 
-// Iniciar servidor despues de cargar tokens
+app.get('/', function(req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ============================================
+// INICIO DEL SERVIDOR
+// ============================================
+
 var PORT = process.env.PORT || 3000;
 
-async function startServer() {
-  // Cargar tokens desde Sheets antes de iniciar
-  await loadTokensFromSheets();
-
+loadTokensFromSheets().then(function() {
   app.listen(PORT, function() {
     console.log('Servidor corriendo en puerto ' + PORT);
+    setTimeout(syncPendingShipments, 5000);
   });
-}
-
-startServer();
+}).catch(function(error) {
+  console.error('Error al iniciar:', error);
+  app.listen(PORT, function() {
+    console.log('Servidor corriendo en puerto ' + PORT + ' (sin cargar tokens de Sheets)');
+    setTimeout(syncPendingShipments, 5000);
+  });
+});
