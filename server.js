@@ -1007,11 +1007,7 @@ async function getReadyToShipOrders(account) {
       console.log(account.name + ' - Envío ' + shippingId + ': status=' + shipment.status + ', logistic_type=' + shipment.logistic_type + ', mode=' + shipment.mode);
     }
 
-    // Filtrar por status pendiente
     var status = shipment.status;
-    if (status !== 'ready_to_ship' && status !== 'pending' && status !== 'handling') {
-      continue;
-    }
 
     // Excluir fulfillment (FULL)
     if (shipment.logistic_type === 'fulfillment') {
