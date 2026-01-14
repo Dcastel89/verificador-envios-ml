@@ -90,10 +90,12 @@
     .resumen-stat { flex: 1; text-align: center; padding: 12px; border-radius: 8px; }
     .resumen-stat.total { background: #eff6ff; }
     .resumen-stat.verificados { background: #f0fdf4; }
+    .resumen-stat.despachados { background: #fef9c3; }
     .resumen-stat.pendientes { background: #fef2f2; }
-    .resumen-stat-number { font-size: 28px; font-weight: 700; }
+    .resumen-stat-number { font-size: 24px; font-weight: 700; }
     .resumen-stat.total .resumen-stat-number { color: #2563eb; }
     .resumen-stat.verificados .resumen-stat-number { color: #16a34a; }
+    .resumen-stat.despachados .resumen-stat-number { color: #ca8a04; }
     .resumen-stat.pendientes .resumen-stat-number { color: #dc2626; }
     .resumen-stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
     .resumen-status { padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; }
@@ -139,15 +141,19 @@
       <div class="resumen-stats">
         <div class="resumen-stat total">
           <div class="resumen-stat-number" id="resumenTotal">-</div>
-          <div class="resumen-stat-label">TOTAL</div>
+          <div class="resumen-stat-label">BLOQUE</div>
         </div>
         <div class="resumen-stat verificados">
           <div class="resumen-stat-number" id="resumenVerificados">-</div>
-          <div class="resumen-stat-label">VERIFICADOS</div>
+          <div class="resumen-stat-label">VERIF</div>
+        </div>
+        <div class="resumen-stat despachados">
+          <div class="resumen-stat-number" id="resumenDespachados">-</div>
+          <div class="resumen-stat-label">DESPACH</div>
         </div>
         <div class="resumen-stat pendientes">
           <div class="resumen-stat-number" id="resumenPendientes">-</div>
-          <div class="resumen-stat-label">PENDIENTES</div>
+          <div class="resumen-stat-label">PEND</div>
         </div>
       </div>
       <div class="resumen-status vacio" id="resumenStatus">Cargando...</div>
@@ -160,6 +166,7 @@
         <div class="sync-progress" id="syncProgress">
           <div class="sync-progress-bar"></div>
         </div>
+        <button type="button" class="resumen-refresh" id="actualizarEstados">Actualizar estados</button>
         <button type="button" class="resumen-refresh" id="limpiarDuplicados">Limpiar duplicados</button>
         <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
@@ -765,10 +772,12 @@
       var resumenFecha = document.getElementById('resumenFecha');
       var resumenTotal = document.getElementById('resumenTotal');
       var resumenVerificados = document.getElementById('resumenVerificados');
+      var resumenDespachados = document.getElementById('resumenDespachados');
       var resumenPendientes = document.getElementById('resumenPendientes');
       var resumenStatus = document.getElementById('resumenStatus');
       var resumenPendientesList = document.getElementById('resumenPendientesList');
       var resumenRefresh = document.getElementById('resumenRefresh');
+      var actualizarEstadosBtn = document.getElementById('actualizarEstados');
 
       function cargarResumenDia() {
         fetch(API_URL + '/api/resumen-dia')
@@ -777,6 +786,7 @@
             resumenFecha.textContent = data.fecha || '--/--/----';
             resumenTotal.textContent = data.total || 0;
             resumenVerificados.textContent = data.verificados || 0;
+            resumenDespachados.textContent = data.despachados || 0;
             resumenPendientes.textContent = data.pendientesCount || 0;
 
             // Actualizar estado
@@ -821,6 +831,37 @@
       }
 
       resumenRefresh.onclick = cargarResumenDia;
+
+      // Actualizar estados desde ML
+      actualizarEstadosBtn.onclick = function() {
+        actualizarEstadosBtn.disabled = true;
+        actualizarEstadosBtn.textContent = 'Actualizando...';
+        resumenStatus.className = 'resumen-status vacio';
+        resumenStatus.textContent = 'Consultando estados en MercadoLibre...';
+
+        fetch(API_URL + '/api/actualizar-estados', { method: 'POST' })
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            actualizarEstadosBtn.disabled = false;
+            actualizarEstadosBtn.textContent = 'Actualizar estados';
+
+            if (data.actualizados > 0) {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = data.actualizados + ' envio(s) marcados como despachados';
+            } else {
+              resumenStatus.className = 'resumen-status vacio';
+              resumenStatus.textContent = 'No hay cambios de estado';
+            }
+            cargarResumenDia();
+          })
+          .catch(function(err) {
+            actualizarEstadosBtn.disabled = false;
+            actualizarEstadosBtn.textContent = 'Actualizar estados';
+            resumenStatus.className = 'resumen-status vacio';
+            resumenStatus.textContent = 'Error actualizando estados';
+            console.error(err);
+          });
+      };
 
       // Sincronizar envíos
       var resumenSync = document.getElementById('resumenSync');
