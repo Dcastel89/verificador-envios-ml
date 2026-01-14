@@ -560,6 +560,32 @@ function isBeforeCutoff(dateCreated, cuenta, logisticType) {
   return timeInMinutes < corte;
 }
 
+function getCorteMaximoDelDia() {
+  // Devuelve el horario de corte más tardío del día (en minutos desde medianoche)
+  // Este es el "cierre" del bloque del día
+  var maxCorte = HORARIO_DEFAULT;
+
+  var keys = Object.keys(horariosCache);
+  for (var i = 0; i < keys.length; i++) {
+    var corte = horariosCache[keys[i]];
+    if (corte > maxCorte) {
+      maxCorte = corte;
+    }
+  }
+
+  return maxCorte;
+}
+
+function isYesterday(dateCreated) {
+  // Verifica si la orden es de ayer
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var today = getArgentinaTime();
+  var yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  return orderDate.toLocaleDateString('es-AR') === yesterday.toLocaleDateString('es-AR');
+}
+
 function isTodayOrder(dateCreated) {
   // Verifica si la orden es de hoy (comparando solo la fecha)
   var orderDate = getArgentinaDate(new Date(dateCreated));
@@ -568,22 +594,35 @@ function isTodayOrder(dateCreated) {
 }
 
 function shouldProcessOrder(dateCreated, cuenta, logisticType) {
-  // Una orden se procesa si:
-  // 1. Es de hoy Y fue creada antes del corte horario (variable por cuenta/tipo)
-  // 2. O es de un día anterior (ya debería estar procesada)
+  // Lógica del "bloque del día":
+  //
+  // El bloque del día de HOY incluye:
+  // 1. Envíos de HOY creados ANTES de su corte específico
+  // 2. Envíos de AYER creados DESPUÉS de su corte específico (perdieron el bloque de ayer)
+  //
+  // El bloque NO incluye:
+  // - Envíos de HOY creados DESPUÉS de su corte → van al bloque de MAÑANA
+  // - Envíos de más de 1 día atrás → ya deberían estar procesados
+
   var orderDate = getArgentinaDate(new Date(dateCreated));
-  var today = getArgentinaTime();
+  var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+  var corteEspecifico = cuenta && logisticType ? getHorarioCorte(cuenta, logisticType) : HORARIO_DEFAULT;
 
-  var orderDateStr = orderDate.toLocaleDateString('es-AR');
-  var todayStr = today.toLocaleDateString('es-AR');
-
-  if (orderDateStr === todayStr) {
-    // Es de hoy, verificar corte horario específico
-    return isBeforeCutoff(dateCreated, cuenta, logisticType);
+  // Caso 1: Es de HOY
+  if (isTodayOrder(dateCreated)) {
+    // Solo procesar si fue creado ANTES del corte específico
+    return orderTimeInMinutes < corteEspecifico;
   }
 
-  // Es de un día anterior, siempre procesar
-  return true;
+  // Caso 2: Es de AYER
+  if (isYesterday(dateCreated)) {
+    // Solo procesar si fue creado DESPUÉS del corte específico
+    // (esos perdieron el bloque de ayer y van al de hoy)
+    return orderTimeInMinutes >= corteEspecifico;
+  }
+
+  // Caso 3: Es de hace más de 1 día - no debería estar aquí, pero incluirlo por si acaso
+  return false;
 }
 
 async function mlApiRequest(account, url, options = {}) {
@@ -944,6 +983,72 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
   } catch (error) {
     console.error('Error marcando verificado:', error.message);
   }
+}
+
+async function markAsDespachado(shipmentId, estadoML) {
+  // Marca un envío como despachado (enviado sin escanear) en la hoja
+  if (!sheets || !SHEET_ID) return;
+
+  var sheetName = getTodaySheetName();
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:I'
+    });
+    var rows = response.data.values || [];
+    var rowIndex = -1;
+
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][2] && rows[i][2].toString() === shipmentId.toString()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      console.log('Envio ' + shipmentId + ' no encontrado en ' + sheetName + ' para marcar despachado');
+      return false;
+    }
+
+    var estadoActual = rows[rowIndex - 1][6] || '';
+
+    // Solo marcar si no está ya verificado
+    if (estadoActual === 'Verificado') {
+      return false;
+    }
+
+    var argentinaTime = getArgentinaTime();
+    var hora = argentinaTime.toLocaleTimeString('es-AR');
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!G' + rowIndex + ':I' + rowIndex,
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: [[estadoML, hora, 'Sin escanear']] }
+    });
+
+    console.log('Envio ' + shipmentId + ' marcado como ' + estadoML + ' en ' + sheetName);
+    return true;
+  } catch (error) {
+    console.error('Error marcando despachado:', error.message);
+    return false;
+  }
+}
+
+async function getShipmentStatus(account, shipmentId) {
+  // Obtiene el estado actual de un envío desde ML
+  if (!account.accessToken) return null;
+
+  var url = 'https://api.mercadolibre.com/shipments/' + shipmentId;
+  var data = await mlApiRequest(account, url);
+
+  if (data && data.status) {
+    return data.status;
+  }
+  return null;
 }
 
 // ============================================
@@ -1669,7 +1774,11 @@ app.get('/api/resumen-dia', async function(req, res) {
     var rows = response.data.values || [];
     var total = 0;
     var verificados = 0;
+    var despachados = 0;
     var pendientes = [];
+
+    // Estados que indican que el envío ya salió (sin escanear)
+    var estadosDespachados = ['Despachado', 'Entregado', 'No entregado', 'Cancelado'];
 
     // Recorrer filas (saltando encabezado)
     for (var i = 1; i < rows.length; i++) {
@@ -1686,7 +1795,11 @@ app.get('/api/resumen-dia', async function(req, res) {
       total++;
       if (estado === 'Verificado') {
         verificados++;
+      } else if (estadosDespachados.indexOf(estado) !== -1) {
+        // Despachado sin escanear
+        despachados++;
       } else {
+        // Pendiente real (ni verificado ni despachado)
         pendientes.push({
           id: envioId,
           cuenta: cuenta,
@@ -1700,6 +1813,7 @@ app.get('/api/resumen-dia', async function(req, res) {
       hoja: sheetName,
       total: total,
       verificados: verificados,
+      despachados: despachados,
       pendientesCount: pendientes.length,
       pendientes: pendientes,
       completo: pendientes.length === 0 && total > 0
@@ -1784,6 +1898,89 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
     res.json({ error: error.message, eliminados: 0 });
   } finally {
     releaseSheetLock();
+  }
+});
+
+// Endpoint para actualizar estados de envíos desde ML
+// Consulta la API de ML y marca como despachados los que ya salieron
+app.post('/api/actualizar-estados', async function(req, res) {
+  if (!sheets || !SHEET_ID) {
+    return res.json({ error: 'Sheets no configurado', actualizados: 0 });
+  }
+
+  var sheetName = getTodaySheetName();
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    // Leer todos los envíos de la hoja
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:I'
+    });
+
+    var rows = response.data.values || [];
+    var actualizados = 0;
+    var errores = 0;
+
+    // Procesar cada envío que no esté verificado
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row || !row[2]) continue;
+
+      var envioId = row[2];
+      var cuenta = row[3] || '';
+      var estadoActual = row[6] || '';
+
+      // Solo procesar si no está ya verificado o marcado
+      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado') {
+        continue;
+      }
+
+      // Encontrar la cuenta correspondiente
+      var account = accounts.find(function(a) {
+        return a.name.toUpperCase() === cuenta.toUpperCase();
+      });
+
+      if (!account || !account.accessToken) {
+        continue;
+      }
+
+      // Consultar estado en ML
+      var estadoML = await getShipmentStatus(account, envioId);
+
+      if (estadoML && estadoML !== 'ready_to_ship') {
+        // Mapear estados de ML a texto legible
+        var estadoTexto = 'Despachado';
+        if (estadoML === 'shipped') {
+          estadoTexto = 'Despachado';
+        } else if (estadoML === 'delivered') {
+          estadoTexto = 'Entregado';
+        } else if (estadoML === 'not_delivered') {
+          estadoTexto = 'No entregado';
+        } else if (estadoML === 'cancelled') {
+          estadoTexto = 'Cancelado';
+        }
+
+        var marcado = await markAsDespachado(envioId, estadoTexto);
+        if (marcado) {
+          actualizados++;
+        }
+      }
+
+      // Pequeña pausa para no saturar la API
+      await new Promise(function(resolve) { setTimeout(resolve, 100); });
+    }
+
+    console.log('Estados actualizados: ' + actualizados + ', Errores: ' + errores);
+    res.json({
+      mensaje: 'Estados actualizados',
+      actualizados: actualizados,
+      errores: errores
+    });
+  } catch (error) {
+    console.error('Error actualizando estados:', error.message);
+    res.json({ error: error.message, actualizados: 0 });
   }
 });
 
