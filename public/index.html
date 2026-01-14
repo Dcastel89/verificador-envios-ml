@@ -160,6 +160,7 @@
         <div class="sync-progress" id="syncProgress">
           <div class="sync-progress-bar"></div>
         </div>
+        <button type="button" class="resumen-refresh" id="limpiarDuplicados">Limpiar duplicados</button>
         <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
     </div>
@@ -858,13 +859,48 @@
           });
       };
 
+      // Limpiar duplicados
+      var limpiarDuplicadosBtn = document.getElementById('limpiarDuplicados');
+      limpiarDuplicadosBtn.onclick = function() {
+        limpiarDuplicadosBtn.disabled = true;
+        limpiarDuplicadosBtn.textContent = 'Limpiando...';
+        resumenStatus.className = 'resumen-status vacio';
+        resumenStatus.textContent = 'Limpiando duplicados...';
+
+        fetch(API_URL + '/api/limpiar-duplicados', { method: 'POST' })
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            limpiarDuplicadosBtn.disabled = false;
+            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
+
+            if (data.error) {
+              resumenStatus.className = 'resumen-status vacio';
+              resumenStatus.textContent = 'Error: ' + data.error;
+            } else if (data.eliminados > 0) {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = 'Eliminados ' + data.eliminados + ' duplicados (' + data.totalAntes + ' -> ' + data.totalDespues + ')';
+              cargarResumenDia();
+            } else {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = data.mensaje || 'No hay duplicados';
+            }
+          })
+          .catch(function(err) {
+            limpiarDuplicadosBtn.disabled = false;
+            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
+            resumenStatus.className = 'resumen-status vacio';
+            resumenStatus.textContent = 'Error de conexion';
+            console.error(err);
+          });
+      };
+
       // Cargar resumen al iniciar
       cargarResumenDia();
 
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v10 - con navegacion Panel/Verificar');
+      console.log('App iniciada v11 - con prevencion de duplicados');
     })();
   </script>
 </body>

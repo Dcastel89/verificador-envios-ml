@@ -64,6 +64,29 @@ const accounts = [
 ];
 
 // ============================================
+// MUTEX PARA PREVENIR DUPLICADOS
+// ============================================
+
+var sheetWriteLock = false;
+
+async function acquireSheetLock(timeout = 5000) {
+  var start = Date.now();
+  while (sheetWriteLock) {
+    if (Date.now() - start > timeout) {
+      console.log('Timeout esperando lock de escritura');
+      return false;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  sheetWriteLock = true;
+  return true;
+}
+
+function releaseSheetLock() {
+  sheetWriteLock = false;
+}
+
+// ============================================
 // SISTEMA DE TOKENS CON GOOGLE SHEETS
 // ============================================
 
@@ -812,10 +835,28 @@ async function addPendingShipments(shipments, sheetName) {
   if (!sheets || !SHEET_ID || shipments.length === 0) return;
   sheetName = sheetName || getTodaySheetName();
 
+  // Adquirir lock para prevenir race conditions
+  var lockAcquired = await acquireSheetLock();
+  if (!lockAcquired) {
+    console.log('No se pudo adquirir lock, reintentando más tarde');
+    return;
+  }
+
   try {
     await ensureDaySheetExists(sheetName);
 
-    var rows = shipments.map(function(s) {
+    // Verificar duplicados DENTRO del lock para prevenir race conditions
+    var existingIds = await getExistingShipmentIds(sheetName);
+    var uniqueShipments = shipments.filter(function(s) {
+      return existingIds.indexOf(s.id.toString()) === -1;
+    });
+
+    if (uniqueShipments.length === 0) {
+      console.log('Todos los envios ya existen, nada que agregar');
+      return;
+    }
+
+    var rows = uniqueShipments.map(function(s) {
       var argentinaDate = getArgentinaDate(new Date(s.dateCreated));
       var fecha = argentinaDate.toLocaleDateString('es-AR');
       var hora = argentinaDate.toLocaleTimeString('es-AR');
@@ -830,9 +871,11 @@ async function addPendingShipments(shipments, sheetName) {
       resource: { values: rows }
     });
 
-    console.log('Agregados ' + shipments.length + ' envios a ' + sheetName);
+    console.log('Agregados ' + uniqueShipments.length + ' envios a ' + sheetName + ' (filtrados ' + (shipments.length - uniqueShipments.length) + ' duplicados)');
   } catch (error) {
     console.error('Error agregando envios:', error.message);
+  } finally {
+    releaseSheetLock();
   }
 }
 
@@ -1664,6 +1707,83 @@ app.get('/api/resumen-dia', async function(req, res) {
   } catch (error) {
     console.error('Error obteniendo resumen:', error.message);
     res.json({ error: error.message, total: 0, verificados: 0, pendientes: [] });
+  }
+});
+
+// Endpoint para limpiar duplicados de la hoja del día
+app.post('/api/limpiar-duplicados', async function(req, res) {
+  if (!sheets || !SHEET_ID) {
+    return res.json({ error: 'Sheets no configurado', eliminados: 0 });
+  }
+
+  var sheetName = getTodaySheetName();
+
+  var lockAcquired = await acquireSheetLock(10000);
+  if (!lockAcquired) {
+    return res.json({ error: 'No se pudo adquirir lock', eliminados: 0 });
+  }
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:I'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length <= 1) {
+      releaseSheetLock();
+      return res.json({ mensaje: 'Hoja vacía', eliminados: 0 });
+    }
+
+    var header = rows[0];
+    var seen = {};
+    var uniqueRows = [header];
+    var duplicados = 0;
+
+    for (var i = 1; i < rows.length; i++) {
+      var envioId = rows[i][2];
+      if (!envioId) continue;
+
+      if (!seen[envioId]) {
+        seen[envioId] = true;
+        uniqueRows.push(rows[i]);
+      } else {
+        duplicados++;
+      }
+    }
+
+    if (duplicados === 0) {
+      releaseSheetLock();
+      return res.json({ mensaje: 'No hay duplicados', eliminados: 0 });
+    }
+
+    // Limpiar y reescribir la hoja sin duplicados
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:I'
+    });
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A1',
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: uniqueRows }
+    });
+
+    console.log('Limpiados ' + duplicados + ' duplicados de ' + sheetName);
+    res.json({
+      mensaje: 'Duplicados eliminados',
+      eliminados: duplicados,
+      totalAntes: rows.length - 1,
+      totalDespues: uniqueRows.length - 1
+    });
+  } catch (error) {
+    console.error('Error limpiando duplicados:', error.message);
+    res.json({ error: error.message, eliminados: 0 });
+  } finally {
+    releaseSheetLock();
   }
 });
 
