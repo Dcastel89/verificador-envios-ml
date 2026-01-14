@@ -1787,6 +1787,119 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
   }
 });
 
+// Endpoint para eliminar envíos que ya no están pendientes (shipped, delivered, etc.)
+app.post('/api/limpiar-despachados', async function(req, res) {
+  if (!sheets || !SHEET_ID) {
+    return res.json({ error: 'Sheets no configurado', eliminados: 0 });
+  }
+
+  var sheetName = getTodaySheetName();
+
+  var lockAcquired = await acquireSheetLock(30000);
+  if (!lockAcquired) {
+    return res.json({ error: 'No se pudo adquirir lock', eliminados: 0 });
+  }
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:I'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length <= 1) {
+      releaseSheetLock();
+      return res.json({ mensaje: 'Hoja vacía', eliminados: 0 });
+    }
+
+    var header = rows[0];
+    var rowsToKeep = [header];
+    var eliminados = 0;
+    var detalles = [];
+
+    // Estados que indican que el envío ya no está pendiente
+    var estadosNoPendientes = ['shipped', 'delivered', 'not_delivered', 'cancelled'];
+
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      var envioId = row[2];
+      var cuenta = row[3];
+      var estado = row[6];
+
+      // Si ya está verificado, mantenerlo
+      if (estado === 'Verificado') {
+        rowsToKeep.push(row);
+        continue;
+      }
+
+      // Si no tiene ID o cuenta, mantenerlo
+      if (!envioId || !cuenta) {
+        rowsToKeep.push(row);
+        continue;
+      }
+
+      // Buscar la cuenta correspondiente
+      var account = accounts.find(function(a) { return a.name === cuenta; });
+      if (!account) {
+        rowsToKeep.push(row);
+        continue;
+      }
+
+      // Consultar estado actual en MercadoLibre
+      try {
+        var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + envioId);
+
+        if (shipmentData && estadosNoPendientes.indexOf(shipmentData.status) !== -1) {
+          // El envío ya no está pendiente, eliminarlo
+          eliminados++;
+          detalles.push({ id: envioId, estadoML: shipmentData.status });
+          console.log('Eliminando envío ' + envioId + ' - estado: ' + shipmentData.status);
+        } else {
+          rowsToKeep.push(row);
+        }
+      } catch (err) {
+        // Si hay error al consultar, mantener el envío
+        console.log('Error consultando envío ' + envioId + ': ' + err.message);
+        rowsToKeep.push(row);
+      }
+    }
+
+    if (eliminados === 0) {
+      releaseSheetLock();
+      return res.json({ mensaje: 'No hay envíos despachados para eliminar', eliminados: 0 });
+    }
+
+    // Reescribir la hoja sin los envíos despachados
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:I'
+    });
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A1',
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: rowsToKeep }
+    });
+
+    console.log('Eliminados ' + eliminados + ' envíos despachados de ' + sheetName);
+    res.json({
+      mensaje: 'Envíos despachados eliminados',
+      eliminados: eliminados,
+      detalles: detalles,
+      totalAntes: rows.length - 1,
+      totalDespues: rowsToKeep.length - 1
+    });
+  } catch (error) {
+    console.error('Error limpiando despachados:', error.message);
+    res.json({ error: error.message, eliminados: 0 });
+  } finally {
+    releaseSheetLock();
+  }
+});
+
 app.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

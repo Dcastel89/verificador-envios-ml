@@ -160,6 +160,7 @@
         <div class="sync-progress" id="syncProgress">
           <div class="sync-progress-bar"></div>
         </div>
+        <button type="button" class="resumen-refresh" id="limpiarDespachados">Limpiar despachados</button>
         <button type="button" class="resumen-refresh" id="limpiarDuplicados">Limpiar duplicados</button>
         <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
@@ -859,6 +860,41 @@
           });
       };
 
+      // Limpiar despachados (envíos que ya no están pendientes en ML)
+      var limpiarDespachadosBtn = document.getElementById('limpiarDespachados');
+      limpiarDespachadosBtn.onclick = function() {
+        limpiarDespachadosBtn.disabled = true;
+        limpiarDespachadosBtn.textContent = 'Verificando...';
+        resumenStatus.className = 'resumen-status vacio';
+        resumenStatus.textContent = 'Consultando estado de envíos en MercadoLibre...';
+
+        fetch(API_URL + '/api/limpiar-despachados', { method: 'POST' })
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            limpiarDespachadosBtn.disabled = false;
+            limpiarDespachadosBtn.textContent = 'Limpiar despachados';
+
+            if (data.error) {
+              resumenStatus.className = 'resumen-status vacio';
+              resumenStatus.textContent = 'Error: ' + data.error;
+            } else if (data.eliminados > 0) {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = 'Eliminados ' + data.eliminados + ' envíos ya despachados (' + data.totalAntes + ' -> ' + data.totalDespues + ')';
+              cargarResumenDia();
+            } else {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = data.mensaje || 'No hay envíos despachados';
+            }
+          })
+          .catch(function(err) {
+            limpiarDespachadosBtn.disabled = false;
+            limpiarDespachadosBtn.textContent = 'Limpiar despachados';
+            resumenStatus.className = 'resumen-status vacio';
+            resumenStatus.textContent = 'Error de conexion';
+            console.error(err);
+          });
+      };
+
       // Limpiar duplicados
       var limpiarDuplicadosBtn = document.getElementById('limpiarDuplicados');
       limpiarDuplicadosBtn.onclick = function() {
@@ -900,7 +936,7 @@
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v11 - con prevencion de duplicados');
+      console.log('App iniciada v12 - con limpieza de despachados');
     })();
   </script>
 </body>
