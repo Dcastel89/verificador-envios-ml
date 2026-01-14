@@ -474,31 +474,67 @@ async function mlApiRequest(account, url, options = {}) {
 async function getReadyToShipOrders(account) {
   if (!account.accessToken) return [];
 
-  var data = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/search', {
-    params: {
-      seller_id: 'me',
-      status: 'ready_to_ship',
-      limit: 50
+  var allShipments = [];
+  var statuses = ['ready_to_ship', 'pending', 'handling'];
+
+  for (var s = 0; s < statuses.length; s++) {
+    var status = statuses[s];
+    var offset = 0;
+    var hasMore = true;
+
+    while (hasMore) {
+      var data = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/search', {
+        params: {
+          seller_id: 'me',
+          status: status,
+          limit: 50,
+          offset: offset
+        }
+      });
+
+      if (!data || !data.results || data.results.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      allShipments = allShipments.concat(data.results);
+      offset += 50;
+
+      // Limitar a 200 por status para no sobrecargar
+      if (offset >= 200) {
+        hasMore = false;
+      }
     }
-  });
+  }
 
-  if (!data) return [];
-
-  var shipments = data.results || [];
-
-  var filtered = shipments.filter(function(s) {
+  var filtered = allShipments.filter(function(s) {
+    // Excluir fulfillment (lo maneja ML)
     if (s.logistic_type === 'fulfillment') return false;
+    // Excluir self_service sin tracking
     if (s.logistic_type === 'self_service' && !s.tracking_method) return false;
     return true;
   });
 
-  return filtered.map(function(s) {
+  // Eliminar duplicados por ID
+  var seen = {};
+  var unique = [];
+  for (var i = 0; i < filtered.length; i++) {
+    var id = filtered[i].id.toString();
+    if (!seen[id]) {
+      seen[id] = true;
+      unique.push(filtered[i]);
+    }
+  }
+
+  return unique.map(function(s) {
     return {
       id: s.id.toString(),
       account: account.name,
       dateCreated: s.date_created,
       receiverName: s.receiver_address ? s.receiver_address.receiver_name : 'N/A',
-      logisticType: s.logistic_type
+      logisticType: s.logistic_type,
+      status: s.status,
+      substatus: s.substatus || ''
     };
   });
 }
