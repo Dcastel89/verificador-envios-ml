@@ -1901,6 +1901,129 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
   }
 });
 
+// ============================================
+// AGREGAR ORDEN FALTANTE POR ID
+// ============================================
+
+// Endpoint para buscar una orden por ID y agregar el envío a la hoja del día
+app.post('/api/agregar-orden/:orderId', async function(req, res) {
+  var orderId = req.params.orderId;
+  console.log('Buscando orden faltante:', orderId);
+
+  var orderData = null;
+  var accountFound = null;
+
+  // Buscar la orden en todas las cuentas
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
+    if (!account.accessToken) continue;
+
+    var data = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+    if (data && data.id) {
+      orderData = data;
+      accountFound = account;
+      console.log('Orden encontrada en cuenta:', account.name);
+      break;
+    }
+  }
+
+  if (!orderData) {
+    return res.status(404).json({ error: 'Orden no encontrada en ninguna cuenta', orderId: orderId });
+  }
+
+  // Verificar que tenga shipping
+  if (!orderData.shipping || !orderData.shipping.id) {
+    return res.status(400).json({ error: 'La orden no tiene envío asociado', orderId: orderId });
+  }
+
+  var shipmentId = orderData.shipping.id.toString();
+
+  // Verificar si ya existe en la hoja
+  var sheetName = getTodaySheetName();
+  var existingIds = await getExistingShipmentIds(sheetName);
+
+  if (existingIds.indexOf(shipmentId) !== -1) {
+    return res.json({
+      mensaje: 'El envío ya existe en la hoja',
+      orderId: orderId,
+      shipmentId: shipmentId,
+      cuenta: accountFound.name,
+      yaExiste: true
+    });
+  }
+
+  // Obtener datos del envío
+  var shipmentData = await mlApiRequest(accountFound, 'https://api.mercadolibre.com/shipments/' + shipmentId);
+
+  if (!shipmentData) {
+    return res.status(400).json({ error: 'No se pudo obtener datos del envío', shipmentId: shipmentId });
+  }
+
+  // Crear el objeto de envío
+  var shipment = {
+    id: shipmentId,
+    orderId: orderId,
+    account: accountFound.name,
+    dateCreated: orderData.date_created,
+    receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
+    logisticType: shipmentData.logistic_type || '',
+    status: shipmentData.status,
+    mode: shipmentData.mode || ''
+  };
+
+  // Agregar a la hoja (sin filtrar por corte horario)
+  await addPendingShipments([shipment], sheetName);
+
+  console.log('Orden agregada manualmente:', orderId, '-> Envío:', shipmentId);
+
+  res.json({
+    mensaje: 'Envío agregado exitosamente',
+    orderId: orderId,
+    shipmentId: shipmentId,
+    cuenta: accountFound.name,
+    receptor: shipment.receiverName,
+    estado: shipmentData.status,
+    logisticType: shipmentData.logistic_type,
+    hoja: sheetName
+  });
+});
+
+// Endpoint GET para ver información de una orden sin agregarla
+app.get('/api/orden/:orderId', async function(req, res) {
+  var orderId = req.params.orderId;
+
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
+    if (!account.accessToken) continue;
+
+    var data = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+    if (data && data.id) {
+      var shipmentData = null;
+      if (data.shipping && data.shipping.id) {
+        shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + data.shipping.id);
+      }
+
+      return res.json({
+        cuenta: account.name,
+        orderId: data.id,
+        status: data.status,
+        dateCreated: data.date_created,
+        shipmentId: data.shipping ? data.shipping.id : null,
+        shipment: shipmentData ? {
+          status: shipmentData.status,
+          logisticType: shipmentData.logistic_type,
+          mode: shipmentData.mode,
+          receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A'
+        } : null
+      });
+    }
+  }
+
+  res.status(404).json({ error: 'Orden no encontrada', orderId: orderId });
+});
+
 // Endpoint para actualizar estados de envíos desde ML
 // Consulta la API de ML y marca como despachados los que ya salieron
 app.post('/api/actualizar-estados', async function(req, res) {
