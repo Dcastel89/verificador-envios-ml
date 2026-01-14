@@ -497,6 +497,7 @@ async function getReadyToShipOrders(account) {
         break;
       }
 
+      console.log(account.name + ' - ' + status + ': ' + data.results.length + ' envios encontrados');
       allShipments = allShipments.concat(data.results);
       offset += 50;
 
@@ -507,17 +508,34 @@ async function getReadyToShipOrders(account) {
     }
   }
 
+  console.log(account.name + ' - Total antes de filtrar: ' + allShipments.length);
+
+  // Log de tipos para debug
+  var typeCount = {};
+  allShipments.forEach(function(s) {
+    var key = (s.logistic_type || 'null') + '|' + (s.mode || 'null');
+    typeCount[key] = (typeCount[key] || 0) + 1;
+  });
+  console.log(account.name + ' - Tipos encontrados:', JSON.stringify(typeCount));
+
   var filtered = allShipments.filter(function(s) {
     // Excluir fulfillment (FULL - lo maneja ML)
-    if (s.logistic_type === 'fulfillment') return false;
-    // Excluir "acordar con comprador" (not_specified o custom)
-    if (s.mode === 'not_specified' || s.mode === 'custom') return false;
-    // Excluir si no tiene shipping_id válido (también acordar con comprador)
-    if (!s.id) return false;
-    // Excluir self_service sin tracking
-    if (s.logistic_type === 'self_service' && !s.tracking_method) return false;
+    if (s.logistic_type === 'fulfillment') {
+      return false;
+    }
+    // Excluir "acordar con comprador" - verificar en varios campos posibles
+    var mode = s.mode || (s.shipping && s.shipping.mode) || '';
+    if (mode === 'not_specified' || mode === 'custom') {
+      return false;
+    }
+    // Excluir si no tiene shipping_id válido
+    if (!s.id) {
+      return false;
+    }
     return true;
   });
+
+  console.log(account.name + ' - Después de filtrar: ' + filtered.length);
 
   // Eliminar duplicados por ID
   var seen = {};
