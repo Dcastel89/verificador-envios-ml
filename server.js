@@ -438,8 +438,30 @@ async function getCutoffTimeFlex(account) {
     }
     var userId = userInfo.id;
 
-    // Intentar usar el endpoint GraphQL de configuración de FLEX
-    var graphqlUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/configuration/v3';
+    // Paso 1: Obtener las suscripciones para conseguir el service_id
+    var subscriptionsUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/users/' + userId + '/subscriptions/v1';
+    var subscriptions = await mlApiRequest(account, subscriptionsUrl);
+
+    if (!subscriptions || !Array.isArray(subscriptions) || subscriptions.length === 0) {
+      console.log(account.name + ' - No tiene suscripciones FLEX activas');
+      return null;
+    }
+
+    // Buscar suscripción activa de Flex
+    var flexSubscription = subscriptions.find(function(sub) {
+      return sub.mode === 'flex' && sub.status && sub.status.id === 'in';
+    });
+
+    if (!flexSubscription || !flexSubscription.service_id) {
+      console.log(account.name + ' - No se encontró suscripción FLEX activa');
+      return null;
+    }
+
+    var serviceId = flexSubscription.service_id;
+    console.log(account.name + ' - Service ID FLEX: ' + serviceId);
+
+    // Paso 2: Obtener configuración con user_id y service_id
+    var configUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/configuration/v3';
 
     var config = {
       method: 'POST',
@@ -448,87 +470,56 @@ async function getCutoffTimeFlex(account) {
         'Content-Type': 'application/json'
       },
       data: {
-        user_id: userId
+        user_id: userId,
+        service_id: serviceId
       }
     };
 
     try {
-      var response = await axios(graphqlUrl, config);
+      var response = await axios(configUrl, config);
       var configData = response.data;
 
       if (!configData) {
-        console.log(account.name + ' - No se pudo obtener configuración de FLEX (GraphQL)');
+        console.log(account.name + ' - No se pudo obtener configuración de FLEX');
         return null;
       }
 
-      // Extraer el cutoff (puede estar en calculated_cutoff o cutoff)
-      var cutoff = configData.calculated_cutoff || configData.cutoff;
-
-      if (cutoff !== null && cutoff !== undefined) {
-        // El cutoff puede venir como número (hora) o como string "HH:MM"
-        if (typeof cutoff === 'number') {
-          console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff + ':00');
-          return cutoff * 60; // Convertir horas a minutos
-        } else if (typeof cutoff === 'string') {
-          var parts = cutoff.split(':');
-          if (parts.length === 2) {
-            var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-            console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff);
-            return minutos;
+      // Extraer el cutoff de delivery_ranges.week
+      if (configData.delivery_ranges && configData.delivery_ranges.week) {
+        var weekRanges = configData.delivery_ranges.week;
+        if (Array.isArray(weekRanges) && weekRanges.length > 0) {
+          var cutoff = weekRanges[0].calculated_cutoff || weekRanges[0].cutoff;
+          if (cutoff !== null && cutoff !== undefined) {
+            if (typeof cutoff === 'number') {
+              console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff + ':00');
+              return cutoff * 60;
+            } else if (typeof cutoff === 'string') {
+              var parts = cutoff.split(':');
+              if (parts.length >= 1) {
+                var minutos = parseInt(parts[0]) * 60 + (parts[1] ? parseInt(parts[1]) : 0);
+                console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff);
+                return minutos;
+              }
+            }
           }
         }
       }
 
-      // Si no hay cutoff en el nivel superior, buscar en delivery_ranges
-      if (configData.delivery_ranges) {
-        var ranges = configData.delivery_ranges.week || configData.delivery_ranges.monday || [];
-        if (ranges.length > 0 && ranges[0].cutoff !== undefined) {
-          cutoff = ranges[0].cutoff;
-          if (typeof cutoff === 'number') {
-            console.log(account.name + ' - Cutoff FLEX obtenido (delivery_ranges): ' + cutoff + ':00');
-            return cutoff * 60;
-          }
+      // Fallback: buscar en availables
+      if (configData.availables && configData.availables.cutoff !== undefined) {
+        var cutoff = configData.availables.cutoff;
+        if (typeof cutoff === 'number') {
+          console.log(account.name + ' - Cutoff FLEX obtenido (availables): ' + cutoff + ':00');
+          return cutoff * 60;
         }
       }
 
       console.log(account.name + ' - No se encontró cutoff en configuración de FLEX');
       return null;
     } catch (apiError) {
-      // Si falla con 401/403, intentar renovar token
-      if (apiError.response && (apiError.response.status === 401 || apiError.response.status === 403)) {
-        console.log('Token expirado para ' + account.name + ', intentando renovar...');
-        var renewed = await refreshAccessToken(account);
-
-        if (renewed) {
-          config.headers['Authorization'] = 'Bearer ' + account.accessToken;
-          try {
-            var retryResponse = await axios(graphqlUrl, config);
-            var retryData = retryResponse.data;
-
-            var cutoff = retryData.calculated_cutoff || retryData.cutoff;
-            if (cutoff !== null && cutoff !== undefined) {
-              if (typeof cutoff === 'number') {
-                console.log(account.name + ' - Cutoff FLEX obtenido (retry): ' + cutoff + ':00');
-                return cutoff * 60;
-              } else if (typeof cutoff === 'string') {
-                var parts = cutoff.split(':');
-                if (parts.length === 2) {
-                  var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-                  console.log(account.name + ' - Cutoff FLEX obtenido (retry): ' + cutoff);
-                  return minutos;
-                }
-              }
-            }
-          } catch (retryError) {
-            console.error(account.name + ' - Error después de renovar token:', retryError.message);
-          }
-        }
-      } else {
-        console.error(account.name + ' - Error obteniendo configuración FLEX:', apiError.message);
-      }
+      console.error(account.name + ' - Error obteniendo configuración FLEX:', apiError.message);
+      return null;
     }
-
-    return null;
   } catch (error) {
     console.error(account.name + ' - Error obteniendo cutoff FLEX:', error.message);
     return null;
@@ -727,6 +718,13 @@ async function loadHorariosFromAPI() {
   }
 
   console.log('=== Horarios cargados desde API: ' + Object.keys(horariosCache).length + ' configuraciones ===');
+
+  // Si no se cargó ningún horario desde la API, usar Sheets como fallback
+  if (Object.keys(horariosCache).length === 0) {
+    console.log('No se cargaron horarios desde API, intentando fallback a Sheets...');
+    await loadHorariosFromSheets();
+    console.log('Horarios cargados desde Sheets (fallback): ' + Object.keys(horariosCache).length + ' configuraciones');
+  }
 }
 
 async function saveTokenToSheets(accountName, accessToken, refreshToken) {
