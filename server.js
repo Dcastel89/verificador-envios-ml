@@ -508,8 +508,12 @@ async function getReadyToShipOrders(account) {
   }
 
   var filtered = allShipments.filter(function(s) {
-    // Excluir fulfillment (lo maneja ML)
+    // Excluir fulfillment (FULL - lo maneja ML)
     if (s.logistic_type === 'fulfillment') return false;
+    // Excluir "acordar con comprador" (not_specified o custom)
+    if (s.mode === 'not_specified' || s.mode === 'custom') return false;
+    // Excluir si no tiene shipping_id válido (también acordar con comprador)
+    if (!s.id) return false;
     // Excluir self_service sin tracking
     if (s.logistic_type === 'self_service' && !s.tracking_method) return false;
     return true;
