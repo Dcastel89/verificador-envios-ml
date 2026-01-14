@@ -1071,6 +1071,24 @@ app.post('/api/auth/token', async function(req, res) {
   }
 });
 
+// Endpoint para sincronizar envíos manualmente
+app.get('/api/sync-morning', async function(req, res) {
+  try {
+    // Resetear la fecha para permitir sync manual
+    lastMorningSyncDate = null;
+    await syncMorningShipments();
+    var sheetName = getTodaySheetName();
+    res.json({
+      success: true,
+      message: 'Sincronización completada',
+      hoja: sheetName
+    });
+  } catch (error) {
+    console.error('Error en sync manual:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/tokens/status', async function(req, res) {
   var status = [];
 
