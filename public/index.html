@@ -74,6 +74,32 @@
     /* Scan mode indicator */
     .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
     .scan-mode-indicator.show { display: block; }
+
+    /* Resumen del día */
+    .resumen-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .resumen-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .resumen-header h2 { font-size: 16px; font-weight: 600; color: #374151; }
+    .resumen-fecha { font-size: 12px; color: #6b7280; }
+    .resumen-stats { display: flex; gap: 12px; margin-bottom: 16px; }
+    .resumen-stat { flex: 1; text-align: center; padding: 12px; border-radius: 8px; }
+    .resumen-stat.total { background: #eff6ff; }
+    .resumen-stat.verificados { background: #f0fdf4; }
+    .resumen-stat.pendientes { background: #fef2f2; }
+    .resumen-stat-number { font-size: 28px; font-weight: 700; }
+    .resumen-stat.total .resumen-stat-number { color: #2563eb; }
+    .resumen-stat.verificados .resumen-stat-number { color: #16a34a; }
+    .resumen-stat.pendientes .resumen-stat-number { color: #dc2626; }
+    .resumen-stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .resumen-status { padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; }
+    .resumen-status.completo { background: #dcfce7; color: #16a34a; }
+    .resumen-status.pendiente { background: #fef3c7; color: #b45309; }
+    .resumen-status.vacio { background: #f3f4f6; color: #6b7280; }
+    .resumen-pendientes-list { margin-top: 12px; max-height: 150px; overflow-y: auto; }
+    .resumen-pendiente-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #fef2f2; border-radius: 6px; margin-bottom: 6px; font-size: 13px; cursor: pointer; }
+    .resumen-pendiente-item:hover { background: #fee2e2; }
+    .resumen-pendiente-id { font-weight: 600; color: #dc2626; }
+    .resumen-pendiente-cuenta { font-size: 11px; color: #6b7280; }
+    .resumen-refresh { background: none; border: none; color: #2563eb; font-size: 12px; cursor: pointer; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -82,6 +108,33 @@
     <div class="account-badge" id="accountBadge">Sin conexion</div>
   </div>
   <div class="container">
+    <!-- Resumen del día -->
+    <div class="resumen-section" id="resumenSection">
+      <div class="resumen-header">
+        <h2>Resumen del dia</h2>
+        <span class="resumen-fecha" id="resumenFecha">--/--/----</span>
+      </div>
+      <div class="resumen-stats">
+        <div class="resumen-stat total">
+          <div class="resumen-stat-number" id="resumenTotal">-</div>
+          <div class="resumen-stat-label">TOTAL</div>
+        </div>
+        <div class="resumen-stat verificados">
+          <div class="resumen-stat-number" id="resumenVerificados">-</div>
+          <div class="resumen-stat-label">VERIFICADOS</div>
+        </div>
+        <div class="resumen-stat pendientes">
+          <div class="resumen-stat-number" id="resumenPendientes">-</div>
+          <div class="resumen-stat-label">PENDIENTES</div>
+        </div>
+      </div>
+      <div class="resumen-status vacio" id="resumenStatus">Cargando...</div>
+      <div class="resumen-pendientes-list hidden" id="resumenPendientesList"></div>
+      <div style="text-align: center; margin-top: 12px;">
+        <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar</button>
+      </div>
+    </div>
+
     <div class="scan-section">
       <div class="scan-input-group">
         <input type="text" id="shipmentInput" class="scan-input" placeholder="Numero de envio...">
@@ -613,7 +666,73 @@
       closeCameraBtn.onclick = stopCamera;
       resetBtn.onclick = reset;
 
-      console.log('App iniciada v8 - con escaneo de productos');
+      // ============================================
+      // RESUMEN DEL DÍA
+      // ============================================
+      var resumenFecha = document.getElementById('resumenFecha');
+      var resumenTotal = document.getElementById('resumenTotal');
+      var resumenVerificados = document.getElementById('resumenVerificados');
+      var resumenPendientes = document.getElementById('resumenPendientes');
+      var resumenStatus = document.getElementById('resumenStatus');
+      var resumenPendientesList = document.getElementById('resumenPendientesList');
+      var resumenRefresh = document.getElementById('resumenRefresh');
+
+      function cargarResumenDia() {
+        fetch(API_URL + '/api/resumen-dia')
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            resumenFecha.textContent = data.fecha || '--/--/----';
+            resumenTotal.textContent = data.total || 0;
+            resumenVerificados.textContent = data.verificados || 0;
+            resumenPendientes.textContent = data.pendientesCount || 0;
+
+            // Actualizar estado
+            resumenStatus.className = 'resumen-status';
+            if (data.total === 0) {
+              resumenStatus.classList.add('vacio');
+              resumenStatus.textContent = 'No hay envios registrados hoy';
+              resumenPendientesList.classList.add('hidden');
+            } else if (data.completo) {
+              resumenStatus.classList.add('completo');
+              resumenStatus.textContent = 'Todos los envios verificados!';
+              resumenPendientesList.classList.add('hidden');
+            } else {
+              resumenStatus.classList.add('pendiente');
+              resumenStatus.textContent = 'Faltan ' + data.pendientesCount + ' envio(s) por verificar';
+
+              // Mostrar lista de pendientes
+              if (data.pendientes && data.pendientes.length > 0) {
+                resumenPendientesList.innerHTML = '';
+                resumenPendientesList.classList.remove('hidden');
+                for (var i = 0; i < data.pendientes.length; i++) {
+                  var p = data.pendientes[i];
+                  var item = document.createElement('div');
+                  item.className = 'resumen-pendiente-item';
+                  item.setAttribute('data-id', p.id);
+                  item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + '</span>';
+                  item.onclick = function() {
+                    var id = this.getAttribute('data-id');
+                    shipmentInput.value = id;
+                    searchShipment(id);
+                  };
+                  resumenPendientesList.appendChild(item);
+                }
+              }
+            }
+          })
+          .catch(function(err) {
+            resumenStatus.className = 'resumen-status vacio';
+            resumenStatus.textContent = 'Error cargando resumen';
+            console.error(err);
+          });
+      }
+
+      resumenRefresh.onclick = cargarResumenDia;
+
+      // Cargar resumen al iniciar
+      cargarResumenDia();
+
+      console.log('App iniciada v9 - con resumen del dia');
     })();
   </script>
 </body>
