@@ -567,9 +567,34 @@ function isTodayOrder(dateCreated) {
   return orderDate.toLocaleDateString('es-AR') === today.toLocaleDateString('es-AR');
 }
 
+function isYesterday(dateCreated) {
+  // Verifica si la orden es de ayer
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var today = getArgentinaTime();
+  var yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return orderDate.toLocaleDateString('es-AR') === yesterday.toLocaleDateString('es-AR');
+}
+
 function shouldProcessOrder(dateCreated, cuenta, logisticType) {
-  // Procesar todas las órdenes del día actual
-  return isTodayOrder(dateCreated);
+  // Determina si un envío corresponde al día de trabajo actual según su corte específico:
+  // - Usa el horario de corte de la cuenta y tipo de logística del envío
+  // - Órdenes de AYER creadas DESPUÉS del corte → entran hoy
+  // - Órdenes de HOY creadas ANTES del corte → entran hoy
+  // - Órdenes de HOY creadas DESPUÉS del corte → NO entran (corresponden a mañana)
+
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+  var corte = getHorarioCorte(cuenta, logisticType);
+
+  if (isTodayOrder(dateCreated)) {
+    return orderTimeInMinutes < corte;
+  }
+  if (isYesterday(dateCreated)) {
+    return orderTimeInMinutes >= corte;
+  }
+
+  return false;
 }
 
 async function mlApiRequest(account, url, options = {}) {
