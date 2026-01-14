@@ -474,91 +474,101 @@ async function mlApiRequest(account, url, options = {}) {
 async function getReadyToShipOrders(account) {
   if (!account.accessToken) return [];
 
-  var allShipments = [];
-  var statuses = ['ready_to_ship', 'pending', 'handling'];
+  // Primero obtener el user ID
+  var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
+  if (!userInfo || !userInfo.id) {
+    console.log(account.name + ' - No se pudo obtener user ID');
+    return [];
+  }
+  var sellerId = userInfo.id;
+  console.log(account.name + ' - Seller ID: ' + sellerId);
 
-  for (var s = 0; s < statuses.length; s++) {
-    var status = statuses[s];
-    var offset = 0;
-    var hasMore = true;
+  var allOrders = [];
+  var offset = 0;
+  var hasMore = true;
 
-    while (hasMore) {
-      var data = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/search', {
-        params: {
-          seller_id: 'me',
-          status: status,
-          limit: 50,
-          offset: offset
-        }
-      });
-
-      if (!data || !data.results || data.results.length === 0) {
-        hasMore = false;
-        break;
+  // Buscar órdenes del vendedor
+  while (hasMore) {
+    var data = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/search', {
+      params: {
+        seller: sellerId,
+        sort: 'date_desc',
+        limit: 50,
+        offset: offset
       }
+    });
 
-      console.log(account.name + ' - ' + status + ': ' + data.results.length + ' envios encontrados');
-      allShipments = allShipments.concat(data.results);
-      offset += 50;
+    if (!data || !data.results || data.results.length === 0) {
+      hasMore = false;
+      break;
+    }
 
-      // Limitar a 200 por status para no sobrecargar
-      if (offset >= 200) {
-        hasMore = false;
-      }
+    console.log(account.name + ' - Órdenes encontradas: ' + data.results.length);
+    allOrders = allOrders.concat(data.results);
+    offset += 50;
+
+    // Limitar a 200 órdenes para no sobrecargar
+    if (offset >= 200) {
+      hasMore = false;
     }
   }
 
-  console.log(account.name + ' - Total antes de filtrar: ' + allShipments.length);
+  console.log(account.name + ' - Total órdenes: ' + allOrders.length);
 
-  // Log de tipos para debug
-  var typeCount = {};
-  allShipments.forEach(function(s) {
-    var key = (s.logistic_type || 'null') + '|' + (s.mode || 'null');
-    typeCount[key] = (typeCount[key] || 0) + 1;
-  });
-  console.log(account.name + ' - Tipos encontrados:', JSON.stringify(typeCount));
+  // Filtrar órdenes con envíos pendientes
+  var pendingShipments = [];
 
-  var filtered = allShipments.filter(function(s) {
-    // Excluir fulfillment (FULL - lo maneja ML)
-    if (s.logistic_type === 'fulfillment') {
-      return false;
-    }
-    // Excluir "acordar con comprador" - verificar en varios campos posibles
-    var mode = s.mode || (s.shipping && s.shipping.mode) || '';
-    if (mode === 'not_specified' || mode === 'custom') {
-      return false;
-    }
-    // Excluir si no tiene shipping_id válido
-    if (!s.id) {
-      return false;
-    }
-    return true;
-  });
+  for (var i = 0; i < allOrders.length; i++) {
+    var order = allOrders[i];
 
-  console.log(account.name + ' - Después de filtrar: ' + filtered.length);
+    // Verificar que la orden esté pagada
+    if (order.status !== 'paid') continue;
+
+    // Verificar shipping
+    var shipping = order.shipping || {};
+    var shippingId = shipping.id;
+    var shippingStatus = shipping.status;
+
+    // Log para debug
+    if (i < 5) {
+      console.log(account.name + ' - Orden ' + order.id + ': shipping_status=' + shippingStatus + ', shipping_id=' + shippingId + ', mode=' + (shipping.mode || 'N/A'));
+    }
+
+    // Filtrar por status de shipping pendiente
+    if (shippingStatus === 'ready_to_ship' || shippingStatus === 'pending' || shippingStatus === 'handling') {
+      // Excluir fulfillment
+      if (shipping.logistic_type === 'fulfillment') continue;
+
+      // Excluir acordar con comprador
+      if (shipping.mode === 'not_specified' || shipping.mode === 'custom' || !shippingId) continue;
+
+      pendingShipments.push({
+        id: shippingId.toString(),
+        orderId: order.id.toString(),
+        account: account.name,
+        dateCreated: order.date_created,
+        receiverName: shipping.receiver_address ? shipping.receiver_address.receiver_name : 'N/A',
+        logisticType: shipping.logistic_type || '',
+        status: shippingStatus,
+        mode: shipping.mode || ''
+      });
+    }
+  }
+
+  console.log(account.name + ' - Envíos pendientes: ' + pendingShipments.length);
 
   // Eliminar duplicados por ID
   var seen = {};
   var unique = [];
-  for (var i = 0; i < filtered.length; i++) {
-    var id = filtered[i].id.toString();
+  for (var i = 0; i < pendingShipments.length; i++) {
+    var id = pendingShipments[i].id;
     if (!seen[id]) {
       seen[id] = true;
-      unique.push(filtered[i]);
+      unique.push(pendingShipments[i]);
     }
   }
 
-  return unique.map(function(s) {
-    return {
-      id: s.id.toString(),
-      account: account.name,
-      dateCreated: s.date_created,
-      receiverName: s.receiver_address ? s.receiver_address.receiver_name : 'N/A',
-      logisticType: s.logistic_type,
-      status: s.status,
-      substatus: s.substatus || ''
-    };
-  });
+  return unique;
 }
 
 // ============================================
