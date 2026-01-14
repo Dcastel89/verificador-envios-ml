@@ -365,12 +365,34 @@ async function refreshAccessToken(account) {
 // FUNCIONES CON AUTO-RENOVACIÓN
 // ============================================
 
-function isWorkingHours() {
+// Configuración de corte horario (13:00 = 780 minutos desde medianoche)
+var CORTE_HORARIO = 13 * 60; // 13:00 en minutos
+
+function getArgentinaTime() {
   var now = new Date();
   var argentinaOffset = -3 * 60;
   var localOffset = now.getTimezoneOffset();
-  var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+  return new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+}
 
+function getArgentinaDate(date) {
+  var argentinaOffset = -3 * 60;
+  var localOffset = date.getTimezoneOffset();
+  return new Date(date.getTime() + (localOffset + argentinaOffset) * 60000);
+}
+
+function getDaySheetName(date) {
+  var days = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+  var argDate = date ? getArgentinaDate(new Date(date)) : getArgentinaTime();
+  return 'Envios_' + days[argDate.getDay()];
+}
+
+function getTodaySheetName() {
+  return getDaySheetName();
+}
+
+function isWorkingHours() {
+  var argentinaTime = getArgentinaTime();
   var day = argentinaTime.getDay();
   var hour = argentinaTime.getHours();
   var minute = argentinaTime.getMinutes();
@@ -380,6 +402,39 @@ function isWorkingHours() {
     return true;
   }
   return false;
+}
+
+function isBeforeCutoff(dateCreated) {
+  // Verifica si la venta fue creada antes del corte horario (13:00)
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var timeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+  return timeInMinutes < CORTE_HORARIO;
+}
+
+function isTodayOrder(dateCreated) {
+  // Verifica si la orden es de hoy (comparando solo la fecha)
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var today = getArgentinaTime();
+  return orderDate.toLocaleDateString('es-AR') === today.toLocaleDateString('es-AR');
+}
+
+function shouldProcessOrder(dateCreated) {
+  // Una orden se procesa si:
+  // 1. Es de hoy Y fue creada antes de las 13:00
+  // 2. O es de un día anterior (ya debería estar procesada)
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var today = getArgentinaTime();
+
+  var orderDateStr = orderDate.toLocaleDateString('es-AR');
+  var todayStr = today.toLocaleDateString('es-AR');
+
+  if (orderDateStr === todayStr) {
+    // Es de hoy, verificar corte horario
+    return isBeforeCutoff(dateCreated);
+  }
+
+  // Es de un día anterior, siempre procesar
+  return true;
 }
 
 async function mlApiRequest(account, url, options = {}) {
@@ -448,12 +503,92 @@ async function getReadyToShipOrders(account) {
   });
 }
 
-async function getExistingShipmentIds() {
-  if (!sheets || !SHEET_ID) return [];
+// ============================================
+// SISTEMA DE HOJAS ROTATIVAS (Lun-Vie)
+// ============================================
+
+async function ensureDaySheetExists(sheetName) {
+  if (!sheets || !SHEET_ID) return false;
+
   try {
+    // Intentar leer la hoja
+    await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A1'
+    });
+    return true;
+  } catch (error) {
+    if (error.message && error.message.includes('Unable to parse range')) {
+      // La hoja no existe, crearla
+      try {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: SHEET_ID,
+          resource: {
+            requests: [{
+              addSheet: {
+                properties: { title: sheetName }
+              }
+            }]
+          }
+        });
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: sheetName + '!A1:H1',
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif']]
+          }
+        });
+
+        console.log('Hoja ' + sheetName + ' creada exitosamente');
+        return true;
+      } catch (createError) {
+        console.error('Error creando hoja ' + sheetName + ':', createError.message);
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
+async function clearDaySheet(sheetName) {
+  if (!sheets || !SHEET_ID) return;
+
+  try {
+    // Obtener el ID de la hoja
+    var spreadsheet = await sheets.spreadsheets.get({
+      spreadsheetId: SHEET_ID
+    });
+
+    var sheet = spreadsheet.data.sheets.find(function(s) {
+      return s.properties.title === sheetName;
+    });
+
+    if (!sheet) return;
+
+    // Limpiar contenido (excepto encabezados)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A2:H1000'
+    });
+
+    console.log('Hoja ' + sheetName + ' limpiada');
+  } catch (error) {
+    console.error('Error limpiando hoja:', error.message);
+  }
+}
+
+async function getExistingShipmentIds(sheetName) {
+  if (!sheets || !SHEET_ID) return [];
+  sheetName = sheetName || getTodaySheetName();
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'A:C'
+      range: sheetName + '!A:C'
     });
     var rows = response.data.values || [];
     var ids = [];
@@ -467,15 +602,15 @@ async function getExistingShipmentIds() {
   }
 }
 
-async function addPendingShipments(shipments) {
+async function addPendingShipments(shipments, sheetName) {
   if (!sheets || !SHEET_ID || shipments.length === 0) return;
-  try {
-    var rows = shipments.map(function(s) {
-      var date = new Date(s.dateCreated);
-      var argentinaOffset = -3 * 60;
-      var localOffset = date.getTimezoneOffset();
-      var argentinaDate = new Date(date.getTime() + (localOffset + argentinaOffset) * 60000);
+  sheetName = sheetName || getTodaySheetName();
 
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    var rows = shipments.map(function(s) {
+      var argentinaDate = getArgentinaDate(new Date(s.dateCreated));
       var fecha = argentinaDate.toLocaleDateString('es-AR');
       var hora = argentinaDate.toLocaleTimeString('es-AR');
 
@@ -484,12 +619,12 @@ async function addPendingShipments(shipments) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: 'A:H',
+      range: sheetName + '!A:H',
       valueInputOption: 'USER_ENTERED',
       resource: { values: rows }
     });
 
-    console.log('Agregados ' + shipments.length + ' envios pendientes');
+    console.log('Agregados ' + shipments.length + ' envios a ' + sheetName);
   } catch (error) {
     console.error('Error agregando envios:', error.message);
   }
@@ -497,10 +632,15 @@ async function addPendingShipments(shipments) {
 
 async function markAsVerified(shipmentId, items) {
   if (!sheets || !SHEET_ID) return;
+
+  var sheetName = getTodaySheetName();
+
   try {
+    await ensureDaySheetExists(sheetName);
+
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'A:H'
+      range: sheetName + '!A:H'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -512,10 +652,7 @@ async function markAsVerified(shipmentId, items) {
       }
     }
 
-    var now = new Date();
-    var argentinaOffset = -3 * 60;
-    var localOffset = now.getTimezoneOffset();
-    var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+    var argentinaTime = getArgentinaTime();
     var fecha = argentinaTime.toLocaleDateString('es-AR');
     var hora = argentinaTime.toLocaleTimeString('es-AR');
     var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
@@ -523,38 +660,108 @@ async function markAsVerified(shipmentId, items) {
     if (rowIndex === -1) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: 'A:H',
+        range: sheetName + '!A:H',
         valueInputOption: 'USER_ENTERED',
         resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora]] }
       });
     } else {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
-        range: 'F' + rowIndex + ':H' + rowIndex,
+        range: sheetName + '!F' + rowIndex + ':H' + rowIndex,
         valueInputOption: 'USER_ENTERED',
         resource: { values: [[itemsStr, 'Verificado', hora]] }
       });
     }
 
-    console.log('Envio ' + shipmentId + ' marcado como verificado');
+    console.log('Envio ' + shipmentId + ' marcado como verificado en ' + sheetName);
   } catch (error) {
     console.error('Error marcando verificado:', error.message);
   }
 }
 
-async function syncPendingShipments() {
-  if (!isWorkingHours()) {
+// ============================================
+// SINCRONIZACIÓN DE ENVÍOS
+// ============================================
+
+var lastMorningSyncDate = null;
+
+async function syncMorningShipments() {
+  // Sincronización completa de las 9:00 AM
+  var today = getArgentinaTime().toLocaleDateString('es-AR');
+
+  if (lastMorningSyncDate === today) {
+    console.log('Sync matutino ya ejecutado hoy');
     return;
   }
 
-  console.log('Sincronizando envios pendientes...');
+  console.log('=== SINCRONIZACIÓN MATUTINA 9:00 AM ===');
 
-  var existingIds = await getExistingShipmentIds();
+  var sheetName = getTodaySheetName();
+
+  // Limpiar la hoja del día (sobreescribir)
+  await clearDaySheet(sheetName);
+  await ensureDaySheetExists(sheetName);
+
   var allShipments = [];
 
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
-    allShipments = allShipments.concat(shipments);
+
+    // Filtrar: solo los creados antes de las 13:00 de hoy o de días anteriores
+    var filtered = shipments.filter(function(s) {
+      return shouldProcessOrder(s.dateCreated);
+    });
+
+    allShipments = allShipments.concat(filtered);
+  }
+
+  if (allShipments.length > 0) {
+    await addPendingShipments(allShipments, sheetName);
+  }
+
+  lastMorningSyncDate = today;
+  console.log('Sync matutino completado. Total: ' + allShipments.length + ' envios');
+}
+
+async function syncPendingShipments() {
+  var argTime = getArgentinaTime();
+  var day = argTime.getDay();
+  var hour = argTime.getHours();
+  var minute = argTime.getMinutes();
+  var timeInMinutes = hour * 60 + minute;
+
+  // Solo de lunes a viernes
+  if (day < 1 || day > 5) {
+    return;
+  }
+
+  // Sync matutino a las 9:00 (540 minutos)
+  if (timeInMinutes >= 540 && timeInMinutes < 545) {
+    await syncMorningShipments();
+    return;
+  }
+
+  // No sincronizar fuera de horario laboral
+  if (!isWorkingHours()) {
+    return;
+  }
+
+  // Sync incremental durante el día
+  console.log('Sincronizando envios pendientes...');
+
+  var sheetName = getTodaySheetName();
+  var existingIds = await getExistingShipmentIds(sheetName);
+  var allShipments = [];
+
+  for (var i = 0; i < accounts.length; i++) {
+    var shipments = await getReadyToShipOrders(accounts[i]);
+
+    // Filtrar por corte horario
+    var filtered = shipments.filter(function(s) {
+      return shouldProcessOrder(s.dateCreated);
+    });
+
+    allShipments = allShipments.concat(filtered);
   }
 
   var newShipments = allShipments.filter(function(s) {
@@ -562,7 +769,7 @@ async function syncPendingShipments() {
   });
 
   if (newShipments.length > 0) {
-    await addPendingShipments(newShipments);
+    await addPendingShipments(newShipments, sheetName);
   }
 
   console.log('Sync completado. Nuevos: ' + newShipments.length);
@@ -924,10 +1131,108 @@ app.get('/api/status', function(req, res) {
     message: 'Verificador de Envios ML',
     sheets: sheets ? 'conectado' : 'no configurado',
     workingHours: isWorkingHours(),
+    todaySheet: getTodaySheetName(),
     accounts: accounts.map(function(a) {
       return { name: a.name, hasToken: !!a.accessToken };
     })
   });
+});
+
+// ============================================
+// WEBHOOK DE MERCADOLIBRE
+// ============================================
+
+app.post('/webhooks/ml', async function(req, res) {
+  // Responder inmediatamente con 200 (requerido por ML)
+  res.status(200).send('OK');
+
+  var notification = req.body;
+  console.log('Webhook ML recibido:', JSON.stringify(notification));
+
+  try {
+    // Verificar que sea una notificación de orders
+    if (notification.topic !== 'orders_v2' && notification.topic !== 'orders') {
+      console.log('Topic ignorado:', notification.topic);
+      return;
+    }
+
+    var resource = notification.resource;
+    if (!resource) {
+      console.log('Sin resource en notificación');
+      return;
+    }
+
+    // Extraer order_id del resource (formato: /orders/123456789)
+    var orderMatch = resource.match(/\/orders\/(\d+)/);
+    if (!orderMatch) {
+      console.log('No se pudo extraer order_id de:', resource);
+      return;
+    }
+
+    var orderId = orderMatch[1];
+    console.log('Procesando orden:', orderId);
+
+    // Buscar la orden en todas las cuentas para obtener el shipment
+    for (var i = 0; i < accounts.length; i++) {
+      var account = accounts[i];
+      if (!account.accessToken) continue;
+
+      var orderData = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+      if (orderData && orderData.shipping && orderData.shipping.id) {
+        var shipmentId = orderData.shipping.id.toString();
+        var dateCreated = orderData.date_created;
+
+        // Verificar corte horario
+        if (!shouldProcessOrder(dateCreated)) {
+          console.log('Orden fuera de corte horario (después de 13:00), ignorando:', orderId);
+          return;
+        }
+
+        // Verificar si el envío ya existe en la hoja de hoy
+        var sheetName = getTodaySheetName();
+        var existingIds = await getExistingShipmentIds(sheetName);
+
+        if (existingIds.indexOf(shipmentId) !== -1) {
+          console.log('Envío ya existe en la hoja:', shipmentId);
+          return;
+        }
+
+        // Obtener datos del envío
+        var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId);
+
+        if (shipmentData && shipmentData.status === 'ready_to_ship') {
+          // Filtrar fulfillment
+          if (shipmentData.logistic_type === 'fulfillment') {
+            console.log('Envío fulfillment ignorado:', shipmentId);
+            return;
+          }
+
+          var shipment = {
+            id: shipmentId,
+            account: account.name,
+            dateCreated: dateCreated,
+            receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
+            logisticType: shipmentData.logistic_type
+          };
+
+          await addPendingShipments([shipment], sheetName);
+          console.log('Nuevo envío agregado via webhook:', shipmentId);
+        }
+
+        return;
+      }
+    }
+
+    console.log('Orden no encontrada en ninguna cuenta:', orderId);
+  } catch (error) {
+    console.error('Error procesando webhook:', error.message);
+  }
+});
+
+// Endpoint para verificar que el webhook funciona
+app.get('/webhooks/ml', function(req, res) {
+  res.json({ status: 'Webhook endpoint activo', url: 'https://verificador-envios-ml.onrender.com/webhooks/ml' });
 });
 
 // ============================================
@@ -990,17 +1295,18 @@ app.get('/api/resumen-dia', async function(req, res) {
   }
 
   try {
-    // Obtener fecha de hoy en Argentina
-    var now = new Date();
-    var argentinaOffset = -3 * 60;
-    var localOffset = now.getTimezoneOffset();
-    var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+    // Usar la hoja del día actual
+    var sheetName = getTodaySheetName();
+    var argentinaTime = getArgentinaTime();
     var hoy = argentinaTime.toLocaleDateString('es-AR');
 
-    // Leer datos de la hoja principal
+    // Asegurar que la hoja existe
+    await ensureDaySheetExists(sheetName);
+
+    // Leer datos de la hoja del día
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'Hoja 1!A:H'
+      range: sheetName + '!A:H'
     });
 
     var rows = response.data.values || [];
@@ -1011,29 +1317,30 @@ app.get('/api/resumen-dia', async function(req, res) {
     // Recorrer filas (saltando encabezado)
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
-      var fecha = row[0] || '';
+      if (!row || row.length < 3) continue;
+
       var envioId = row[2] || '';
       var cuenta = row[3] || '';
       var receptor = row[4] || '';
       var estado = row[6] || '';
 
-      // Filtrar por fecha de hoy
-      if (fecha === hoy) {
-        total++;
-        if (estado === 'Verificado') {
-          verificados++;
-        } else {
-          pendientes.push({
-            id: envioId,
-            cuenta: cuenta,
-            receptor: receptor
-          });
-        }
+      if (!envioId) continue;
+
+      total++;
+      if (estado === 'Verificado') {
+        verificados++;
+      } else {
+        pendientes.push({
+          id: envioId,
+          cuenta: cuenta,
+          receptor: receptor
+        });
       }
     }
 
     res.json({
       fecha: hoy,
+      hoja: sheetName,
       total: total,
       verificados: verificados,
       pendientesCount: pendientes.length,
