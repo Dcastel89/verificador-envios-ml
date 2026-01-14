@@ -119,15 +119,6 @@
     .sync-progress.active { display: block; }
     .sync-progress-bar { height: 100%; background: #2563eb; border-radius: 2px; animation: progress 2s ease-in-out infinite; width: 30%; }
     @keyframes progress { 0% { margin-left: 0; } 50% { margin-left: 70%; } 100% { margin-left: 0; } }
-
-    /* Pestañas de bloque */
-    .bloque-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
-    .bloque-tab { flex: 1; padding: 12px 16px; border: 2px solid #e5e7eb; background: white; color: #374151; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .bloque-tab:hover { border-color: #2563eb; }
-    .bloque-tab.active { background: #2563eb; color: white; border-color: #2563eb; }
-    .bloque-tab.active[data-bloque="cerrado"] { background: #dc2626; border-color: #dc2626; }
-    .bloque-tab.active[data-bloque="nuevo"] { background: #059669; border-color: #059669; }
-    .bloque-info { text-align: center; font-size: 12px; color: #6b7280; margin-bottom: 12px; padding: 6px; background: #f9fafb; border-radius: 6px; }
   </style>
 </head>
 <body>
@@ -141,16 +132,10 @@
   <div class="container">
     <!-- Vista Panel -->
     <div class="view-section active" id="viewPanel">
-    <!-- Selector de bloque -->
-    <div class="bloque-tabs">
-      <button type="button" class="bloque-tab active" id="tabBloqueCerrado" data-bloque="cerrado">Bloque Cerrado</button>
-      <button type="button" class="bloque-tab" id="tabBloqueNuevo" data-bloque="nuevo">Bloque Nuevo</button>
-    </div>
-    <div class="bloque-info" id="bloqueInfo">Corte: --:--</div>
     <!-- Resumen del día -->
     <div class="resumen-section" id="resumenSection">
       <div class="resumen-header">
-        <h2 id="resumenTitulo">Bloque Cerrado</h2>
+        <h2>Resumen del dia</h2>
         <span class="resumen-fecha" id="resumenFecha">--/--/----</span>
       </div>
       <div class="resumen-stats">
@@ -782,7 +767,7 @@
       resetBtn.onclick = reset;
 
       // ============================================
-      // RESUMEN DEL DÍA Y BLOQUES
+      // RESUMEN DEL DÍA
       // ============================================
       var resumenFecha = document.getElementById('resumenFecha');
       var resumenTotal = document.getElementById('resumenTotal');
@@ -793,81 +778,41 @@
       var resumenPendientesList = document.getElementById('resumenPendientesList');
       var resumenRefresh = document.getElementById('resumenRefresh');
       var actualizarEstadosBtn = document.getElementById('actualizarEstados');
-      var resumenTitulo = document.getElementById('resumenTitulo');
-      var bloqueInfo = document.getElementById('bloqueInfo');
-      var tabBloqueCerrado = document.getElementById('tabBloqueCerrado');
-      var tabBloqueNuevo = document.getElementById('tabBloqueNuevo');
 
-      var bloqueActual = 'cerrado'; // Por defecto
-      var bloqueDefaultCargado = false;
-
-      function switchBloque(bloque) {
-        bloqueActual = bloque;
-        if (bloque === 'cerrado') {
-          tabBloqueCerrado.classList.add('active');
-          tabBloqueNuevo.classList.remove('active');
-          resumenTitulo.textContent = 'Bloque Cerrado';
-        } else {
-          tabBloqueCerrado.classList.remove('active');
-          tabBloqueNuevo.classList.add('active');
-          resumenTitulo.textContent = 'Bloque Nuevo';
-        }
-        cargarResumenBloque();
-      }
-
-      tabBloqueCerrado.onclick = function() { switchBloque('cerrado'); };
-      tabBloqueNuevo.onclick = function() { switchBloque('nuevo'); };
-
-      function cargarInfoBloques() {
-        fetch(API_URL + '/api/bloques/info')
+      function cargarResumenDia() {
+        fetch(API_URL + '/api/resumen-dia')
           .then(function(response) { return response.json(); })
           .then(function(data) {
-            bloqueInfo.textContent = 'Corte: ' + data.horaCorteMaximo + ' | ' + data.horaActual;
-            // Establecer bloque por defecto solo la primera vez
-            if (!bloqueDefaultCargado) {
-              bloqueDefaultCargado = true;
-              switchBloque(data.bloqueDefault);
-            }
-          })
-          .catch(function(err) {
-            console.error('Error cargando info bloques:', err);
-          });
-      }
-
-      function cargarResumenBloque() {
-        var endpoint = bloqueActual === 'cerrado' ? '/api/bloque-cerrado' : '/api/bloque-nuevo';
-        fetch(API_URL + endpoint)
-          .then(function(response) { return response.json(); })
-          .then(function(data) {
-            var now = new Date();
-            resumenFecha.textContent = now.toLocaleDateString('es-AR');
+            resumenFecha.textContent = data.fecha || '--/--/----';
             resumenTotal.textContent = data.total || 0;
-            resumenVerificados.textContent = '-';
-            resumenDespachados.textContent = '-';
-            resumenPendientes.textContent = data.total || 0;
+            resumenVerificados.textContent = data.verificados || 0;
+            resumenDespachados.textContent = data.despachados || 0;
+            resumenPendientes.textContent = data.pendientesCount || 0;
 
-            // Actualizar estado según el bloque
+            // Actualizar estado
             resumenStatus.className = 'resumen-status';
             if (data.total === 0) {
               resumenStatus.classList.add('vacio');
-              resumenStatus.textContent = bloqueActual === 'nuevo'
-                ? 'No hay envios nuevos desde el corte'
-                : 'No hay envios en este bloque';
+              resumenStatus.textContent = 'No hay envios registrados hoy';
+              resumenPendientesList.classList.add('hidden');
+            } else if (data.completo) {
+              resumenStatus.classList.add('completo');
+              resumenStatus.textContent = 'Todos los envios verificados!';
               resumenPendientesList.classList.add('hidden');
             } else {
               resumenStatus.classList.add('pendiente');
-              resumenStatus.textContent = data.total + ' envio(s) en ' + (bloqueActual === 'cerrado' ? 'bloque cerrado' : 'bloque nuevo');
+              resumenStatus.textContent = 'Faltan ' + data.pendientesCount + ' envio(s) por verificar';
 
-              // Mostrar lista de envíos del bloque
-              if (data.envios && data.envios.length > 0) {
+              // Mostrar lista de pendientes
+              if (data.pendientes && data.pendientes.length > 0) {
                 resumenPendientesList.innerHTML = '';
                 resumenPendientesList.classList.remove('hidden');
-                for (var i = 0; i < data.envios.length; i++) {
-                  var p = data.envios[i];
+                for (var i = 0; i < data.pendientes.length; i++) {
+                  var p = data.pendientes[i];
                   var item = document.createElement('div');
                   item.className = 'resumen-pendiente-item';
                   item.setAttribute('data-id', p.id);
-                  item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + ' - ' + (p.receptor || '') + '</span>';
+                  item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + '</span>';
                   item.onclick = function() {
                     var id = this.getAttribute('data-id');
                     shipmentInput.value = id;
@@ -880,17 +825,12 @@
           })
           .catch(function(err) {
             resumenStatus.className = 'resumen-status vacio';
-            resumenStatus.textContent = 'Error cargando bloque';
+            resumenStatus.textContent = 'Error cargando resumen';
             console.error(err);
           });
       }
 
-      // Función legacy para compatibilidad
-      function cargarResumenDia() {
-        cargarResumenBloque();
-      }
-
-      resumenRefresh.onclick = cargarResumenBloque;
+      resumenRefresh.onclick = cargarResumenDia;
 
       // Actualizar estados desde ML
       actualizarEstadosBtn.onclick = function() {
@@ -995,13 +935,13 @@
           });
       };
 
-      // Cargar info de bloques y resumen al iniciar
-      cargarInfoBloques();
+      // Cargar resumen al iniciar
+      cargarResumenDia();
 
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v12 - con bloques cerrado/nuevo');
+      console.log('App iniciada v13 - bloque del dia simple');
     })();
   </script>
 </body>
