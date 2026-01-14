@@ -593,35 +593,90 @@ function isTodayOrder(dateCreated) {
   return orderDate.toLocaleDateString('es-AR') === today.toLocaleDateString('es-AR');
 }
 
+function isAfterCutoffNow(cuenta, logisticType) {
+  // Verifica si AHORA estamos después del corte horario
+  var now = getArgentinaTime();
+  var nowInMinutes = now.getHours() * 60 + now.getMinutes();
+  var corte = cuenta && logisticType ? getHorarioCorte(cuenta, logisticType) : HORARIO_DEFAULT;
+  return nowInMinutes >= corte;
+}
+
 function shouldProcessOrder(dateCreated, cuenta, logisticType) {
-  // Lógica del "bloque del día":
+  // Lógica del "bloque actual":
   //
-  // El bloque del día de HOY incluye:
-  // 1. Envíos de HOY creados ANTES de su corte específico
-  // 2. Envíos de AYER creados DESPUÉS de su corte específico (perdieron el bloque de ayer)
+  // Un bloque va desde el corte de un día hasta el corte del día siguiente.
+  // Ejemplo con corte a las 14:00:
+  //   - Bloque actual: desde 14:00 de HOY hasta 14:00 de MAÑANA
+  //   - Bloque anterior: desde 14:00 de AYER hasta 14:00 de HOY
   //
-  // El bloque NO incluye:
-  // - Envíos de HOY creados DESPUÉS de su corte → van al bloque de MAÑANA
-  // - Envíos de más de 1 día atrás → ya deberían estar procesados
+  // Si estamos DESPUÉS del corte de hoy (ej: son las 16:00):
+  //   - Bloque actual = órdenes de HOY después del corte
+  //
+  // Si estamos ANTES del corte de hoy (ej: son las 10:00):
+  //   - Bloque actual = órdenes de AYER después del corte + órdenes de HOY antes del corte
 
   var orderDate = getArgentinaDate(new Date(dateCreated));
   var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
   var corteEspecifico = cuenta && logisticType ? getHorarioCorte(cuenta, logisticType) : HORARIO_DEFAULT;
 
-  // Caso 1: Es de HOY
-  if (isTodayOrder(dateCreated)) {
-    // Solo procesar si fue creado ANTES del corte específico
-    return orderTimeInMinutes < corteEspecifico;
+  var now = getArgentinaTime();
+  var nowInMinutes = now.getHours() * 60 + now.getMinutes();
+  var estamosPostCorte = nowInMinutes >= corteEspecifico;
+
+  // Caso 1: Estamos DESPUÉS del corte de hoy
+  if (estamosPostCorte) {
+    // Bloque actual = órdenes de HOY creadas DESPUÉS del corte
+    if (isTodayOrder(dateCreated)) {
+      return orderTimeInMinutes >= corteEspecifico;
+    }
+    return false;
   }
 
-  // Caso 2: Es de AYER
+  // Caso 2: Estamos ANTES del corte de hoy
+  // Bloque actual = órdenes de AYER post-corte + órdenes de HOY pre-corte
+  if (isTodayOrder(dateCreated)) {
+    return orderTimeInMinutes < corteEspecifico;
+  }
   if (isYesterday(dateCreated)) {
-    // Solo procesar si fue creado DESPUÉS del corte específico
-    // (esos perdieron el bloque de ayer y van al de hoy)
     return orderTimeInMinutes >= corteEspecifico;
   }
 
-  // Caso 3: Es de hace más de 1 día - no debería estar aquí, pero incluirlo por si acaso
+  return false;
+}
+
+function shouldProcessOrderPreviousBlock(dateCreated, cuenta, logisticType) {
+  // Lógica del "bloque anterior" (para consulta histórica):
+  //
+  // Si estamos DESPUÉS del corte de hoy:
+  //   - Bloque anterior = órdenes de AYER post-corte + órdenes de HOY pre-corte
+  //
+  // Si estamos ANTES del corte de hoy:
+  //   - Bloque anterior = órdenes de ANTEAYER post-corte + órdenes de AYER pre-corte
+
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+  var corteEspecifico = cuenta && logisticType ? getHorarioCorte(cuenta, logisticType) : HORARIO_DEFAULT;
+
+  var now = getArgentinaTime();
+  var nowInMinutes = now.getHours() * 60 + now.getMinutes();
+  var estamosPostCorte = nowInMinutes >= corteEspecifico;
+
+  if (estamosPostCorte) {
+    // Bloque anterior = AYER post-corte + HOY pre-corte
+    if (isTodayOrder(dateCreated)) {
+      return orderTimeInMinutes < corteEspecifico;
+    }
+    if (isYesterday(dateCreated)) {
+      return orderTimeInMinutes >= corteEspecifico;
+    }
+  } else {
+    // Bloque anterior = ANTEAYER post-corte + AYER pre-corte
+    if (isYesterday(dateCreated)) {
+      return orderTimeInMinutes < corteEspecifico;
+    }
+    // Para anteayer necesitaríamos otra función, por ahora no lo incluimos
+  }
+
   return false;
 }
 
@@ -1458,6 +1513,48 @@ app.get('/api/sync-morning', async function(req, res) {
     });
   } catch (error) {
     console.error('Error en sync manual:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para obtener envíos del bloque anterior (sin guardar en hoja)
+app.get('/api/bloque-anterior', async function(req, res) {
+  try {
+    var allShipments = [];
+
+    for (var i = 0; i < accounts.length; i++) {
+      var shipments = await getReadyToShipOrders(accounts[i]);
+
+      var filtered = shipments.filter(function(s) {
+        return shouldProcessOrderPreviousBlock(s.dateCreated, s.account, s.logisticType);
+      });
+
+      allShipments = allShipments.concat(filtered);
+    }
+
+    // Calcular info del bloque
+    var now = getArgentinaTime();
+    var corteDefault = HORARIO_DEFAULT;
+    var horaCorte = Math.floor(corteDefault / 60) + ':' + String(corteDefault % 60).padStart(2, '0');
+
+    res.json({
+      bloque: 'anterior',
+      descripcion: 'Envíos del bloque anterior al corte de hoy',
+      horaCorteReferencia: horaCorte,
+      total: allShipments.length,
+      envios: allShipments.map(function(s) {
+        return {
+          id: s.id,
+          orderId: s.orderId,
+          cuenta: s.account,
+          receptor: s.receiverName,
+          fecha: s.dateCreated,
+          logisticType: s.logisticType
+        };
+      })
+    });
+  } catch (error) {
+    console.error('Error obteniendo bloque anterior:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
