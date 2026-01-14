@@ -980,6 +980,72 @@ app.post('/api/barcodes/reload', async function(req, res) {
   res.json({ success: true, count: Object.keys(barcodeCache).length });
 });
 
+// ============================================
+// RESUMEN DEL DÍA
+// ============================================
+
+app.get('/api/resumen-dia', async function(req, res) {
+  if (!sheets || !SHEET_ID) {
+    return res.json({ error: 'Sheets no configurado', total: 0, verificados: 0, pendientes: 0 });
+  }
+
+  try {
+    // Obtener fecha de hoy en Argentina
+    var now = new Date();
+    var argentinaOffset = -3 * 60;
+    var localOffset = now.getTimezoneOffset();
+    var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+    var hoy = argentinaTime.toLocaleDateString('es-AR');
+
+    // Leer datos de la hoja principal
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'Hoja 1!A:H'
+    });
+
+    var rows = response.data.values || [];
+    var total = 0;
+    var verificados = 0;
+    var pendientes = [];
+
+    // Recorrer filas (saltando encabezado)
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      var fecha = row[0] || '';
+      var envioId = row[2] || '';
+      var cuenta = row[3] || '';
+      var receptor = row[4] || '';
+      var estado = row[6] || '';
+
+      // Filtrar por fecha de hoy
+      if (fecha === hoy) {
+        total++;
+        if (estado === 'Verificado') {
+          verificados++;
+        } else {
+          pendientes.push({
+            id: envioId,
+            cuenta: cuenta,
+            receptor: receptor
+          });
+        }
+      }
+    }
+
+    res.json({
+      fecha: hoy,
+      total: total,
+      verificados: verificados,
+      pendientesCount: pendientes.length,
+      pendientes: pendientes,
+      completo: pendientes.length === 0 && total > 0
+    });
+  } catch (error) {
+    console.error('Error obteniendo resumen:', error.message);
+    res.json({ error: error.message, total: 0, verificados: 0, pendientes: [] });
+  }
+});
+
 app.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
