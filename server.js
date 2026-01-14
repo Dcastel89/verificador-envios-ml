@@ -305,6 +305,7 @@ function getSkuByBarcode(barcode) {
 // Cache: { "TIENDA|flex": 600, "TIENDA|colecta": 780, ... } (minutos desde medianoche)
 var horariosCache = {};
 var HORARIO_DEFAULT = 13 * 60; // 13:00 por defecto
+var lastHorariosLoadDate = null; // Para cargar horarios solo una vez al día
 
 // Mapeo de logistic_type a nombre amigable
 function getTipoEnvio(logisticType) {
@@ -1007,9 +1008,10 @@ async function getReadyToShipOrders(account) {
       console.log(account.name + ' - Envío ' + shippingId + ': status=' + shipment.status + ', logistic_type=' + shipment.logistic_type + ', mode=' + shipment.mode);
     }
 
-    // Filtrar por status pendiente
     var status = shipment.status;
-    if (status !== 'ready_to_ship' && status !== 'pending' && status !== 'handling') {
+
+    // Excluir cancelados
+    if (status === 'cancelled') {
       continue;
     }
 
@@ -1346,6 +1348,17 @@ async function syncMorningShipments() {
     return;
   }
 
+  // Cargar horarios de corte desde API de ML (una vez al día)
+  if (lastHorariosLoadDate !== today) {
+    console.log('=== Cargando horarios de corte desde API de ML ===');
+    try {
+      await loadHorariosFromAPI();
+      lastHorariosLoadDate = today;
+    } catch (error) {
+      console.error('Error cargando horarios:', error.message);
+    }
+  }
+
   console.log('=== SINCRONIZACIÓN MATUTINA 9:00 AM ===');
 
   var sheetName = getTodaySheetName();
@@ -1428,16 +1441,6 @@ async function syncPendingShipments() {
 }
 
 setInterval(syncPendingShipments, 60000);
-
-// Actualizar horarios desde API de ML cada hora (3600000 ms)
-setInterval(async function() {
-  try {
-    console.log('=== Actualizando horarios desde API de ML ===');
-    await loadHorariosFromAPI();
-  } catch (error) {
-    console.error('Error actualizando horarios automáticamente:', error.message);
-  }
-}, 3600000);
 
 function describeSKU(sku) {
   if (!sku) return '';
@@ -1752,7 +1755,7 @@ app.get('/api/sync-morning', async function(req, res) {
   }
 });
 
-// Endpoint para obtener envíos del día (00:00 a 23:59)
+// Endpoint para obtener envíos del día de trabajo actual (respetando horarios de corte)
 app.get('/api/envios-del-dia', async function(req, res) {
   try {
     var allShipments = [];
@@ -1760,9 +1763,9 @@ app.get('/api/envios-del-dia', async function(req, res) {
     for (var i = 0; i < accounts.length; i++) {
       var shipments = await getReadyToShipOrders(accounts[i]);
 
-      // Filtrar solo los envíos creados hoy (día calendario completo)
+      // Filtrar envíos que corresponden al día de trabajo actual según horario de corte
       var filtered = shipments.filter(function(s) {
-        return isTodayOrder(s.dateCreated);
+        return shouldProcessOrder(s.dateCreated, s.account, s.logisticType);
       });
 
       allShipments = allShipments.concat(filtered);

@@ -90,14 +90,26 @@
     .resumen-stat { flex: 1; text-align: center; padding: 12px; border-radius: 8px; }
     .resumen-stat.total { background: #eff6ff; }
     .resumen-stat.verificados { background: #f0fdf4; }
-    .resumen-stat.despachados { background: #fef9c3; }
     .resumen-stat.pendientes { background: #fef2f2; }
     .resumen-stat-number { font-size: 24px; font-weight: 700; }
     .resumen-stat.total .resumen-stat-number { color: #2563eb; }
     .resumen-stat.verificados .resumen-stat-number { color: #16a34a; }
-    .resumen-stat.despachados .resumen-stat-number { color: #ca8a04; }
     .resumen-stat.pendientes .resumen-stat-number { color: #dc2626; }
     .resumen-stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    /* Botones de cuentas */
+    .cuentas-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+    .cuenta-btn { flex: 1; min-width: 60px; padding: 10px 8px; border: 2px solid #e5e7eb; background: white; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.2s; }
+    .cuenta-btn:hover { border-color: #2563eb; background: #eff6ff; }
+    .cuenta-btn.active { border-color: #2563eb; background: #2563eb; color: white; }
+    .cuenta-desglose { background: #f9fafb; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: none; }
+    .cuenta-desglose.show { display: block; }
+    .cuenta-desglose-title { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+    .cuenta-desglose-items { display: flex; gap: 16px; justify-content: center; }
+    .cuenta-desglose-item { text-align: center; }
+    .cuenta-desglose-num { font-size: 20px; font-weight: 700; }
+    .cuenta-desglose-num.flex { color: #7c3aed; }
+    .cuenta-desglose-num.otros { color: #059669; }
+    .cuenta-desglose-label { font-size: 11px; color: #6b7280; }
     .resumen-status { padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; }
     .resumen-status.completo { background: #dcfce7; color: #16a34a; }
     .resumen-status.pendiente { background: #fef3c7; color: #b45309; }
@@ -148,16 +160,32 @@
           <div class="resumen-stat-number" id="resumenVerificados">-</div>
           <div class="resumen-stat-label">VERIF</div>
         </div>
-        <div class="resumen-stat despachados">
-          <div class="resumen-stat-number" id="resumenDespachados">-</div>
-          <div class="resumen-stat-label">DESPACH</div>
-        </div>
         <div class="resumen-stat pendientes">
           <div class="resumen-stat-number" id="resumenPendientes">-</div>
           <div class="resumen-stat-label">PEND</div>
         </div>
       </div>
       <div class="resumen-status vacio" id="resumenStatus">Cargando...</div>
+      <div class="cuentas-btns" id="cuentasBtns">
+        <button type="button" class="cuenta-btn" data-cuenta="TIENDA">TIENDA</button>
+        <button type="button" class="cuenta-btn" data-cuenta="SHOP">SHOP</button>
+        <button type="button" class="cuenta-btn" data-cuenta="FURST">FURST</button>
+        <button type="button" class="cuenta-btn" data-cuenta="MUN1">MUN1</button>
+        <button type="button" class="cuenta-btn" data-cuenta="MUN2">MUN2</button>
+      </div>
+      <div class="cuenta-desglose" id="cuentaDesglose">
+        <div class="cuenta-desglose-title" id="cuentaDesgloseTitulo">-</div>
+        <div class="cuenta-desglose-items">
+          <div class="cuenta-desglose-item">
+            <div class="cuenta-desglose-num flex" id="cuentaFlex">0</div>
+            <div class="cuenta-desglose-label">FLEX</div>
+          </div>
+          <div class="cuenta-desglose-item">
+            <div class="cuenta-desglose-num otros" id="cuentaOtros">0</div>
+            <div class="cuenta-desglose-label">OTROS</div>
+          </div>
+        </div>
+      </div>
       <div class="resumen-pendientes-list hidden" id="resumenPendientesList"></div>
       <div style="text-align: center; margin-top: 12px;">
         <button type="button" class="resumen-sync-btn" id="resumenSync">
@@ -773,12 +801,19 @@
       var resumenFecha = document.getElementById('resumenFecha');
       var resumenTotal = document.getElementById('resumenTotal');
       var resumenVerificados = document.getElementById('resumenVerificados');
-      var resumenDespachados = document.getElementById('resumenDespachados');
       var resumenPendientes = document.getElementById('resumenPendientes');
       var resumenStatus = document.getElementById('resumenStatus');
       var resumenPendientesList = document.getElementById('resumenPendientesList');
       var resumenRefresh = document.getElementById('resumenRefresh');
       var actualizarEstadosBtn = document.getElementById('actualizarEstados');
+      var cuentasBtns = document.getElementById('cuentasBtns');
+      var cuentaDesglose = document.getElementById('cuentaDesglose');
+      var cuentaDesgloseTitulo = document.getElementById('cuentaDesgloseTitulo');
+      var cuentaFlex = document.getElementById('cuentaFlex');
+      var cuentaOtros = document.getElementById('cuentaOtros');
+
+      var enviosDelDia = []; // Guardar envíos para filtrar por cuenta
+      var cuentaSeleccionada = null;
 
       function cargarResumenDia() {
         fetch(API_URL + '/api/envios-del-dia')
@@ -788,35 +823,25 @@
             resumenFecha.textContent = now.toLocaleDateString('es-AR');
             resumenTotal.textContent = data.total || 0;
             resumenVerificados.textContent = '-';
-            resumenDespachados.textContent = '-';
             resumenPendientes.textContent = data.total || 0;
+
+            enviosDelDia = data.envios || [];
 
             resumenStatus.className = 'resumen-status';
             if (data.total === 0) {
               resumenStatus.classList.add('vacio');
               resumenStatus.textContent = 'No hay envios del dia';
               resumenPendientesList.classList.add('hidden');
+              cuentaDesglose.classList.remove('show');
             } else {
               resumenStatus.classList.add('pendiente');
               resumenStatus.textContent = data.total + ' envio(s) pendientes';
+              mostrarListaPendientes(enviosDelDia);
+            }
 
-              if (data.envios && data.envios.length > 0) {
-                resumenPendientesList.innerHTML = '';
-                resumenPendientesList.classList.remove('hidden');
-                for (var i = 0; i < data.envios.length; i++) {
-                  var p = data.envios[i];
-                  var item = document.createElement('div');
-                  item.className = 'resumen-pendiente-item';
-                  item.setAttribute('data-id', p.id);
-                  item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + ' - ' + (p.receptor || '') + '</span>';
-                  item.onclick = function() {
-                    var id = this.getAttribute('data-id');
-                    shipmentInput.value = id;
-                    searchShipment(id);
-                  };
-                  resumenPendientesList.appendChild(item);
-                }
-              }
+            // Si hay cuenta seleccionada, actualizar desglose
+            if (cuentaSeleccionada) {
+              mostrarDesgloseCuenta(cuentaSeleccionada);
             }
           })
           .catch(function(err) {
@@ -825,6 +850,75 @@
             console.error(err);
           });
       }
+
+      function mostrarListaPendientes(envios) {
+        resumenPendientesList.innerHTML = '';
+        if (envios.length > 0) {
+          resumenPendientesList.classList.remove('hidden');
+          for (var i = 0; i < envios.length; i++) {
+            var p = envios[i];
+            var item = document.createElement('div');
+            item.className = 'resumen-pendiente-item';
+            item.setAttribute('data-id', p.id);
+            item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + ' - ' + (p.receptor || '') + '</span>';
+            item.onclick = function() {
+              var id = this.getAttribute('data-id');
+              shipmentInput.value = id;
+              searchShipment(id);
+            };
+            resumenPendientesList.appendChild(item);
+          }
+        } else {
+          resumenPendientesList.classList.add('hidden');
+        }
+      }
+
+      function mostrarDesgloseCuenta(cuenta) {
+        var enviosCuenta = enviosDelDia.filter(function(e) { return e.cuenta === cuenta; });
+        var flexCount = 0;
+        var otrosCount = 0;
+
+        for (var i = 0; i < enviosCuenta.length; i++) {
+          if (enviosCuenta[i].logisticType === 'self_service') {
+            flexCount++;
+          } else {
+            otrosCount++;
+          }
+        }
+
+        cuentaDesgloseTitulo.textContent = cuenta + ' (' + enviosCuenta.length + ' envios)';
+        cuentaFlex.textContent = flexCount;
+        cuentaOtros.textContent = otrosCount;
+        cuentaDesglose.classList.add('show');
+
+        // Mostrar solo los pendientes de esta cuenta
+        mostrarListaPendientes(enviosCuenta);
+      }
+
+      // Manejar clicks en botones de cuentas
+      cuentasBtns.onclick = function(e) {
+        if (e.target.classList.contains('cuenta-btn')) {
+          var cuenta = e.target.getAttribute('data-cuenta');
+
+          // Toggle: si ya está seleccionada, deseleccionar
+          if (cuentaSeleccionada === cuenta) {
+            cuentaSeleccionada = null;
+            e.target.classList.remove('active');
+            cuentaDesglose.classList.remove('show');
+            mostrarListaPendientes(enviosDelDia);
+          } else {
+            // Deseleccionar anterior
+            var btns = cuentasBtns.querySelectorAll('.cuenta-btn');
+            for (var i = 0; i < btns.length; i++) {
+              btns[i].classList.remove('active');
+            }
+            // Seleccionar nuevo
+            e.target.classList.add('active');
+            cuentaSeleccionada = cuenta;
+            mostrarDesgloseCuenta(cuenta);
+          }
+        }
+      };
 
       resumenRefresh.onclick = cargarResumenDia;
 
