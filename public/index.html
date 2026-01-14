@@ -10,7 +10,13 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; min-height: 100vh; padding-bottom: 80px; }
     .header { background: #2563eb; color: white; padding: 16px; text-align: center; }
-    .header h1 { font-size: 18px; font-weight: 600; }
+    .header h1 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+    .nav-tabs { display: flex; gap: 8px; justify-content: center; }
+    .nav-tab { padding: 8px 24px; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: white; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .nav-tab:hover { background: rgba(255,255,255,0.1); }
+    .nav-tab.active { background: white; color: #2563eb; border-color: white; }
+    .view-section { display: none; }
+    .view-section.active { display: block; }
     .account-badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-top: 8px; }
     .container { padding: 16px; max-width: 500px; margin: 0 auto; }
     .scan-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -116,9 +122,14 @@
 <body>
   <div class="header">
     <h1>Verificador de Envios</h1>
-    <div class="account-badge" id="accountBadge">Sin conexion</div>
+    <div class="nav-tabs">
+      <button type="button" class="nav-tab active" id="navPanel" data-view="panel">Panel</button>
+      <button type="button" class="nav-tab" id="navVerificar" data-view="verificar">Verificar</button>
+    </div>
   </div>
   <div class="container">
+    <!-- Vista Panel -->
+    <div class="view-section active" id="viewPanel">
     <!-- Resumen del día -->
     <div class="resumen-section" id="resumenSection">
       <div class="resumen-header">
@@ -152,7 +163,10 @@
         <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
     </div>
+    </div>
 
+    <!-- Vista Verificar -->
+    <div class="view-section" id="viewVerificar">
     <div class="scan-section">
       <div class="scan-input-group">
         <input type="text" id="shipmentInput" class="scan-input" placeholder="Numero de envio...">
@@ -173,6 +187,7 @@
       <div id="itemsList"></div>
     </div>
     <button type="button" class="reset-btn hidden" id="resetBtn">Nuevo envio</button>
+    </div>
   </div>
   <div class="complete-banner" id="completeBanner">Envio verificado correctamente</div>
   <button type="button" id="cameraBtn" class="camera-btn">Escanear envio</button>
@@ -218,13 +233,41 @@
       var itemsCount = document.getElementById('itemsCount');
       var completeBanner = document.getElementById('completeBanner');
       var resetBtn = document.getElementById('resetBtn');
-      var accountBadge = document.getElementById('accountBadge');
       var scanModeIndicator = document.getElementById('scanModeIndicator');
+
+      // Navegacion entre vistas
+      var navPanel = document.getElementById('navPanel');
+      var navVerificar = document.getElementById('navVerificar');
+      var viewPanel = document.getElementById('viewPanel');
+      var viewVerificar = document.getElementById('viewVerificar');
+      var currentView = 'panel';
       var modalOverlay = document.getElementById('modalOverlay');
       var modalBarcode = document.getElementById('modalBarcode');
       var modalSkuList = document.getElementById('modalSkuList');
       var modalCancel = document.getElementById('modalCancel');
       var modalSave = document.getElementById('modalSave');
+
+      function switchView(view) {
+        currentView = view;
+        if (view === 'panel') {
+          viewPanel.classList.add('active');
+          viewVerificar.classList.remove('active');
+          navPanel.classList.add('active');
+          navVerificar.classList.remove('active');
+          // Ocultar boton de camara en vista panel
+          cameraBtn.classList.add('hidden');
+        } else {
+          viewPanel.classList.remove('active');
+          viewVerificar.classList.add('active');
+          navPanel.classList.remove('active');
+          navVerificar.classList.add('active');
+          // Mostrar boton de camara en vista verificar
+          cameraBtn.classList.remove('hidden');
+        }
+      }
+
+      navPanel.onclick = function() { switchView('panel'); };
+      navVerificar.onclick = function() { switchView('verificar'); };
 
       function showStatus(message, type) {
         statusMessage.textContent = message;
@@ -242,7 +285,10 @@
         var item = currentItems[index];
         var checks = unitChecks[index] || [];
         for (var i = 0; i < item.quantity; i++) {
-          if (!checks[i]) return false;
+          var check = checks[i];
+          // Soporta tanto boolean como objeto {checked, method}
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) return false;
         }
         return true;
       }
@@ -259,10 +305,34 @@
         if (alreadySaved) return;
         alreadySaved = true;
 
+        // Construir resumen de métodos de verificación por item
+        var verificacionDetalle = [];
+        for (var i = 0; i < currentItems.length; i++) {
+          var item = currentItems[i];
+          var checks = unitChecks[i] || [];
+          var scannedCount = 0;
+          var manualCount = 0;
+          for (var j = 0; j < item.quantity; j++) {
+            var check = checks[j];
+            if (check && check.method === 'scanned') scannedCount++;
+            else if (check && check.method === 'manual') manualCount++;
+          }
+          verificacionDetalle.push({
+            sku: item.sku,
+            quantity: item.quantity,
+            scanned: scannedCount,
+            manual: manualCount
+          });
+        }
+
         fetch(API_URL + '/api/shipment/' + currentShipmentId + '/verificado', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: currentItems, cuenta: currentAccount })
+          body: JSON.stringify({
+            items: currentItems,
+            cuenta: currentAccount,
+            verificacionDetalle: verificacionDetalle
+          })
         }).catch(function(err) {
           console.error('Error guardando verificacion:', err);
         });
@@ -367,7 +437,8 @@
           var itemIndex = parseInt(e.target.getAttribute('data-item'));
           var unitIndex = parseInt(e.target.getAttribute('data-unit'));
           if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-          unitChecks[itemIndex][unitIndex] = e.target.checked;
+          // Registrar método manual
+          unitChecks[itemIndex][unitIndex] = e.target.checked ? { checked: true, method: 'manual' } : null;
           updateCard(itemIndex);
         }
       });
@@ -393,7 +464,6 @@
             currentShipmentId = shipmentId.trim();
             currentAccount = data.account;
             alreadySaved = false;
-            accountBadge.textContent = data.account;
             hideStatus();
             itemsSection.classList.remove('hidden');
             resetBtn.classList.remove('hidden');
@@ -401,6 +471,8 @@
             stopCamera();
             // Cambiar a modo escaneo de productos
             setScanMode('product');
+            // Asegurar que estamos en la vista verificar
+            switchView('verificar');
           })
           .catch(function(error) {
             showStatus(error.message, 'error');
@@ -454,7 +526,10 @@
         var item = currentItems[itemIndex];
         var checks = unitChecks[itemIndex] || [];
         for (var i = 0; i < item.quantity; i++) {
-          if (!checks[i]) return i;
+          var check = checks[i];
+          // Soporta tanto boolean como objeto {checked, method}
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) return i;
         }
         return -1;
       }
@@ -469,9 +544,9 @@
               if (itemIndex >= 0) {
                 var unitIndex = findNextUncheckedUnit(itemIndex);
                 if (unitIndex >= 0) {
-                  // Marcar la unidad
+                  // Marcar la unidad con método escaneado
                   if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-                  unitChecks[itemIndex][unitIndex] = true;
+                  unitChecks[itemIndex][unitIndex] = { checked: true, method: 'scanned' };
 
                   // Actualizar UI
                   var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + unitIndex + '"]');
@@ -673,7 +748,6 @@
         resetBtn.classList.add('hidden');
         completeBanner.classList.remove('show');
         hideStatus();
-        accountBadge.textContent = 'Sin conexion';
         setScanMode('shipment');
         shipmentInput.focus();
       }
@@ -787,7 +861,10 @@
       // Cargar resumen al iniciar
       cargarResumenDia();
 
-      console.log('App iniciada v9 - con resumen del dia');
+      // Inicializar vista (ocultar boton de camara en vista panel)
+      cameraBtn.classList.add('hidden');
+
+      console.log('App iniciada v10 - con navegacion Panel/Verificar');
     })();
   </script>
 </body>
