@@ -305,6 +305,7 @@ function getSkuByBarcode(barcode) {
 // Cache: { "TIENDA|flex": 600, "TIENDA|colecta": 780, ... } (minutos desde medianoche)
 var horariosCache = {};
 var HORARIO_DEFAULT = 13 * 60; // 13:00 por defecto
+var lastHorariosLoadDate = null; // Para cargar horarios solo una vez al día
 
 // Mapeo de logistic_type a nombre amigable
 function getTipoEnvio(logisticType) {
@@ -1347,6 +1348,17 @@ async function syncMorningShipments() {
     return;
   }
 
+  // Cargar horarios de corte desde API de ML (una vez al día)
+  if (lastHorariosLoadDate !== today) {
+    console.log('=== Cargando horarios de corte desde API de ML ===');
+    try {
+      await loadHorariosFromAPI();
+      lastHorariosLoadDate = today;
+    } catch (error) {
+      console.error('Error cargando horarios:', error.message);
+    }
+  }
+
   console.log('=== SINCRONIZACIÓN MATUTINA 9:00 AM ===');
 
   var sheetName = getTodaySheetName();
@@ -1429,16 +1441,6 @@ async function syncPendingShipments() {
 }
 
 setInterval(syncPendingShipments, 60000);
-
-// Actualizar horarios desde API de ML cada hora (3600000 ms)
-setInterval(async function() {
-  try {
-    console.log('=== Actualizando horarios desde API de ML ===');
-    await loadHorariosFromAPI();
-  } catch (error) {
-    console.error('Error actualizando horarios automáticamente:', error.message);
-  }
-}, 3600000);
 
 function describeSKU(sku) {
   if (!sku) return '';
