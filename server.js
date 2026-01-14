@@ -275,6 +275,128 @@ function getSkuByBarcode(barcode) {
   return barcodeCache[barcode] || null;
 }
 
+// ============================================
+// SISTEMA DE HORARIOS DE CORTE POR CUENTA/TIPO
+// ============================================
+
+// Cache: { "TIENDA|flex": 600, "TIENDA|colecta": 780, ... } (minutos desde medianoche)
+var horariosCache = {};
+var HORARIO_DEFAULT = 13 * 60; // 13:00 por defecto
+
+// Mapeo de logistic_type a nombre amigable
+function getTipoEnvio(logisticType) {
+  if (logisticType === 'self_service') return 'flex';
+  if (logisticType === 'drop_off' || logisticType === 'xd_drop_off') return 'despacho';
+  if (logisticType === 'cross_docking') return 'colecta';
+  return 'otro';
+}
+
+async function loadHorariosFromSheets() {
+  if (!sheets || !SHEET_ID) {
+    console.log('Sheets no configurado, usando horarios por defecto');
+    return;
+  }
+
+  try {
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'Horarios!A:C'
+    });
+
+    var rows = response.data.values || [];
+    horariosCache = {};
+
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row[0] || !row[1] || !row[2]) continue;
+
+      var cuenta = row[0].toString().trim().toUpperCase();
+      var tipo = row[1].toString().trim().toLowerCase();
+      var hora = row[2].toString().trim();
+
+      // Parsear hora (formato HH:MM)
+      var parts = hora.split(':');
+      if (parts.length === 2) {
+        var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        var key = cuenta + '|' + tipo;
+        horariosCache[key] = minutos;
+      }
+    }
+
+    console.log('Cargados ' + Object.keys(horariosCache).length + ' horarios de corte');
+  } catch (error) {
+    if (error.message && error.message.includes('Unable to parse range')) {
+      console.log('Hoja Horarios no existe, creándola...');
+      await createHorariosSheet();
+    } else {
+      console.error('Error cargando horarios desde Sheets:', error.message);
+    }
+  }
+}
+
+async function createHorariosSheet() {
+  if (!sheets || !SHEET_ID) return;
+
+  try {
+    // Crear la hoja
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      resource: {
+        requests: [{
+          addSheet: {
+            properties: { title: 'Horarios' }
+          }
+        }]
+      }
+    });
+
+    // Agregar encabezados y datos por defecto
+    var defaultData = [
+      ['Cuenta', 'Tipo', 'HoraCorte'],
+      ['TIENDA', 'flex', '10:00'],
+      ['TIENDA', 'colecta', '13:00'],
+      ['SHOP', 'flex', '10:00'],
+      ['SHOP', 'despacho', '14:00'],
+      ['FURST', 'flex', '10:00'],
+      ['FURST', 'colecta', '13:00'],
+      ['MUN1', 'flex', '10:00'],
+      ['MUN1', 'despacho', '14:00'],
+      ['MUN2', 'flex', '10:00'],
+      ['MUN2', 'despacho', '14:00']
+    ];
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: 'Horarios!A1',
+      valueInputOption: 'RAW',
+      resource: { values: defaultData }
+    });
+
+    console.log('Hoja Horarios creada con valores por defecto');
+    await loadHorariosFromSheets();
+  } catch (error) {
+    console.error('Error creando hoja Horarios:', error.message);
+  }
+}
+
+function getHorarioCorte(cuenta, logisticType) {
+  var tipo = getTipoEnvio(logisticType);
+  var key = cuenta.toUpperCase() + '|' + tipo;
+
+  if (horariosCache[key]) {
+    return horariosCache[key];
+  }
+
+  // Buscar horario genérico para la cuenta (cualquier tipo)
+  for (var k in horariosCache) {
+    if (k.startsWith(cuenta.toUpperCase() + '|')) {
+      return horariosCache[k];
+    }
+  }
+
+  return HORARIO_DEFAULT;
+}
+
 async function saveTokenToSheets(accountName, accessToken, refreshToken) {
   if (!sheets || !SHEET_ID) return;
 
@@ -404,11 +526,15 @@ function isWorkingHours() {
   return false;
 }
 
-function isBeforeCutoff(dateCreated) {
-  // Verifica si la venta fue creada antes del corte horario (13:00)
+function isBeforeCutoff(dateCreated, cuenta, logisticType) {
+  // Verifica si la venta fue creada antes del corte horario
   var orderDate = getArgentinaDate(new Date(dateCreated));
   var timeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
-  return timeInMinutes < CORTE_HORARIO;
+
+  // Usar horario específico por cuenta y tipo, o el default
+  var corte = cuenta && logisticType ? getHorarioCorte(cuenta, logisticType) : HORARIO_DEFAULT;
+
+  return timeInMinutes < corte;
 }
 
 function isTodayOrder(dateCreated) {
@@ -418,9 +544,9 @@ function isTodayOrder(dateCreated) {
   return orderDate.toLocaleDateString('es-AR') === today.toLocaleDateString('es-AR');
 }
 
-function shouldProcessOrder(dateCreated) {
+function shouldProcessOrder(dateCreated, cuenta, logisticType) {
   // Una orden se procesa si:
-  // 1. Es de hoy Y fue creada antes de las 13:00
+  // 1. Es de hoy Y fue creada antes del corte horario (variable por cuenta/tipo)
   // 2. O es de un día anterior (ya debería estar procesada)
   var orderDate = getArgentinaDate(new Date(dateCreated));
   var today = getArgentinaTime();
@@ -429,8 +555,8 @@ function shouldProcessOrder(dateCreated) {
   var todayStr = today.toLocaleDateString('es-AR');
 
   if (orderDateStr === todayStr) {
-    // Es de hoy, verificar corte horario
-    return isBeforeCutoff(dateCreated);
+    // Es de hoy, verificar corte horario específico
+    return isBeforeCutoff(dateCreated, cuenta, logisticType);
   }
 
   // Es de un día anterior, siempre procesar
@@ -787,9 +913,9 @@ async function syncMorningShipments() {
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
 
-    // Filtrar: solo los creados antes de las 13:00 de hoy o de días anteriores
+    // Filtrar: solo los creados antes del corte horario de hoy o de días anteriores
     var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.dateCreated);
+      return shouldProcessOrder(s.dateCreated, s.account, s.logisticType);
     });
 
     allShipments = allShipments.concat(filtered);
@@ -836,9 +962,9 @@ async function syncPendingShipments() {
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
 
-    // Filtrar por corte horario
+    // Filtrar por corte horario específico por cuenta/tipo
     var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.dateCreated);
+      return shouldProcessOrder(s.dateCreated, s.account, s.logisticType);
     });
 
     allShipments = allShipments.concat(filtered);
@@ -1319,12 +1445,6 @@ app.post('/webhooks/ml', async function(req, res) {
     var shipmentId = orderData.shipping.id.toString();
     var dateCreated = orderData.date_created;
 
-    // Verificar corte horario
-    if (!shouldProcessOrder(dateCreated)) {
-      console.log('Orden fuera de corte horario (después de 13:00), ignorando:', orderId);
-      return;
-    }
-
     // Verificar si el envío ya existe en la hoja de hoy
     var sheetName = getTodaySheetName();
     var existingIds = await getExistingShipmentIds(sheetName);
@@ -1339,6 +1459,13 @@ app.post('/webhooks/ml', async function(req, res) {
 
     if (!shipmentData) {
       console.log('No se pudo obtener datos del envío:', shipmentId);
+      return;
+    }
+
+    // Verificar corte horario (ahora que tenemos logistic_type)
+    if (!shouldProcessOrder(dateCreated, account.name, shipmentData.logistic_type)) {
+      var tipoEnvio = getTipoEnvio(shipmentData.logistic_type);
+      console.log('Orden fuera de corte horario para ' + account.name + '/' + tipoEnvio + ', ignorando:', orderId);
       return;
     }
 
@@ -1430,6 +1557,29 @@ app.post('/api/barcodes/reload', async function(req, res) {
   res.json({ success: true, count: Object.keys(barcodeCache).length });
 });
 
+// Recargar horarios desde Sheets
+app.post('/api/horarios/reload', async function(req, res) {
+  await loadHorariosFromSheets();
+  res.json({ success: true, horarios: horariosCache });
+});
+
+// Obtener horarios actuales
+app.get('/api/horarios', function(req, res) {
+  var horarios = [];
+  for (var key in horariosCache) {
+    var parts = key.split('|');
+    var minutos = horariosCache[key];
+    var horas = Math.floor(minutos / 60);
+    var mins = minutos % 60;
+    horarios.push({
+      cuenta: parts[0],
+      tipo: parts[1],
+      hora: String(horas).padStart(2, '0') + ':' + String(mins).padStart(2, '0')
+    });
+  }
+  res.json({ horarios: horarios, count: horarios.length });
+});
+
 // ============================================
 // RESUMEN DEL DÍA
 // ============================================
@@ -1512,6 +1662,7 @@ async function initializeServer() {
   try {
     await loadTokensFromSheets();
     await loadBarcodesFromSheets();
+    await loadHorariosFromSheets();
     console.log('Datos cargados desde Sheets');
   } catch (error) {
     console.error('Error cargando datos:', error.message);
