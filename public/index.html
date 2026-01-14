@@ -19,6 +19,7 @@
     .scan-btn { padding: 14px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
     .scan-btn:disabled { background: #9ca3af; }
     .camera-btn { position: fixed; bottom: 0; left: 0; right: 0; padding: 18px; background: #059669; color: white; border: none; font-size: 18px; font-weight: 600; cursor: pointer; z-index: 90; }
+    .camera-btn.product-mode { background: #7c3aed; }
     .camera-container { display: none; margin-top: 16px; position: relative; }
     .camera-container.active { display: block; }
     #video { width: 100%; border-radius: 8px; }
@@ -27,13 +28,17 @@
     .status-message.show { display: block; }
     .status-message.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
     .status-message.loading { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .status-message.success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
     .items-section { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .items-header { padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
     .items-header h2 { font-size: 16px; font-weight: 600; color: #374151; }
     .items-count { font-size: 14px; color: #6b7280; }
-    .item-card { padding: 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; }
+    .item-card { padding: 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; }
     .item-card:last-child { border-bottom: none; }
     .item-card.checked { background: #f0fdf4; }
+    .item-card.highlight { background: #fef3c7; animation: pulse 0.5s ease-in-out; }
+    .item-card.just-scanned { background: #dcfce7; border-left: 4px solid #22c55e; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
     .item-main-checkbox { width: 28px; height: 28px; cursor: pointer; flex-shrink: 0; margin-top: 4px; pointer-events: none; }
     .item-info { flex: 1; }
     .item-description { font-size: 20px; font-weight: 700; color: #111827; line-height: 1.3; }
@@ -42,10 +47,33 @@
     .item-kit-badge { display: inline-block; background: #dbeafe; color: #1d4ed8; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px; vertical-align: middle; }
     .unit-checkboxes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e7eb; }
     .unit-checkbox { width: 36px; height: 36px; cursor: pointer; accent-color: #22c55e; }
+    .unit-checkbox.scanned { outline: 3px solid #7c3aed; outline-offset: 2px; }
     .complete-banner { display: none; position: fixed; bottom: 56px; left: 0; right: 0; background: #22c55e; color: white; padding: 20px; text-align: center; font-size: 18px; font-weight: 600; z-index: 100; }
     .complete-banner.show { display: block; }
     .reset-btn { width: 100%; padding: 14px; margin-top: 16px; background: #ef4444; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
     .hidden { display: none; }
+
+    /* Modal para guardar barcode */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: white; border-radius: 12px; padding: 24px; max-width: 400px; width: 100%; }
+    .modal h3 { font-size: 18px; margin-bottom: 16px; color: #111827; }
+    .modal p { font-size: 14px; color: #6b7280; margin-bottom: 16px; }
+    .modal-barcode { font-family: monospace; background: #f3f4f6; padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 16px; font-weight: 600; }
+    .modal-sku-list { max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+    .modal-sku-option { padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+    .modal-sku-option:hover { border-color: #2563eb; background: #eff6ff; }
+    .modal-sku-option.selected { border-color: #2563eb; background: #eff6ff; }
+    .modal-sku-name { font-weight: 600; color: #111827; }
+    .modal-sku-desc { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    .modal-buttons { display: flex; gap: 12px; }
+    .modal-btn { flex: 1; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+    .modal-btn.primary { background: #2563eb; color: white; }
+    .modal-btn.secondary { background: #f3f4f6; color: #374151; }
+
+    /* Scan mode indicator */
+    .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
+    .scan-mode-indicator.show { display: block; }
   </style>
 </head>
 <body>
@@ -61,9 +89,10 @@
       </div>
       <div class="camera-container" id="cameraContainer">
         <video id="video" playsinline></video>
-        <button type="button" class="close-camera" id="closeCamera">✕</button>
+        <button type="button" class="close-camera" id="closeCamera">X</button>
       </div>
     </div>
+    <div class="scan-mode-indicator" id="scanModeIndicator">Modo escaneo de productos activo</div>
     <div class="status-message" id="statusMessage"></div>
     <div class="items-section hidden" id="itemsSection">
       <div class="items-header">
@@ -74,8 +103,22 @@
     </div>
     <button type="button" class="reset-btn hidden" id="resetBtn">Nuevo envio</button>
   </div>
-  <div class="complete-banner" id="completeBanner">✓ Envio verificado correctamente</div>
-  <button type="button" id="cameraBtn" class="camera-btn">Escanear con cámara</button>
+  <div class="complete-banner" id="completeBanner">Envio verificado correctamente</div>
+  <button type="button" id="cameraBtn" class="camera-btn">Escanear envio</button>
+
+  <!-- Modal para guardar barcode -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h3>Codigo no registrado</h3>
+      <p>Este codigo de barras no esta vinculado a ningun SKU. Selecciona el producto correspondiente para guardarlo:</p>
+      <div class="modal-barcode" id="modalBarcode"></div>
+      <div class="modal-sku-list" id="modalSkuList"></div>
+      <div class="modal-buttons">
+        <button type="button" class="modal-btn secondary" id="modalCancel">Cancelar</button>
+        <button type="button" class="modal-btn primary" id="modalSave">Guardar</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
   <script>
@@ -88,6 +131,9 @@
       var currentShipmentId = '';
       var currentAccount = '';
       var alreadySaved = false;
+      var scanMode = 'shipment'; // 'shipment' o 'product'
+      var pendingBarcode = null;
+      var selectedSkuForModal = null;
 
       var shipmentInput = document.getElementById('shipmentInput');
       var searchBtn = document.getElementById('searchBtn');
@@ -102,10 +148,19 @@
       var completeBanner = document.getElementById('completeBanner');
       var resetBtn = document.getElementById('resetBtn');
       var accountBadge = document.getElementById('accountBadge');
+      var scanModeIndicator = document.getElementById('scanModeIndicator');
+      var modalOverlay = document.getElementById('modalOverlay');
+      var modalBarcode = document.getElementById('modalBarcode');
+      var modalSkuList = document.getElementById('modalSkuList');
+      var modalCancel = document.getElementById('modalCancel');
+      var modalSave = document.getElementById('modalSave');
 
       function showStatus(message, type) {
         statusMessage.textContent = message;
         statusMessage.className = 'status-message show ' + type;
+        if (type === 'success') {
+          setTimeout(hideStatus, 3000);
+        }
       }
 
       function hideStatus() {
@@ -132,7 +187,7 @@
       function saveVerification() {
         if (alreadySaved) return;
         alreadySaved = true;
-        
+
         fetch(API_URL + '/api/shipment/' + currentShipmentId + '/verificado', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -150,6 +205,8 @@
           completeBanner.classList.add('show');
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           saveVerification();
+          // Volver al modo de escanear envío
+          setScanMode('shipment');
         } else {
           completeBanner.classList.remove('show');
         }
@@ -165,24 +222,34 @@
         updateItemsCount();
       }
 
+      function highlightCard(index) {
+        var card = document.querySelector('.item-card[data-index="' + index + '"]');
+        if (!card) return;
+        card.classList.add('just-scanned');
+        setTimeout(function() {
+          card.classList.remove('just-scanned');
+        }, 2000);
+      }
+
       function renderItems() {
         itemsList.innerHTML = '';
         for (var i = 0; i < currentItems.length; i++) {
           var item = currentItems[i];
           unitChecks[i] = [];
-          
+
           var card = document.createElement('div');
           card.className = 'item-card';
           card.setAttribute('data-index', i);
-          
+          card.setAttribute('data-sku', item.sku);
+
           var mainCheckbox = document.createElement('input');
           mainCheckbox.type = 'checkbox';
           mainCheckbox.className = 'item-main-checkbox';
           mainCheckbox.checked = false;
-          
+
           var info = document.createElement('div');
           info.className = 'item-info';
-          
+
           var descDiv = document.createElement('div');
           descDiv.className = 'item-description';
           descDiv.textContent = item.description || item.title || item.sku;
@@ -192,18 +259,18 @@
             badge.textContent = 'KIT';
             descDiv.appendChild(badge);
           }
-          
+
           var skuDiv = document.createElement('div');
           skuDiv.className = 'item-sku';
           skuDiv.textContent = 'SKU: ' + item.sku;
-          
+
           var qtyDiv = document.createElement('div');
           qtyDiv.className = 'item-quantity';
           qtyDiv.textContent = 'Cantidad: ' + item.quantity;
-          
+
           var unitsDiv = document.createElement('div');
           unitsDiv.className = 'unit-checkboxes';
-          
+
           for (var j = 0; j < item.quantity; j++) {
             var unitCb = document.createElement('input');
             unitCb.type = 'checkbox';
@@ -212,7 +279,7 @@
             unitCb.setAttribute('data-unit', j);
             unitsDiv.appendChild(unitCb);
           }
-          
+
           info.appendChild(descDiv);
           info.appendChild(skuDiv);
           info.appendChild(qtyDiv);
@@ -261,6 +328,8 @@
             resetBtn.classList.remove('hidden');
             renderItems();
             stopCamera();
+            // Cambiar a modo escaneo de productos
+            setScanMode('product');
           })
           .catch(function(error) {
             showStatus(error.message, 'error');
@@ -288,6 +357,184 @@
         return texto;
       }
 
+      function setScanMode(mode) {
+        scanMode = mode;
+        if (mode === 'product') {
+          cameraBtn.textContent = 'Escanear producto';
+          cameraBtn.classList.add('product-mode');
+          scanModeIndicator.classList.add('show');
+        } else {
+          cameraBtn.textContent = 'Escanear envio';
+          cameraBtn.classList.remove('product-mode');
+          scanModeIndicator.classList.remove('show');
+        }
+      }
+
+      function findItemBySku(sku) {
+        for (var i = 0; i < currentItems.length; i++) {
+          if (currentItems[i].sku === sku) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
+      function findNextUncheckedUnit(itemIndex) {
+        var item = currentItems[itemIndex];
+        var checks = unitChecks[itemIndex] || [];
+        for (var i = 0; i < item.quantity; i++) {
+          if (!checks[i]) return i;
+        }
+        return -1;
+      }
+
+      function markProductByBarcode(barcode) {
+        fetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            if (data.found && data.sku) {
+              // Encontramos el SKU para este barcode
+              var itemIndex = findItemBySku(data.sku);
+              if (itemIndex >= 0) {
+                var unitIndex = findNextUncheckedUnit(itemIndex);
+                if (unitIndex >= 0) {
+                  // Marcar la unidad
+                  if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
+                  unitChecks[itemIndex][unitIndex] = true;
+
+                  // Actualizar UI
+                  var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + unitIndex + '"]');
+                  if (checkbox) {
+                    checkbox.checked = true;
+                    checkbox.classList.add('scanned');
+                    setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
+                  }
+
+                  updateCard(itemIndex);
+                  highlightCard(itemIndex);
+
+                  showStatus('OK: ' + data.sku, 'success');
+                  if (navigator.vibrate) navigator.vibrate(100);
+                } else {
+                  showStatus('Producto ya verificado: ' + data.sku, 'error');
+                  if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+                }
+              } else {
+                showStatus('SKU no esta en este envio: ' + data.sku, 'error');
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+              }
+            } else {
+              // Barcode no registrado, mostrar modal para guardarlo
+              showBarcodeModal(barcode);
+            }
+          })
+          .catch(function(err) {
+            showStatus('Error al verificar codigo', 'error');
+            console.error(err);
+          });
+      }
+
+      function showBarcodeModal(barcode) {
+        pendingBarcode = barcode;
+        selectedSkuForModal = null;
+        modalBarcode.textContent = barcode;
+
+        // Mostrar lista de SKUs del envío actual
+        modalSkuList.innerHTML = '';
+        for (var i = 0; i < currentItems.length; i++) {
+          var item = currentItems[i];
+          var option = document.createElement('div');
+          option.className = 'modal-sku-option';
+          option.setAttribute('data-sku', item.sku);
+          option.setAttribute('data-index', i);
+
+          var name = document.createElement('div');
+          name.className = 'modal-sku-name';
+          name.textContent = item.sku;
+
+          var desc = document.createElement('div');
+          desc.className = 'modal-sku-desc';
+          desc.textContent = item.description || item.title || '';
+
+          option.appendChild(name);
+          option.appendChild(desc);
+          modalSkuList.appendChild(option);
+
+          option.onclick = function() {
+            var allOptions = modalSkuList.querySelectorAll('.modal-sku-option');
+            for (var j = 0; j < allOptions.length; j++) {
+              allOptions[j].classList.remove('selected');
+            }
+            this.classList.add('selected');
+            selectedSkuForModal = this.getAttribute('data-sku');
+          };
+        }
+
+        modalOverlay.classList.add('show');
+      }
+
+      function hideBarcodeModal() {
+        modalOverlay.classList.remove('show');
+        pendingBarcode = null;
+        selectedSkuForModal = null;
+      }
+
+      function saveBarcodeMapping() {
+        if (!pendingBarcode || !selectedSkuForModal) {
+          showStatus('Selecciona un SKU', 'error');
+          return;
+        }
+
+        var item = currentItems.find(function(i) { return i.sku === selectedSkuForModal; });
+        var description = item ? (item.description || item.title || '') : '';
+
+        fetch(API_URL + '/api/barcode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            barcode: pendingBarcode,
+            sku: selectedSkuForModal,
+            description: description
+          })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showStatus('Guardado: ' + pendingBarcode + ' -> ' + selectedSkuForModal, 'success');
+            // Marcar el producto automaticamente
+            markProductByBarcode(pendingBarcode);
+          } else {
+            showStatus('Error al guardar', 'error');
+          }
+          hideBarcodeModal();
+        })
+        .catch(function(err) {
+          showStatus('Error al guardar', 'error');
+          hideBarcodeModal();
+        });
+      }
+
+      modalCancel.onclick = hideBarcodeModal;
+      modalSave.onclick = saveBarcodeMapping;
+
+      function handleScan(result) {
+        var texto = result.getText();
+
+        if (scanMode === 'shipment') {
+          // Modo escaneo de envío
+          isScanning = false;
+          var shipmentId = extractShipmentId(texto);
+          shipmentInput.value = shipmentId;
+          stopCamera();
+          searchShipment(shipmentId);
+        } else {
+          // Modo escaneo de producto
+          isScanning = false;
+          stopCamera();
+          markProductByBarcode(texto.trim());
+        }
+      }
+
       function startCamera() {
         if (typeof ZXing === 'undefined') {
           showStatus('Error: libreria de camara no cargada', 'error');
@@ -300,7 +547,9 @@
             ZXing.BarcodeFormat.CODE_128,
             ZXing.BarcodeFormat.CODE_39,
             ZXing.BarcodeFormat.EAN_13,
-            ZXing.BarcodeFormat.EAN_8
+            ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.UPC_A,
+            ZXing.BarcodeFormat.UPC_E
           ]);
           codeReader = new ZXing.BrowserMultiFormatReader(hints);
         }
@@ -308,11 +557,7 @@
         isScanning = true;
         codeReader.decodeFromVideoDevice(null, 'video', function(result, error) {
           if (result && isScanning) {
-            isScanning = false;
-            var texto = extractShipmentId(result.getText());
-            shipmentInput.value = texto;
-            stopCamera();
-            searchShipment(texto);
+            handleScan(result);
           }
         }).catch(function(err) {
           showStatus('No se pudo acceder a la camara', 'error');
@@ -338,6 +583,7 @@
         completeBanner.classList.remove('show');
         hideStatus();
         accountBadge.textContent = 'Sin conexion';
+        setScanMode('shipment');
         shipmentInput.focus();
       }
 
@@ -347,7 +593,7 @@
       closeCameraBtn.onclick = stopCamera;
       resetBtn.onclick = reset;
 
-      console.log('App iniciada v7');
+      console.log('App iniciada v8 - con escaneo de productos');
     })();
   </script>
 </body>
