@@ -507,8 +507,8 @@ async function getReadyToShipOrders(account) {
     allOrders = allOrders.concat(data.results);
     offset += 50;
 
-    // Limitar a 100 órdenes para no sobrecargar
-    if (offset >= 100) {
+    // Limitar a 200 órdenes para no sobrecargar
+    if (offset >= 200) {
       hasMore = false;
     }
   }
@@ -1240,6 +1240,9 @@ app.get('/api/status', function(req, res) {
 // WEBHOOK DE MERCADOLIBRE
 // ============================================
 
+// Cache de seller IDs para webhook
+var sellerIdCache = {};
+
 app.post('/webhooks/ml', async function(req, res) {
   // Responder inmediatamente con 200 (requerido por ML)
   res.status(200).send('OK');
@@ -1255,6 +1258,7 @@ app.post('/webhooks/ml', async function(req, res) {
     }
 
     var resource = notification.resource;
+    var userId = notification.user_id;
     if (!resource) {
       console.log('Sin resource en notificación');
       return;
@@ -1268,61 +1272,104 @@ app.post('/webhooks/ml', async function(req, res) {
     }
 
     var orderId = orderMatch[1];
-    console.log('Procesando orden:', orderId);
+    console.log('Procesando orden:', orderId, 'para user_id:', userId);
 
-    // Buscar la orden en todas las cuentas para obtener el shipment
-    for (var i = 0; i < accounts.length; i++) {
-      var account = accounts[i];
-      if (!account.accessToken) continue;
+    // Buscar la cuenta correcta usando user_id
+    var account = null;
 
-      var orderData = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
-
-      if (orderData && orderData.shipping && orderData.shipping.id) {
-        var shipmentId = orderData.shipping.id.toString();
-        var dateCreated = orderData.date_created;
-
-        // Verificar corte horario
-        if (!shouldProcessOrder(dateCreated)) {
-          console.log('Orden fuera de corte horario (después de 13:00), ignorando:', orderId);
-          return;
-        }
-
-        // Verificar si el envío ya existe en la hoja de hoy
-        var sheetName = getTodaySheetName();
-        var existingIds = await getExistingShipmentIds(sheetName);
-
-        if (existingIds.indexOf(shipmentId) !== -1) {
-          console.log('Envío ya existe en la hoja:', shipmentId);
-          return;
-        }
-
-        // Obtener datos del envío
-        var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId);
-
-        if (shipmentData && shipmentData.status === 'ready_to_ship') {
-          // Filtrar fulfillment
-          if (shipmentData.logistic_type === 'fulfillment') {
-            console.log('Envío fulfillment ignorado:', shipmentId);
-            return;
-          }
-
-          var shipment = {
-            id: shipmentId,
-            account: account.name,
-            dateCreated: dateCreated,
-            receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
-            logisticType: shipmentData.logistic_type
-          };
-
-          await addPendingShipments([shipment], sheetName);
-          console.log('Nuevo envío agregado via webhook:', shipmentId);
-        }
-
-        return;
+    // Primero buscar en cache
+    for (var name in sellerIdCache) {
+      if (sellerIdCache[name] === userId) {
+        account = accounts.find(function(a) { return a.name === name; });
+        break;
       }
     }
 
-    console.log('Orden no encontrada en ninguna cuenta:', orderId);
+    // Si no está en cache, buscar en todas las cuentas
+    if (!account) {
+      for (var i = 0; i < accounts.length; i++) {
+        var acc = accounts[i];
+        if (!acc.accessToken) continue;
+
+        var userInfo = await mlApiRequest(acc, 'https://api.mercadolibre.com/users/me');
+        if (userInfo && userInfo.id) {
+          sellerIdCache[acc.name] = userInfo.id;
+          if (userInfo.id === userId) {
+            account = acc;
+            console.log('Cuenta encontrada para user_id ' + userId + ': ' + acc.name);
+            break;
+          }
+        }
+      }
+    }
+
+    if (!account) {
+      console.log('No se encontró cuenta para user_id:', userId);
+      return;
+    }
+
+    // Obtener datos de la orden
+    var orderData = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+    if (!orderData || !orderData.shipping || !orderData.shipping.id) {
+      console.log('Orden sin shipping válido:', orderId);
+      return;
+    }
+
+    var shipmentId = orderData.shipping.id.toString();
+    var dateCreated = orderData.date_created;
+
+    // Verificar corte horario
+    if (!shouldProcessOrder(dateCreated)) {
+      console.log('Orden fuera de corte horario (después de 13:00), ignorando:', orderId);
+      return;
+    }
+
+    // Verificar si el envío ya existe en la hoja de hoy
+    var sheetName = getTodaySheetName();
+    var existingIds = await getExistingShipmentIds(sheetName);
+
+    if (existingIds.indexOf(shipmentId) !== -1) {
+      console.log('Envío ya existe en la hoja:', shipmentId);
+      return;
+    }
+
+    // Obtener datos del envío
+    var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId);
+
+    if (!shipmentData) {
+      console.log('No se pudo obtener datos del envío:', shipmentId);
+      return;
+    }
+
+    // Verificar status
+    if (shipmentData.status !== 'ready_to_ship' && shipmentData.status !== 'pending' && shipmentData.status !== 'handling') {
+      console.log('Envío con status no pendiente:', shipmentId, shipmentData.status);
+      return;
+    }
+
+    // Filtrar fulfillment
+    if (shipmentData.logistic_type === 'fulfillment') {
+      console.log('Envío fulfillment ignorado:', shipmentId);
+      return;
+    }
+
+    // Filtrar acordar con comprador
+    if (shipmentData.mode === 'not_specified' || shipmentData.mode === 'custom') {
+      console.log('Envío acordar con comprador ignorado:', shipmentId);
+      return;
+    }
+
+    var shipment = {
+      id: shipmentId,
+      account: account.name,
+      dateCreated: dateCreated,
+      receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
+      logisticType: shipmentData.logistic_type
+    };
+
+    await addPendingShipments([shipment], sheetName);
+    console.log('Nuevo envío agregado via webhook:', shipmentId, 'cuenta:', account.name);
   } catch (error) {
     console.error('Error procesando webhook:', error.message);
   }
