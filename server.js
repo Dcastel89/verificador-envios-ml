@@ -576,34 +576,22 @@ function isYesterday(dateCreated) {
   return orderDate.toLocaleDateString('es-AR') === yesterday.toLocaleDateString('es-AR');
 }
 
-function getCorteMaximoDelDia() {
-  // Devuelve el horario de corte más tardío del día (en minutos desde medianoche)
-  var maxCorte = HORARIO_DEFAULT;
-  var keys = Object.keys(horariosCache);
-  for (var i = 0; i < keys.length; i++) {
-    var corte = horariosCache[keys[i]];
-    if (corte > maxCorte) {
-      maxCorte = corte;
-    }
-  }
-  return maxCorte;
-}
-
 function shouldProcessOrder(dateCreated, cuenta, logisticType) {
-  // Determina si un envío corresponde al día de trabajo actual según los cortes:
-  // - Órdenes de AYER creadas DESPUÉS del corte máximo → entran hoy
-  // - Órdenes de HOY creadas ANTES del corte máximo → entran hoy
-  // - Órdenes de HOY creadas DESPUÉS del corte máximo → NO entran (corresponden a mañana)
+  // Determina si un envío corresponde al día de trabajo actual según su corte específico:
+  // - Usa el horario de corte de la cuenta y tipo de logística del envío
+  // - Órdenes de AYER creadas DESPUÉS del corte → entran hoy
+  // - Órdenes de HOY creadas ANTES del corte → entran hoy
+  // - Órdenes de HOY creadas DESPUÉS del corte → NO entran (corresponden a mañana)
 
   var orderDate = getArgentinaDate(new Date(dateCreated));
   var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
-  var corteMaximo = getCorteMaximoDelDia();
+  var corte = getHorarioCorte(cuenta, logisticType);
 
   if (isTodayOrder(dateCreated)) {
-    return orderTimeInMinutes < corteMaximo;
+    return orderTimeInMinutes < corte;
   }
   if (isYesterday(dateCreated)) {
-    return orderTimeInMinutes >= corteMaximo;
+    return orderTimeInMinutes >= corte;
   }
 
   return false;
