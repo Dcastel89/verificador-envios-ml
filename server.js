@@ -420,6 +420,314 @@ function getHorarioCorte(cuenta, logisticType) {
   return HORARIO_DEFAULT;
 }
 
+// ============================================
+// OBTENCIÓN DE HORARIOS DESDE API DE ML
+// ============================================
+
+async function getCutoffTimeFlex(account) {
+  // Obtiene el horario de corte de FLEX desde la API de ML
+  if (!account.accessToken) return null;
+
+  try {
+    // Primero obtener el user ID
+    var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
+    if (!userInfo || !userInfo.id) {
+      console.log(account.name + ' - No se pudo obtener user ID para horarios FLEX');
+      return null;
+    }
+    var userId = userInfo.id;
+
+    // Intentar usar el endpoint GraphQL de configuración de FLEX
+    var graphqlUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/configuration/v3';
+
+    var config = {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + account.accessToken,
+        'Content-Type': 'application/json'
+      },
+      data: {
+        user_id: userId
+      }
+    };
+
+    try {
+      var response = await axios(graphqlUrl, config);
+      var configData = response.data;
+
+      if (!configData) {
+        console.log(account.name + ' - No se pudo obtener configuración de FLEX (GraphQL)');
+        return null;
+      }
+
+      // Extraer el cutoff (puede estar en calculated_cutoff o cutoff)
+      var cutoff = configData.calculated_cutoff || configData.cutoff;
+
+      if (cutoff !== null && cutoff !== undefined) {
+        // El cutoff puede venir como número (hora) o como string "HH:MM"
+        if (typeof cutoff === 'number') {
+          console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff + ':00');
+          return cutoff * 60; // Convertir horas a minutos
+        } else if (typeof cutoff === 'string') {
+          var parts = cutoff.split(':');
+          if (parts.length === 2) {
+            var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+            console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff);
+            return minutos;
+          }
+        }
+      }
+
+      // Si no hay cutoff en el nivel superior, buscar en delivery_ranges
+      if (configData.delivery_ranges) {
+        var ranges = configData.delivery_ranges.week || configData.delivery_ranges.monday || [];
+        if (ranges.length > 0 && ranges[0].cutoff !== undefined) {
+          cutoff = ranges[0].cutoff;
+          if (typeof cutoff === 'number') {
+            console.log(account.name + ' - Cutoff FLEX obtenido (delivery_ranges): ' + cutoff + ':00');
+            return cutoff * 60;
+          }
+        }
+      }
+
+      console.log(account.name + ' - No se encontró cutoff en configuración de FLEX');
+      return null;
+    } catch (apiError) {
+      // Si falla con 401/403, intentar renovar token
+      if (apiError.response && (apiError.response.status === 401 || apiError.response.status === 403)) {
+        console.log('Token expirado para ' + account.name + ', intentando renovar...');
+        var renewed = await refreshAccessToken(account);
+
+        if (renewed) {
+          config.headers['Authorization'] = 'Bearer ' + account.accessToken;
+          try {
+            var retryResponse = await axios(graphqlUrl, config);
+            var retryData = retryResponse.data;
+
+            var cutoff = retryData.calculated_cutoff || retryData.cutoff;
+            if (cutoff !== null && cutoff !== undefined) {
+              if (typeof cutoff === 'number') {
+                console.log(account.name + ' - Cutoff FLEX obtenido (retry): ' + cutoff + ':00');
+                return cutoff * 60;
+              } else if (typeof cutoff === 'string') {
+                var parts = cutoff.split(':');
+                if (parts.length === 2) {
+                  var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+                  console.log(account.name + ' - Cutoff FLEX obtenido (retry): ' + cutoff);
+                  return minutos;
+                }
+              }
+            }
+          } catch (retryError) {
+            console.error(account.name + ' - Error después de renovar token:', retryError.message);
+          }
+        }
+      } else {
+        console.error(account.name + ' - Error obteniendo configuración FLEX:', apiError.message);
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error(account.name + ' - Error obteniendo cutoff FLEX:', error.message);
+    return null;
+  }
+}
+
+async function getCutoffTimeColecta(account) {
+  // Obtiene el horario de corte de COLECTA (cross_docking) desde la API de ML
+  if (!account.accessToken) return null;
+
+  try {
+    // Primero obtener el user ID
+    var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
+    if (!userInfo || !userInfo.id) {
+      console.log(account.name + ' - No se pudo obtener user ID para horarios COLECTA');
+      return null;
+    }
+    var userId = userInfo.id;
+
+    // Obtener schedule de cross_docking
+    var scheduleUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/schedule/cross_docking';
+    var scheduleData = await mlApiRequest(account, scheduleUrl);
+
+    if (!scheduleData) {
+      console.log(account.name + ' - No se pudo obtener schedule de COLECTA');
+      return null;
+    }
+
+    // El schedule puede tener diferentes días, usar monday como referencia
+    var cutoff = null;
+    if (scheduleData.monday && scheduleData.monday.available_options && scheduleData.monday.available_options.length > 0) {
+      var selectedOption = scheduleData.monday.available_options.find(function(opt) { return opt.selected; });
+      if (!selectedOption && scheduleData.monday.available_options.length > 0) {
+        selectedOption = scheduleData.monday.available_options[0];
+      }
+      if (selectedOption && selectedOption.cutoff) {
+        cutoff = selectedOption.cutoff;
+      }
+    }
+
+    if (cutoff) {
+      // cutoff viene en formato "HH:MM" (ej: "13:00")
+      var parts = cutoff.split(':');
+      if (parts.length === 2) {
+        var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        console.log(account.name + ' - Cutoff COLECTA obtenido: ' + cutoff);
+        return minutos;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error(account.name + ' - Error obteniendo cutoff COLECTA:', error.message);
+    return null;
+  }
+}
+
+async function getCutoffTimeDespacho(account) {
+  // Obtiene el horario máximo de despacho en PUNTO DE DESPACHO (xd_drop_off) desde la API de ML
+  if (!account.accessToken) return null;
+
+  try {
+    // Primero obtener el user ID
+    var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
+    if (!userInfo || !userInfo.id) {
+      console.log(account.name + ' - No se pudo obtener user ID para horarios DESPACHO');
+      return null;
+    }
+    var userId = userInfo.id;
+
+    // Obtener processing time para xd_drop_off (con header X-Version: v3)
+    var processingUrl = 'https://api.mercadolibre.com/shipping/users/' + userId + '/processing_time_middleend/xd_drop_off';
+
+    var config = {
+      headers: {
+        'Authorization': 'Bearer ' + account.accessToken,
+        'X-Version': 'v3'
+      }
+    };
+
+    try {
+      var response = await axios.get(processingUrl, config);
+      var processingData = response.data;
+
+      if (!processingData) {
+        console.log(account.name + ' - No se pudo obtener processing time de DESPACHO');
+        return null;
+      }
+
+      // El processing time puede tener diferentes días, usar monday como referencia
+      var maximumTime = null;
+      if (processingData.monday && processingData.monday.available_options && processingData.monday.available_options.length > 0) {
+        var selectedOption = processingData.monday.available_options.find(function(opt) { return opt.selected; });
+        if (!selectedOption && processingData.monday.available_options.length > 0) {
+          selectedOption = processingData.monday.available_options[0];
+        }
+        if (selectedOption && selectedOption.maximum_time) {
+          maximumTime = selectedOption.maximum_time;
+        } else if (selectedOption && selectedOption.cutoff) {
+          // Usar cutoff si no hay maximum_time
+          maximumTime = selectedOption.cutoff;
+        }
+      }
+
+      if (maximumTime) {
+        // maximum_time viene en formato "HH:MM" (ej: "17:45")
+        var parts = maximumTime.split(':');
+        if (parts.length === 2) {
+          var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+          console.log(account.name + ' - Horario máximo DESPACHO obtenido: ' + maximumTime);
+          return minutos;
+        }
+      }
+    } catch (apiError) {
+      // Si falla con 401/403, intentar renovar token
+      if (apiError.response && (apiError.response.status === 401 || apiError.response.status === 403)) {
+        console.log('Token expirado para ' + account.name + ', intentando renovar...');
+        var renewed = await refreshAccessToken(account);
+
+        if (renewed) {
+          config.headers['Authorization'] = 'Bearer ' + account.accessToken;
+          try {
+            var retryResponse = await axios.get(processingUrl, config);
+            var retryData = retryResponse.data;
+
+            if (retryData && retryData.monday && retryData.monday.available_options && retryData.monday.available_options.length > 0) {
+              var selectedOption = retryData.monday.available_options.find(function(opt) { return opt.selected; });
+              if (!selectedOption && retryData.monday.available_options.length > 0) {
+                selectedOption = retryData.monday.available_options[0];
+              }
+              if (selectedOption && (selectedOption.maximum_time || selectedOption.cutoff)) {
+                var time = selectedOption.maximum_time || selectedOption.cutoff;
+                var parts = time.split(':');
+                if (parts.length === 2) {
+                  var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+                  console.log(account.name + ' - Horario máximo DESPACHO obtenido (retry): ' + time);
+                  return minutos;
+                }
+              }
+            }
+          } catch (retryError) {
+            console.error(account.name + ' - Error después de renovar token:', retryError.message);
+          }
+        }
+      } else {
+        console.error(account.name + ' - Error obteniendo processing time:', apiError.message);
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error(account.name + ' - Error obteniendo cutoff DESPACHO:', error.message);
+    return null;
+  }
+}
+
+async function loadHorariosFromAPI() {
+  // Carga los horarios de corte desde la API de ML para todas las cuentas
+  console.log('=== Cargando horarios desde API de ML ===');
+
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
+    if (!account.accessToken) {
+      console.log(account.name + ' - Sin token, saltando');
+      continue;
+    }
+
+    console.log('Obteniendo horarios para cuenta: ' + account.name);
+
+    // Obtener horario FLEX
+    var flexCutoff = await getCutoffTimeFlex(account);
+    if (flexCutoff !== null) {
+      var key = account.name.toUpperCase() + '|flex';
+      horariosCache[key] = flexCutoff;
+      console.log('✓ ' + key + ' = ' + flexCutoff + ' minutos');
+    }
+
+    // Obtener horario COLECTA
+    var colectaCutoff = await getCutoffTimeColecta(account);
+    if (colectaCutoff !== null) {
+      var key = account.name.toUpperCase() + '|colecta';
+      horariosCache[key] = colectaCutoff;
+      console.log('✓ ' + key + ' = ' + colectaCutoff + ' minutos');
+    }
+
+    // Obtener horario DESPACHO
+    var despachoCutoff = await getCutoffTimeDespacho(account);
+    if (despachoCutoff !== null) {
+      var key = account.name.toUpperCase() + '|despacho';
+      horariosCache[key] = despachoCutoff;
+      console.log('✓ ' + key + ' = ' + despachoCutoff + ' minutos');
+    }
+
+    // Pequeña pausa entre cuentas para no saturar la API
+    await new Promise(function(resolve) { setTimeout(resolve, 500); });
+  }
+
+  console.log('=== Horarios cargados desde API: ' + Object.keys(horariosCache).length + ' configuraciones ===');
+}
+
 async function saveTokenToSheets(accountName, accessToken, refreshToken) {
   if (!sheets || !SHEET_ID) return;
 
@@ -1121,6 +1429,16 @@ async function syncPendingShipments() {
 
 setInterval(syncPendingShipments, 60000);
 
+// Actualizar horarios desde API de ML cada hora (3600000 ms)
+setInterval(async function() {
+  try {
+    console.log('=== Actualizando horarios desde API de ML ===');
+    await loadHorariosFromAPI();
+  } catch (error) {
+    console.error('Error actualizando horarios automáticamente:', error.message);
+  }
+}, 3600000);
+
 function describeSKU(sku) {
   if (!sku) return '';
 
@@ -1735,10 +2053,29 @@ app.post('/api/barcodes/reload', async function(req, res) {
   res.json({ success: true, count: Object.keys(barcodeCache).length });
 });
 
-// Recargar horarios desde Sheets
+// Recargar horarios desde Sheets (fallback/manual)
 app.post('/api/horarios/reload', async function(req, res) {
   await loadHorariosFromSheets();
-  res.json({ success: true, horarios: horariosCache });
+  res.json({ success: true, horarios: horariosCache, fuente: 'sheets' });
+});
+
+// Recargar horarios desde API de ML
+app.post('/api/horarios/refresh', async function(req, res) {
+  try {
+    await loadHorariosFromAPI();
+    res.json({
+      success: true,
+      mensaje: 'Horarios actualizados desde API de ML',
+      horarios: horariosCache,
+      count: Object.keys(horariosCache).length
+    });
+  } catch (error) {
+    console.error('Error refrescando horarios:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // Obtener horarios actuales
@@ -2132,8 +2469,19 @@ async function initializeServer() {
   try {
     await loadTokensFromSheets();
     await loadBarcodesFromSheets();
-    await loadHorariosFromSheets();
-    console.log('Datos cargados desde Sheets');
+
+    // Intentar cargar horarios desde API de ML (fuente principal)
+    try {
+      await loadHorariosFromAPI();
+      console.log('✓ Horarios cargados desde API de ML');
+    } catch (apiError) {
+      console.error('Error cargando horarios desde API, usando Sheets como fallback:', apiError.message);
+      // Fallback: cargar desde Sheets si la API falla
+      await loadHorariosFromSheets();
+      console.log('✓ Horarios cargados desde Google Sheets (fallback)');
+    }
+
+    console.log('Datos cargados exitosamente');
   } catch (error) {
     console.error('Error cargando datos:', error.message);
   }
