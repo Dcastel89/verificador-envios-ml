@@ -740,10 +740,10 @@ async function ensureDaySheetExists(sheetName) {
 
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: sheetName + '!A1:H1',
+          range: sheetName + '!A1:I1',
           valueInputOption: 'USER_ENTERED',
           resource: {
-            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif']]
+            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo']]
           }
         });
 
@@ -836,7 +836,7 @@ async function addPendingShipments(shipments, sheetName) {
   }
 }
 
-async function markAsVerified(shipmentId, items) {
+async function markAsVerified(shipmentId, items, verificacionDetalle) {
   if (!sheets || !SHEET_ID) return;
 
   var sheetName = getTodaySheetName();
@@ -846,7 +846,7 @@ async function markAsVerified(shipmentId, items) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:H'
+      range: sheetName + '!A:I'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -863,23 +863,41 @@ async function markAsVerified(shipmentId, items) {
     var hora = argentinaTime.toLocaleTimeString('es-AR');
     var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
 
+    // Construir string de método de verificación
+    var metodoStr = '';
+    if (verificacionDetalle && verificacionDetalle.length > 0) {
+      var totalScanned = 0;
+      var totalManual = 0;
+      verificacionDetalle.forEach(function(d) {
+        totalScanned += d.scanned || 0;
+        totalManual += d.manual || 0;
+      });
+      if (totalScanned > 0 && totalManual > 0) {
+        metodoStr = 'Mixto (Esc:' + totalScanned + ' Man:' + totalManual + ')';
+      } else if (totalScanned > 0) {
+        metodoStr = 'Escaneado (' + totalScanned + ')';
+      } else if (totalManual > 0) {
+        metodoStr = 'Manual (' + totalManual + ')';
+      }
+    }
+
     if (rowIndex === -1) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: sheetName + '!A:H',
+        range: sheetName + '!A:I',
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora]] }
+        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr]] }
       });
     } else {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
-        range: sheetName + '!F' + rowIndex + ':H' + rowIndex,
+        range: sheetName + '!F' + rowIndex + ':I' + rowIndex,
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[itemsStr, 'Verificado', hora]] }
+        resource: { values: [[itemsStr, 'Verificado', hora, metodoStr]] }
       });
     }
 
-    console.log('Envio ' + shipmentId + ' marcado como verificado en ' + sheetName);
+    console.log('Envio ' + shipmentId + ' marcado como verificado en ' + sheetName + ' - Metodo: ' + metodoStr);
   } catch (error) {
     console.error('Error marcando verificado:', error.message);
   }
@@ -1211,8 +1229,9 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
 app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
   var shipmentId = req.params.shipmentId;
   var items = req.body.items || [];
+  var verificacionDetalle = req.body.verificacionDetalle || [];
 
-  await markAsVerified(shipmentId, items);
+  await markAsVerified(shipmentId, items, verificacionDetalle);
 
   res.json({ success: true, message: 'Registro guardado' });
 });

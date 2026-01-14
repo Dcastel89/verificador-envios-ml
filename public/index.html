@@ -285,7 +285,10 @@
         var item = currentItems[index];
         var checks = unitChecks[index] || [];
         for (var i = 0; i < item.quantity; i++) {
-          if (!checks[i]) return false;
+          var check = checks[i];
+          // Soporta tanto boolean como objeto {checked, method}
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) return false;
         }
         return true;
       }
@@ -302,10 +305,34 @@
         if (alreadySaved) return;
         alreadySaved = true;
 
+        // Construir resumen de métodos de verificación por item
+        var verificacionDetalle = [];
+        for (var i = 0; i < currentItems.length; i++) {
+          var item = currentItems[i];
+          var checks = unitChecks[i] || [];
+          var scannedCount = 0;
+          var manualCount = 0;
+          for (var j = 0; j < item.quantity; j++) {
+            var check = checks[j];
+            if (check && check.method === 'scanned') scannedCount++;
+            else if (check && check.method === 'manual') manualCount++;
+          }
+          verificacionDetalle.push({
+            sku: item.sku,
+            quantity: item.quantity,
+            scanned: scannedCount,
+            manual: manualCount
+          });
+        }
+
         fetch(API_URL + '/api/shipment/' + currentShipmentId + '/verificado', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: currentItems, cuenta: currentAccount })
+          body: JSON.stringify({
+            items: currentItems,
+            cuenta: currentAccount,
+            verificacionDetalle: verificacionDetalle
+          })
         }).catch(function(err) {
           console.error('Error guardando verificacion:', err);
         });
@@ -410,7 +437,8 @@
           var itemIndex = parseInt(e.target.getAttribute('data-item'));
           var unitIndex = parseInt(e.target.getAttribute('data-unit'));
           if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-          unitChecks[itemIndex][unitIndex] = e.target.checked;
+          // Registrar método manual
+          unitChecks[itemIndex][unitIndex] = e.target.checked ? { checked: true, method: 'manual' } : null;
           updateCard(itemIndex);
         }
       });
@@ -498,7 +526,10 @@
         var item = currentItems[itemIndex];
         var checks = unitChecks[itemIndex] || [];
         for (var i = 0; i < item.quantity; i++) {
-          if (!checks[i]) return i;
+          var check = checks[i];
+          // Soporta tanto boolean como objeto {checked, method}
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) return i;
         }
         return -1;
       }
@@ -513,9 +544,9 @@
               if (itemIndex >= 0) {
                 var unitIndex = findNextUncheckedUnit(itemIndex);
                 if (unitIndex >= 0) {
-                  // Marcar la unidad
+                  // Marcar la unidad con método escaneado
                   if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-                  unitChecks[itemIndex][unitIndex] = true;
+                  unitChecks[itemIndex][unitIndex] = { checked: true, method: 'scanned' };
 
                   // Actualizar UI
                   var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + unitIndex + '"]');
