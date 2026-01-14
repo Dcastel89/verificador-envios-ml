@@ -1009,6 +1009,11 @@ async function getReadyToShipOrders(account) {
 
     var status = shipment.status;
 
+    // Excluir cancelados
+    if (status === 'cancelled') {
+      continue;
+    }
+
     // Excluir fulfillment (FULL)
     if (shipment.logistic_type === 'fulfillment') {
       continue;
