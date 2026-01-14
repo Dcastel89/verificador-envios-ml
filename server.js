@@ -1752,7 +1752,7 @@ app.get('/api/sync-morning', async function(req, res) {
   }
 });
 
-// Endpoint para obtener envíos del día (00:00 a 23:59)
+// Endpoint para obtener envíos del día de trabajo actual (respetando horarios de corte)
 app.get('/api/envios-del-dia', async function(req, res) {
   try {
     var allShipments = [];
@@ -1760,9 +1760,9 @@ app.get('/api/envios-del-dia', async function(req, res) {
     for (var i = 0; i < accounts.length; i++) {
       var shipments = await getReadyToShipOrders(accounts[i]);
 
-      // Filtrar solo los envíos creados hoy (día calendario completo)
+      // Filtrar envíos que corresponden al día de trabajo actual según horario de corte
       var filtered = shipments.filter(function(s) {
-        return isTodayOrder(s.dateCreated);
+        return shouldProcessOrder(s.dateCreated, s.account, s.logisticType);
       });
 
       allShipments = allShipments.concat(filtered);
