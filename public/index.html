@@ -90,10 +90,12 @@
     .resumen-stat { flex: 1; text-align: center; padding: 12px; border-radius: 8px; }
     .resumen-stat.total { background: #eff6ff; }
     .resumen-stat.verificados { background: #f0fdf4; }
+    .resumen-stat.despachados { background: #fefce8; }
     .resumen-stat.pendientes { background: #fef2f2; }
-    .resumen-stat-number { font-size: 28px; font-weight: 700; }
+    .resumen-stat-number { font-size: 24px; font-weight: 700; }
     .resumen-stat.total .resumen-stat-number { color: #2563eb; }
     .resumen-stat.verificados .resumen-stat-number { color: #16a34a; }
+    .resumen-stat.despachados .resumen-stat-number { color: #ca8a04; }
     .resumen-stat.pendientes .resumen-stat-number { color: #dc2626; }
     .resumen-stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
     .resumen-status { padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; }
@@ -139,11 +141,15 @@
       <div class="resumen-stats">
         <div class="resumen-stat total">
           <div class="resumen-stat-number" id="resumenTotal">-</div>
-          <div class="resumen-stat-label">TOTAL</div>
+          <div class="resumen-stat-label">BLOQUE</div>
         </div>
         <div class="resumen-stat verificados">
           <div class="resumen-stat-number" id="resumenVerificados">-</div>
           <div class="resumen-stat-label">VERIFICADOS</div>
+        </div>
+        <div class="resumen-stat despachados">
+          <div class="resumen-stat-number" id="resumenDespachados">-</div>
+          <div class="resumen-stat-label">DESPACHADOS</div>
         </div>
         <div class="resumen-stat pendientes">
           <div class="resumen-stat-number" id="resumenPendientes">-</div>
@@ -160,7 +166,7 @@
         <div class="sync-progress" id="syncProgress">
           <div class="sync-progress-bar"></div>
         </div>
-        <button type="button" class="resumen-refresh" id="limpiarDespachados">Limpiar despachados</button>
+        <button type="button" class="resumen-refresh" id="actualizarEstados">Actualizar estados</button>
         <button type="button" class="resumen-refresh" id="limpiarDuplicados">Limpiar duplicados</button>
         <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
@@ -766,6 +772,7 @@
       var resumenFecha = document.getElementById('resumenFecha');
       var resumenTotal = document.getElementById('resumenTotal');
       var resumenVerificados = document.getElementById('resumenVerificados');
+      var resumenDespachados = document.getElementById('resumenDespachados');
       var resumenPendientes = document.getElementById('resumenPendientes');
       var resumenStatus = document.getElementById('resumenStatus');
       var resumenPendientesList = document.getElementById('resumenPendientesList');
@@ -778,6 +785,7 @@
             resumenFecha.textContent = data.fecha || '--/--/----';
             resumenTotal.textContent = data.total || 0;
             resumenVerificados.textContent = data.verificados || 0;
+            resumenDespachados.textContent = data.despachados || 0;
             resumenPendientes.textContent = data.pendientesCount || 0;
 
             // Actualizar estado
@@ -860,35 +868,35 @@
           });
       };
 
-      // Limpiar despachados (envíos que ya no están pendientes en ML)
-      var limpiarDespachadosBtn = document.getElementById('limpiarDespachados');
-      limpiarDespachadosBtn.onclick = function() {
-        limpiarDespachadosBtn.disabled = true;
-        limpiarDespachadosBtn.textContent = 'Verificando...';
+      // Actualizar estados (consulta ML y marca despachados sin eliminarlos)
+      var actualizarEstadosBtn = document.getElementById('actualizarEstados');
+      actualizarEstadosBtn.onclick = function() {
+        actualizarEstadosBtn.disabled = true;
+        actualizarEstadosBtn.textContent = 'Consultando ML...';
         resumenStatus.className = 'resumen-status vacio';
         resumenStatus.textContent = 'Consultando estado de envíos en MercadoLibre...';
 
-        fetch(API_URL + '/api/limpiar-despachados', { method: 'POST' })
+        fetch(API_URL + '/api/actualizar-estados', { method: 'POST' })
           .then(function(response) { return response.json(); })
           .then(function(data) {
-            limpiarDespachadosBtn.disabled = false;
-            limpiarDespachadosBtn.textContent = 'Limpiar despachados';
+            actualizarEstadosBtn.disabled = false;
+            actualizarEstadosBtn.textContent = 'Actualizar estados';
 
             if (data.error) {
               resumenStatus.className = 'resumen-status vacio';
               resumenStatus.textContent = 'Error: ' + data.error;
-            } else if (data.eliminados > 0) {
+            } else if (data.actualizados > 0) {
               resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = 'Eliminados ' + data.eliminados + ' envíos ya despachados (' + data.totalAntes + ' -> ' + data.totalDespues + ')';
+              resumenStatus.textContent = 'Actualizados ' + data.actualizados + ' envíos despachados';
               cargarResumenDia();
             } else {
               resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = data.mensaje || 'No hay envíos despachados';
+              resumenStatus.textContent = data.mensaje || 'Todos los estados están actualizados';
             }
           })
           .catch(function(err) {
-            limpiarDespachadosBtn.disabled = false;
-            limpiarDespachadosBtn.textContent = 'Limpiar despachados';
+            actualizarEstadosBtn.disabled = false;
+            actualizarEstadosBtn.textContent = 'Actualizar estados';
             resumenStatus.className = 'resumen-status vacio';
             resumenStatus.textContent = 'Error de conexion';
             console.error(err);
@@ -936,7 +944,7 @@
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v12 - con limpieza de despachados');
+      console.log('App iniciada v13 - bloque del dia con estados');
     })();
   </script>
 </body>

@@ -420,6 +420,17 @@ function getHorarioCorte(cuenta, logisticType) {
   return HORARIO_DEFAULT;
 }
 
+// Obtiene el corte más tardío del día (para determinar cierre del bloque)
+function getCorteMaximoDelDia() {
+  var maxCorte = HORARIO_DEFAULT;
+  for (var k in horariosCache) {
+    if (horariosCache[k] > maxCorte) {
+      maxCorte = horariosCache[k];
+    }
+  }
+  return maxCorte;
+}
+
 async function saveTokenToSheets(accountName, accessToken, refreshToken) {
   if (!sheets || !SHEET_ID) return;
 
@@ -568,21 +579,42 @@ function isTodayOrder(dateCreated) {
 }
 
 function shouldProcessOrder(dateCreated, cuenta, logisticType) {
-  // Una orden se procesa si:
-  // 1. Es de hoy Y fue creada antes del corte horario (variable por cuenta/tipo)
-  // 2. O es de un día anterior (ya debería estar procesada)
+  // LÓGICA DEL BLOQUE DEL DÍA:
+  // Un envío pertenece al bloque de HOY si:
+  // 1. Es de HOY y fue creado ANTES de su corte específico
+  // 2. Es de AYER y fue creado DESPUÉS de su corte específico (quedó fuera del bloque de ayer)
+  // 3. Es de hace más de 1 día (por seguridad, para no perder envíos)
+
   var orderDate = getArgentinaDate(new Date(dateCreated));
   var today = getArgentinaTime();
 
-  var orderDateStr = orderDate.toLocaleDateString('es-AR');
-  var todayStr = today.toLocaleDateString('es-AR');
+  // Calcular fechas sin hora para comparar días
+  var orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
+  var todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  var yesterdayDay = new Date(todayDay);
+  yesterdayDay.setDate(yesterdayDay.getDate() - 1);
 
-  if (orderDateStr === todayStr) {
-    // Es de hoy, verificar corte horario específico
-    return isBeforeCutoff(dateCreated, cuenta, logisticType);
+  var orderTime = orderDay.getTime();
+  var todayTime = todayDay.getTime();
+  var yesterdayTime = yesterdayDay.getTime();
+
+  // Obtener el corte específico para este envío
+  var corte = getHorarioCorte(cuenta, logisticType);
+  var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+
+  if (orderTime === todayTime) {
+    // Es de HOY: pertenece al bloque si fue creado ANTES de su corte
+    return orderTimeInMinutes < corte;
   }
 
-  // Es de un día anterior, siempre procesar
+  if (orderTime === yesterdayTime) {
+    // Es de AYER: pertenece al bloque de HOY si fue creado DESPUÉS de su corte
+    // (quedó fuera del bloque de ayer)
+    return orderTimeInMinutes >= corte;
+  }
+
+  // Es de hace más de 1 día: incluir por seguridad (no debería pasar normalmente)
+  // Estos envíos probablemente ya fueron procesados, pero los incluimos para no perderlos
   return true;
 }
 
@@ -1669,7 +1701,11 @@ app.get('/api/resumen-dia', async function(req, res) {
     var rows = response.data.values || [];
     var total = 0;
     var verificados = 0;
+    var despachados = 0;
     var pendientes = [];
+
+    // Estados que indican que el envío ya no está pendiente de verificar
+    var estadosFinales = ['Verificado', 'Despachado', 'Entregado', 'No entregado', 'Cancelado'];
 
     // Recorrer filas (saltando encabezado)
     for (var i = 1; i < rows.length; i++) {
@@ -1686,7 +1722,11 @@ app.get('/api/resumen-dia', async function(req, res) {
       total++;
       if (estado === 'Verificado') {
         verificados++;
+      } else if (estado === 'Despachado' || estado === 'Entregado' ||
+                 estado === 'No entregado' || estado === 'Cancelado') {
+        despachados++;
       } else {
+        // Solo los que están "Pendiente" o sin estado van a la lista de pendientes
         pendientes.push({
           id: envioId,
           cuenta: cuenta,
@@ -1700,6 +1740,7 @@ app.get('/api/resumen-dia', async function(req, res) {
       hoja: sheetName,
       total: total,
       verificados: verificados,
+      despachados: despachados,
       pendientesCount: pendientes.length,
       pendientes: pendientes,
       completo: pendientes.length === 0 && total > 0
@@ -1788,16 +1829,17 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
 });
 
 // Endpoint para eliminar envíos que ya no están pendientes (shipped, delivered, etc.)
-app.post('/api/limpiar-despachados', async function(req, res) {
+// Endpoint para actualizar estados de envíos (marcar despachados sin eliminarlos)
+app.post('/api/actualizar-estados', async function(req, res) {
   if (!sheets || !SHEET_ID) {
-    return res.json({ error: 'Sheets no configurado', eliminados: 0 });
+    return res.json({ error: 'Sheets no configurado', actualizados: 0 });
   }
 
   var sheetName = getTodaySheetName();
 
   var lockAcquired = await acquireSheetLock(30000);
   if (!lockAcquired) {
-    return res.json({ error: 'No se pudo adquirir lock', eliminados: 0 });
+    return res.json({ error: 'No se pudo adquirir lock', actualizados: 0 });
   }
 
   try {
@@ -1811,16 +1853,20 @@ app.post('/api/limpiar-despachados', async function(req, res) {
     var rows = response.data.values || [];
     if (rows.length <= 1) {
       releaseSheetLock();
-      return res.json({ mensaje: 'Hoja vacía', eliminados: 0 });
+      return res.json({ mensaje: 'Hoja vacía', actualizados: 0 });
     }
 
-    var header = rows[0];
-    var rowsToKeep = [header];
-    var eliminados = 0;
-    var detalles = [];
+    // Estados que indican que el envío ya fue despachado
+    var estadosDespachados = ['shipped', 'delivered', 'not_delivered', 'cancelled'];
+    var estadosTexto = {
+      'shipped': 'Despachado',
+      'delivered': 'Entregado',
+      'not_delivered': 'No entregado',
+      'cancelled': 'Cancelado'
+    };
 
-    // Estados que indican que el envío ya no está pendiente
-    var estadosNoPendientes = ['shipped', 'delivered', 'not_delivered', 'cancelled'];
+    var actualizados = 0;
+    var detalles = [];
 
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
@@ -1828,22 +1874,20 @@ app.post('/api/limpiar-despachados', async function(req, res) {
       var cuenta = row[3];
       var estado = row[6];
 
-      // Si ya está verificado, mantenerlo
-      if (estado === 'Verificado') {
-        rowsToKeep.push(row);
+      // Si ya está verificado o ya tiene un estado final, saltar
+      if (estado === 'Verificado' || estado === 'Despachado' || estado === 'Entregado' ||
+          estado === 'No entregado' || estado === 'Cancelado') {
         continue;
       }
 
-      // Si no tiene ID o cuenta, mantenerlo
+      // Si no tiene ID o cuenta, saltar
       if (!envioId || !cuenta) {
-        rowsToKeep.push(row);
         continue;
       }
 
       // Buscar la cuenta correspondiente
       var account = accounts.find(function(a) { return a.name === cuenta; });
       if (!account) {
-        rowsToKeep.push(row);
         continue;
       }
 
@@ -1851,50 +1895,36 @@ app.post('/api/limpiar-despachados', async function(req, res) {
       try {
         var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + envioId);
 
-        if (shipmentData && estadosNoPendientes.indexOf(shipmentData.status) !== -1) {
-          // El envío ya no está pendiente, eliminarlo
-          eliminados++;
-          detalles.push({ id: envioId, estadoML: shipmentData.status });
-          console.log('Eliminando envío ' + envioId + ' - estado: ' + shipmentData.status);
-        } else {
-          rowsToKeep.push(row);
+        if (shipmentData && estadosDespachados.indexOf(shipmentData.status) !== -1) {
+          // El envío ya fue despachado, actualizar estado en la hoja
+          var nuevoEstado = estadosTexto[shipmentData.status] || 'Despachado';
+          var rowIndex = i + 1;
+
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID,
+            range: sheetName + '!G' + rowIndex,
+            valueInputOption: 'USER_ENTERED',
+            resource: { values: [[nuevoEstado]] }
+          });
+
+          actualizados++;
+          detalles.push({ id: envioId, estadoML: shipmentData.status, nuevoEstado: nuevoEstado });
+          console.log('Actualizado envío ' + envioId + ' -> ' + nuevoEstado);
         }
       } catch (err) {
-        // Si hay error al consultar, mantener el envío
         console.log('Error consultando envío ' + envioId + ': ' + err.message);
-        rowsToKeep.push(row);
       }
     }
 
-    if (eliminados === 0) {
-      releaseSheetLock();
-      return res.json({ mensaje: 'No hay envíos despachados para eliminar', eliminados: 0 });
-    }
-
-    // Reescribir la hoja sin los envíos despachados
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
-    });
-
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID,
-      range: sheetName + '!A1',
-      valueInputOption: 'USER_ENTERED',
-      resource: { values: rowsToKeep }
-    });
-
-    console.log('Eliminados ' + eliminados + ' envíos despachados de ' + sheetName);
+    console.log('Actualizados ' + actualizados + ' envíos en ' + sheetName);
     res.json({
-      mensaje: 'Envíos despachados eliminados',
-      eliminados: eliminados,
-      detalles: detalles,
-      totalAntes: rows.length - 1,
-      totalDespues: rowsToKeep.length - 1
+      mensaje: actualizados > 0 ? 'Estados actualizados' : 'No hay envíos para actualizar',
+      actualizados: actualizados,
+      detalles: detalles
     });
   } catch (error) {
-    console.error('Error limpiando despachados:', error.message);
-    res.json({ error: error.message, eliminados: 0 });
+    console.error('Error actualizando estados:', error.message);
+    res.json({ error: error.message, actualizados: 0 });
   } finally {
     releaseSheetLock();
   }
