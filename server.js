@@ -1131,10 +1131,108 @@ app.get('/api/status', function(req, res) {
     message: 'Verificador de Envios ML',
     sheets: sheets ? 'conectado' : 'no configurado',
     workingHours: isWorkingHours(),
+    todaySheet: getTodaySheetName(),
     accounts: accounts.map(function(a) {
       return { name: a.name, hasToken: !!a.accessToken };
     })
   });
+});
+
+// ============================================
+// WEBHOOK DE MERCADOLIBRE
+// ============================================
+
+app.post('/webhooks/ml', async function(req, res) {
+  // Responder inmediatamente con 200 (requerido por ML)
+  res.status(200).send('OK');
+
+  var notification = req.body;
+  console.log('Webhook ML recibido:', JSON.stringify(notification));
+
+  try {
+    // Verificar que sea una notificación de orders
+    if (notification.topic !== 'orders_v2' && notification.topic !== 'orders') {
+      console.log('Topic ignorado:', notification.topic);
+      return;
+    }
+
+    var resource = notification.resource;
+    if (!resource) {
+      console.log('Sin resource en notificación');
+      return;
+    }
+
+    // Extraer order_id del resource (formato: /orders/123456789)
+    var orderMatch = resource.match(/\/orders\/(\d+)/);
+    if (!orderMatch) {
+      console.log('No se pudo extraer order_id de:', resource);
+      return;
+    }
+
+    var orderId = orderMatch[1];
+    console.log('Procesando orden:', orderId);
+
+    // Buscar la orden en todas las cuentas para obtener el shipment
+    for (var i = 0; i < accounts.length; i++) {
+      var account = accounts[i];
+      if (!account.accessToken) continue;
+
+      var orderData = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+      if (orderData && orderData.shipping && orderData.shipping.id) {
+        var shipmentId = orderData.shipping.id.toString();
+        var dateCreated = orderData.date_created;
+
+        // Verificar corte horario
+        if (!shouldProcessOrder(dateCreated)) {
+          console.log('Orden fuera de corte horario (después de 13:00), ignorando:', orderId);
+          return;
+        }
+
+        // Verificar si el envío ya existe en la hoja de hoy
+        var sheetName = getTodaySheetName();
+        var existingIds = await getExistingShipmentIds(sheetName);
+
+        if (existingIds.indexOf(shipmentId) !== -1) {
+          console.log('Envío ya existe en la hoja:', shipmentId);
+          return;
+        }
+
+        // Obtener datos del envío
+        var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId);
+
+        if (shipmentData && shipmentData.status === 'ready_to_ship') {
+          // Filtrar fulfillment
+          if (shipmentData.logistic_type === 'fulfillment') {
+            console.log('Envío fulfillment ignorado:', shipmentId);
+            return;
+          }
+
+          var shipment = {
+            id: shipmentId,
+            account: account.name,
+            dateCreated: dateCreated,
+            receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
+            logisticType: shipmentData.logistic_type
+          };
+
+          await addPendingShipments([shipment], sheetName);
+          console.log('Nuevo envío agregado via webhook:', shipmentId);
+        }
+
+        return;
+      }
+    }
+
+    console.log('Orden no encontrada en ninguna cuenta:', orderId);
+  } catch (error) {
+    console.error('Error procesando webhook:', error.message);
+  }
+});
+
+// Endpoint para verificar que el webhook funciona
+app.get('/webhooks/ml', function(req, res) {
+  res.json({ status: 'Webhook endpoint activo', url: 'https://verificador-envios-ml.onrender.com/webhooks/ml' });
 });
 
 // ============================================
@@ -1197,17 +1295,18 @@ app.get('/api/resumen-dia', async function(req, res) {
   }
 
   try {
-    // Obtener fecha de hoy en Argentina
-    var now = new Date();
-    var argentinaOffset = -3 * 60;
-    var localOffset = now.getTimezoneOffset();
-    var argentinaTime = new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
+    // Usar la hoja del día actual
+    var sheetName = getTodaySheetName();
+    var argentinaTime = getArgentinaTime();
     var hoy = argentinaTime.toLocaleDateString('es-AR');
 
-    // Leer datos de la hoja principal
+    // Asegurar que la hoja existe
+    await ensureDaySheetExists(sheetName);
+
+    // Leer datos de la hoja del día
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'Hoja 1!A:H'
+      range: sheetName + '!A:H'
     });
 
     var rows = response.data.values || [];
@@ -1218,29 +1317,30 @@ app.get('/api/resumen-dia', async function(req, res) {
     // Recorrer filas (saltando encabezado)
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
-      var fecha = row[0] || '';
+      if (!row || row.length < 3) continue;
+
       var envioId = row[2] || '';
       var cuenta = row[3] || '';
       var receptor = row[4] || '';
       var estado = row[6] || '';
 
-      // Filtrar por fecha de hoy
-      if (fecha === hoy) {
-        total++;
-        if (estado === 'Verificado') {
-          verificados++;
-        } else {
-          pendientes.push({
-            id: envioId,
-            cuenta: cuenta,
-            receptor: receptor
-          });
-        }
+      if (!envioId) continue;
+
+      total++;
+      if (estado === 'Verificado') {
+        verificados++;
+      } else {
+        pendientes.push({
+          id: envioId,
+          cuenta: cuenta,
+          receptor: receptor
+        });
       }
     }
 
     res.json({
       fecha: hoy,
+      hoja: sheetName,
       total: total,
       verificados: verificados,
       pendientesCount: pendientes.length,
