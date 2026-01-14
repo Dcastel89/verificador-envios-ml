@@ -549,19 +549,39 @@
             ZXing.BarcodeFormat.EAN_13,
             ZXing.BarcodeFormat.EAN_8,
             ZXing.BarcodeFormat.UPC_A,
-            ZXing.BarcodeFormat.UPC_E
+            ZXing.BarcodeFormat.UPC_E,
+            ZXing.BarcodeFormat.ITF
           ]);
-          codeReader = new ZXing.BrowserMultiFormatReader(hints);
+          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          codeReader = new ZXing.BrowserMultiFormatReader(hints, 500);
         }
         cameraContainer.classList.add('active');
         isScanning = true;
-        codeReader.decodeFromVideoDevice(null, 'video', function(result, error) {
+
+        // Intentar usar la cámara trasera con mejor resolución
+        var constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            focusMode: { ideal: 'continuous' }
+          }
+        };
+
+        codeReader.decodeFromConstraints(constraints, 'video', function(result, error) {
           if (result && isScanning) {
             handleScan(result);
           }
         }).catch(function(err) {
-          showStatus('No se pudo acceder a la camara', 'error');
-          stopCamera();
+          // Si falla con constraints, intentar sin ellos
+          codeReader.decodeFromVideoDevice(null, 'video', function(result, error) {
+            if (result && isScanning) {
+              handleScan(result);
+            }
+          }).catch(function(err2) {
+            showStatus('No se pudo acceder a la camara', 'error');
+            stopCamera();
+          });
         });
       }
 
