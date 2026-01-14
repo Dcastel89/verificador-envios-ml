@@ -487,7 +487,7 @@ async function getReadyToShipOrders(account) {
   var offset = 0;
   var hasMore = true;
 
-  // Buscar órdenes del vendedor
+  // Buscar órdenes del vendedor (solo pagadas recientes)
   while (hasMore) {
     var data = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/search', {
       params: {
@@ -507,52 +507,64 @@ async function getReadyToShipOrders(account) {
     allOrders = allOrders.concat(data.results);
     offset += 50;
 
-    // Limitar a 200 órdenes para no sobrecargar
-    if (offset >= 200) {
+    // Limitar a 100 órdenes para no sobrecargar
+    if (offset >= 100) {
       hasMore = false;
     }
   }
 
   console.log(account.name + ' - Total órdenes: ' + allOrders.length);
 
-  // Filtrar órdenes con envíos pendientes
+  // Filtrar órdenes pagadas con shipping_id
+  var ordersWithShipping = allOrders.filter(function(order) {
+    return order.status === 'paid' && order.shipping && order.shipping.id;
+  });
+
+  console.log(account.name + ' - Órdenes con shipping: ' + ordersWithShipping.length);
+
+  // Obtener detalles de cada envío
   var pendingShipments = [];
 
-  for (var i = 0; i < allOrders.length; i++) {
-    var order = allOrders[i];
+  for (var i = 0; i < ordersWithShipping.length; i++) {
+    var order = ordersWithShipping[i];
+    var shippingId = order.shipping.id;
 
-    // Verificar que la orden esté pagada
-    if (order.status !== 'paid') continue;
+    // Obtener detalles completos del envío
+    var shipment = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shippingId);
 
-    // Verificar shipping
-    var shipping = order.shipping || {};
-    var shippingId = shipping.id;
-    var shippingStatus = shipping.status;
+    if (!shipment) continue;
 
-    // Log para debug
+    // Log para debug (primeros 5)
     if (i < 5) {
-      console.log(account.name + ' - Orden ' + order.id + ': shipping_status=' + shippingStatus + ', shipping_id=' + shippingId + ', mode=' + (shipping.mode || 'N/A'));
+      console.log(account.name + ' - Envío ' + shippingId + ': status=' + shipment.status + ', logistic_type=' + shipment.logistic_type + ', mode=' + shipment.mode);
     }
 
-    // Filtrar por status de shipping pendiente
-    if (shippingStatus === 'ready_to_ship' || shippingStatus === 'pending' || shippingStatus === 'handling') {
-      // Excluir fulfillment
-      if (shipping.logistic_type === 'fulfillment') continue;
-
-      // Excluir acordar con comprador
-      if (shipping.mode === 'not_specified' || shipping.mode === 'custom' || !shippingId) continue;
-
-      pendingShipments.push({
-        id: shippingId.toString(),
-        orderId: order.id.toString(),
-        account: account.name,
-        dateCreated: order.date_created,
-        receiverName: shipping.receiver_address ? shipping.receiver_address.receiver_name : 'N/A',
-        logisticType: shipping.logistic_type || '',
-        status: shippingStatus,
-        mode: shipping.mode || ''
-      });
+    // Filtrar por status pendiente
+    var status = shipment.status;
+    if (status !== 'ready_to_ship' && status !== 'pending' && status !== 'handling') {
+      continue;
     }
+
+    // Excluir fulfillment (FULL)
+    if (shipment.logistic_type === 'fulfillment') {
+      continue;
+    }
+
+    // Excluir acordar con comprador
+    if (shipment.mode === 'not_specified' || shipment.mode === 'custom') {
+      continue;
+    }
+
+    pendingShipments.push({
+      id: shippingId.toString(),
+      orderId: order.id.toString(),
+      account: account.name,
+      dateCreated: order.date_created,
+      receiverName: shipment.receiver_address ? shipment.receiver_address.receiver_name : 'N/A',
+      logisticType: shipment.logistic_type || '',
+      status: status,
+      mode: shipment.mode || ''
+    });
   }
 
   console.log(account.name + ' - Envíos pendientes: ' + pendingShipments.length);
