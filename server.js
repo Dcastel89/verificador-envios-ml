@@ -1813,7 +1813,7 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
 });
 
 // ============================================
-// VISION API - Análisis de imágenes con Claude
+// VISION API - Verificación inteligente con Claude
 // ============================================
 
 app.post('/api/vision/analyze', async function(req, res) {
@@ -1822,6 +1822,8 @@ app.post('/api/vision/analyze', async function(req, res) {
   }
 
   var imageBase64 = req.body.image;
+  var productoEsperado = req.body.producto; // Info del pedido: título, descripción, SKU esperado, etc.
+
   if (!imageBase64) {
     return res.status(400).json({ error: 'No se recibió imagen' });
   }
@@ -1837,9 +1839,59 @@ app.post('/api/vision/analyze', async function(req, res) {
   }
 
   try {
+    var prompt = '';
+
+    if (productoEsperado) {
+      // MODO VERIFICACIÓN: Comparar imagen con producto esperado
+      prompt = `Sos un verificador de pedidos. Tu trabajo es confirmar si el producto en la foto coincide con lo que se pidió.
+
+PRODUCTO ESPERADO DEL PEDIDO:
+${typeof productoEsperado === 'string' ? productoEsperado : JSON.stringify(productoEsperado, null, 2)}
+
+INSTRUCCIONES:
+1. Mirá la foto del producto
+2. Compará con lo que se pidió (modelo de celular, color, tipo de producto)
+3. Buscá códigos/etiquetas en la imagen que confirmen el modelo (ej: A25, A36, "For Samsung A06")
+4. Verificá que el COLOR del producto coincida con lo pedido
+
+IMPORTANTE:
+- El fondo suele ser madera, ignoralo
+- Las fundas vienen en bolsas transparentes con etiquetas
+- Los códigos tipo "A25", "A36" indican el modelo de celular
+- Colores comunes: Negro, Blanco, Transparente, Rojo, Azul, Rosa, Lila, Verde, Celeste, Amarillo
+
+Respondé SOLO con este JSON:
+{
+  "correcto": true/false,
+  "productoDetectado": "descripción breve de lo que ves en la foto",
+  "modeloDetectado": "código del modelo si lo ves (ej: A25, A36)",
+  "colorDetectado": "color del producto",
+  "motivo": "si es incorrecto, explicá por qué",
+  "confianza": "alta/media/baja"
+}`;
+    } else {
+      // MODO EXTRACCIÓN: Solo extraer info de la imagen (sin comparar)
+      prompt = `Analizá esta imagen de un producto (funda de celular).
+
+Extraé:
+1. **Modelo/SKU**: Buscá códigos en etiquetas (A25, A36, B12, "For A06", etc.)
+2. **Color**: Color real del producto (no del fondo de madera)
+3. **Tipo**: Qué tipo de producto es
+
+IGNORAR: "Fashion Case", "New", "Phone case", "4G", "5G", "Made in China"
+
+Respondé SOLO con este JSON:
+{
+  "modeloDetectado": "código encontrado o null",
+  "colorDetectado": "color del producto",
+  "tipoProducto": "funda silicona/funda transparente/vidrio/etc",
+  "confianza": "alta/media/baja"
+}`;
+    }
+
     var response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{
         role: 'user',
         content: [
@@ -1851,23 +1903,14 @@ app.post('/api/vision/analyze', async function(req, res) {
               data: imageBase64
             }
           },
-          {
-            type: 'text',
-            text: `Analizá esta imagen de una funda de celular.
-
-Extraé:
-1. **SKU/Código**: Buscá el código del producto en etiquetas. Suele ser formato letra+números (ej: A25, A36, B12). Ignorá textos como "Fashion Case", "New", "4G/5G", etc.
-2. **Color de la funda**: Identificá el color REAL de la funda (no del fondo, empaque o etiquetas). Usá nombres simples: Negro, Blanco, Rojo, Azul, Verde, Rosa, Lila, Celeste, Amarillo, Naranja, Gris, Transparente, etc.
-
-Respondé SOLO con JSON válido, sin explicaciones:
-{"sku": "CODIGO", "color": "COLOR", "confianza": "alta/media/baja"}`
-          }
+          { type: 'text', text: prompt }
         ]
       }]
     });
 
     // Parsear respuesta de Claude
     var claudeText = response.content[0].text.trim();
+    console.log('Claude response:', claudeText);
 
     // Intentar extraer JSON de la respuesta
     var jsonMatch = claudeText.match(/\{[\s\S]*\}/);
@@ -1879,15 +1922,6 @@ Respondé SOLO con JSON válido, sin explicaciones:
     }
 
     var result = JSON.parse(jsonMatch[0]);
-
-    res.json({
-      success: true,
-      sku: result.sku || null,
-      color: result.color || null,
-      confianza: result.confianza || 'media',
-      modelo: result.modelo || null,
-      rawResponse: claudeText
-    });
 
   } catch (error) {
     console.error('Error en Claude Vision:', error.message);
