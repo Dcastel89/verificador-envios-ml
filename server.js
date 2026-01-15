@@ -1994,23 +1994,82 @@ app.post('/api/auth/token', async function(req, res) {
   }
 });
 
-// Endpoint para sincronizar envíos manualmente
+// Endpoint unificado para sincronizar envíos y actualizar estados
 app.get('/api/sync-morning', async function(req, res) {
   try {
-    // Resetear la fecha para permitir sync manual
+    var sheetName = getTodaySheetName();
+
+    // 1. Sincronizar envíos nuevos desde ML
     lastMorningSyncDate = null;
     await syncMorningShipments();
-    var sheetName = getTodaySheetName();
+
+    // 2. Actualizar estados de envíos existentes
+    var actualizados = await actualizarEstadosEnvios();
+
     res.json({
       success: true,
       message: 'Sincronización completada',
-      hoja: sheetName
+      hoja: sheetName,
+      estadosActualizados: actualizados
     });
   } catch (error) {
-    console.error('Error en sync manual:', error.message);
+    console.error('Error en sync:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
+
+// Función auxiliar para actualizar estados (usada por sync unificado)
+async function actualizarEstadosEnvios() {
+  if (!sheets || !SHEET_ID) return 0;
+
+  var sheetName = getTodaySheetName();
+  var actualizados = 0;
+
+  try {
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+
+    var rows = response.data.values || [];
+
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row || !row[2]) continue;
+
+      var envioId = row[2];
+      var cuenta = row[3] || '';
+      var estadoActual = row[6] || '';
+
+      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado') {
+        continue;
+      }
+
+      var account = accounts.find(function(a) {
+        return a.name.toUpperCase() === cuenta.toUpperCase();
+      });
+
+      if (!account || !account.accessToken) continue;
+
+      var estadoML = await getShipmentStatus(account, envioId);
+
+      if (estadoML && estadoML !== 'ready_to_ship') {
+        var estadoTexto = 'Despachado';
+        if (estadoML === 'delivered') estadoTexto = 'Entregado';
+        else if (estadoML === 'cancelled') estadoTexto = 'Cancelado';
+
+        var marcado = await markAsDespachado(envioId, estadoTexto);
+        if (marcado) actualizados++;
+      }
+
+      await new Promise(function(resolve) { setTimeout(resolve, 50); });
+    }
+  } catch (error) {
+    console.error('Error actualizando estados:', error.message);
+  }
+
+  return actualizados;
+}
 
 // Endpoint para obtener envíos del día desde Google Sheets (persistente)
 app.get('/api/envios-del-dia', async function(req, res) {

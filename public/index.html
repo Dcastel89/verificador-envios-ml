@@ -45,7 +45,7 @@
     .items-header { padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
     .items-header h2 { font-size: 16px; font-weight: 600; color: #374151; }
     .items-count { font-size: 14px; color: #6b7280; }
-    .item-card { padding: 16px; padding-right: 70px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; position: relative; }
+    .item-card { padding: 16px; padding-right: 80px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; position: relative; }
     .item-card:last-child { border-bottom: none; }
     .item-card.checked { background: #f0fdf4; }
     .item-card.highlight { background: #fef3c7; animation: pulse 0.5s ease-in-out; }
@@ -87,10 +87,10 @@
     .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
     .scan-mode-indicator.show { display: block; }
 
-    /* Verify photo button */
-    .verify-photo-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: #7c3aed; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(124,58,237,0.3); transition: all 0.2s; }
+    /* Verify photo button - grande y fácil de tocar */
+    .verify-photo-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #7c3aed; color: white; border: none; width: 56px; height: 56px; border-radius: 50%; font-size: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(124,58,237,0.4); transition: all 0.2s; }
     .verify-photo-btn:hover { background: #6d28d9; transform: translateY(-50%) scale(1.1); }
-    .verify-photo-btn:active { transform: translateY(-50%) scale(0.95); }
+    .verify-photo-btn:active { background: #5b21b6; transform: translateY(-50%) scale(0.95); }
 
     /* Resumen del día */
     .resumen-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -134,7 +134,6 @@
     .resumen-pendiente-item:hover { background: #fee2e2; }
     .resumen-pendiente-id { font-weight: 600; color: #dc2626; }
     .resumen-pendiente-cuenta { font-size: 11px; color: #6b7280; }
-    .resumen-refresh { background: none; border: none; color: #2563eb; font-size: 12px; cursor: pointer; text-decoration: underline; }
     .resumen-sync-btn { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .resumen-sync-btn:hover { background: #1d4ed8; }
     .resumen-sync-btn:disabled { background: #9ca3af; cursor: not-allowed; }
@@ -212,14 +211,11 @@
       <div style="text-align: center; margin-top: 12px;">
         <button type="button" class="resumen-sync-btn" id="resumenSync">
           <span class="spinner"></span>
-          <span class="btn-text">Sincronizar envios</span>
+          <span class="btn-text">Sincronizar</span>
         </button>
         <div class="sync-progress" id="syncProgress">
           <div class="sync-progress-bar"></div>
         </div>
-        <button type="button" class="resumen-refresh" id="actualizarEstados">Actualizar estados</button>
-        <button type="button" class="resumen-refresh" id="limpiarDuplicados">Limpiar duplicados</button>
-        <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
     </div>
     </div>
@@ -234,10 +230,10 @@
       <div class="camera-container" id="cameraContainer">
         <video id="video" playsinline></video>
         <button type="button" class="close-camera" id="closeCamera">X</button>
-        <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Foto OCR</button>
+        <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar</button>
       </div>
       <div class="vision-result hidden" id="visionResult">
-        <div><strong>Texto detectado:</strong></div>
+        <div><strong>Resultado:</strong></div>
         <div class="vision-result-text" id="visionText"></div>
         <div class="vision-result-colors" id="visionColors"></div>
       </div>
@@ -838,6 +834,11 @@
         // Abrir cámara en modo producto
         scanMode = 'product';
         startCamera();
+
+        // Scroll suave a la cámara
+        setTimeout(function() {
+          cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
       }
 
       function capturePhoto() {
@@ -875,7 +876,7 @@
         .then(function(response) { return response.json(); })
         .then(function(data) {
           capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Foto OCR';
+          capturePhotoBtn.textContent = 'Analizar';
 
           if (data.success) {
             // Si hay verificación con producto específico
@@ -894,7 +895,7 @@
         })
         .catch(function(err) {
           capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Foto OCR';
+          capturePhotoBtn.textContent = 'Analizar';
           showStatus('Error de conexion', 'error');
           console.error(err);
         });
@@ -925,14 +926,23 @@
         var item = currentItems[itemIndex];
         if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
 
-        // Marcar la primera unidad no verificada
+        // Marcar solo la primera unidad no verificada
         for (var j = 0; j < item.quantity; j++) {
           if (!unitChecks[itemIndex][j] || !unitChecks[itemIndex][j].checked) {
             unitChecks[itemIndex][j] = { checked: true, method: method };
-            break;
+            // Actualizar checkbox en UI
+            var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
+            if (checkbox) {
+              checkbox.checked = true;
+              checkbox.classList.add('scanned');
+              setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
+            }
+            break; // Solo marcar una
           }
         }
+
         updateCard(itemIndex);
+        highlightCard(itemIndex);
         updateItemsCount();
       }
 
@@ -953,94 +963,17 @@
       }
 
       function showVisionResult(data) {
-        visionText.textContent = data.text || '(sin texto)';
+        // Mostrar info de Claude (modelo, color, tipo)
+        var info = [];
+        if (data.modeloDetectado) info.push('Modelo: ' + data.modeloDetectado);
+        if (data.colorDetectado) info.push('Color: ' + data.colorDetectado);
+        if (data.tipoProducto) info.push('Tipo: ' + data.tipoProducto);
 
-        // Mostrar colores
-        visionColors.innerHTML = '';
-        if (data.colors && data.colors.length > 0) {
-          var colorLabel = document.createElement('span');
-          colorLabel.textContent = 'Colores: ';
-          colorLabel.style.fontWeight = 'bold';
-          visionColors.appendChild(colorLabel);
-
-          data.colors.forEach(function(c) {
-            var chip = document.createElement('span');
-            chip.className = 'vision-color-chip';
-            chip.textContent = c.name;
-            chip.style.backgroundColor = 'rgb(' + c.red + ',' + c.green + ',' + c.blue + ')';
-            chip.style.color = (c.red + c.green + c.blue) > 380 ? '#000' : '#fff';
-            visionColors.appendChild(chip);
-          });
-        }
+        visionText.textContent = info.length > 0 ? info.join(' | ') : '(sin datos)';
+        visionColors.innerHTML = data.confianza ? '<strong>Confianza:</strong> ' + data.confianza : '';
 
         visionResult.classList.remove('hidden');
         hideStatus();
-      }
-
-      function tryMatchTextWithSku(fullText, words) {
-        // Buscar en el texto detectado si hay algún SKU que coincida
-        var textUpper = fullText.toUpperCase().replace(/\s+/g, '');
-
-        for (var i = 0; i < currentItems.length; i++) {
-          var item = currentItems[i];
-          var sku = item.sku.toUpperCase();
-
-          // Buscar coincidencia exacta o parcial del SKU en el texto
-          if (textUpper.includes(sku) || sku.includes(textUpper)) {
-            var unitIndex = findNextUncheckedUnit(i);
-            if (unitIndex >= 0) {
-              // Marcar como verificado via OCR
-              if (!unitChecks[i]) unitChecks[i] = [];
-              unitChecks[i][unitIndex] = { checked: true, method: 'scanned' };
-
-              var checkbox = document.querySelector('.unit-checkbox[data-item="' + i + '"][data-unit="' + unitIndex + '"]');
-              if (checkbox) {
-                checkbox.checked = true;
-                checkbox.classList.add('scanned');
-                setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
-              }
-
-              updateCard(i);
-              highlightCard(i);
-              showStatus('OCR Match: ' + item.sku, 'success');
-              if (navigator.vibrate) navigator.vibrate(100);
-              return;
-            } else {
-              showStatus('SKU ya verificado: ' + item.sku, 'error');
-              return;
-            }
-          }
-        }
-
-        // También buscar cada palabra individual
-        for (var w = 0; w < words.length; w++) {
-          var word = words[w].toUpperCase();
-          for (var j = 0; j < currentItems.length; j++) {
-            var itemJ = currentItems[j];
-            if (word === itemJ.sku.toUpperCase()) {
-              var unitIdx = findNextUncheckedUnit(j);
-              if (unitIdx >= 0) {
-                if (!unitChecks[j]) unitChecks[j] = [];
-                unitChecks[j][unitIdx] = { checked: true, method: 'scanned' };
-
-                var cb = document.querySelector('.unit-checkbox[data-item="' + j + '"][data-unit="' + unitIdx + '"]');
-                if (cb) {
-                  cb.checked = true;
-                  cb.classList.add('scanned');
-                  setTimeout(function() { cb.classList.remove('scanned'); }, 2000);
-                }
-
-                updateCard(j);
-                highlightCard(j);
-                showStatus('OCR Match: ' + itemJ.sku, 'success');
-                if (navigator.vibrate) navigator.vibrate(100);
-                return;
-              }
-            }
-          }
-        }
-
-        showStatus('Texto detectado, sin match con SKUs', 'loading');
       }
 
       capturePhotoBtn.onclick = capturePhoto;
@@ -1076,8 +1009,6 @@
       var resumenPendientes = document.getElementById('resumenPendientes');
       var resumenStatus = document.getElementById('resumenStatus');
       var resumenPendientesList = document.getElementById('resumenPendientesList');
-      var resumenRefresh = document.getElementById('resumenRefresh');
-      var actualizarEstadosBtn = document.getElementById('actualizarEstados');
       var cuentasBtns = document.getElementById('cuentasBtns');
       var cuentasBtnsIndividuales = document.getElementById('cuentasBtnsIndividuales');
       var cuentaDesglose = document.getElementById('cuentaDesglose');
@@ -1272,40 +1203,7 @@
       cuentasBtns.onclick = handleCuentaClick;
       cuentasBtnsIndividuales.onclick = handleCuentaClick;
 
-      resumenRefresh.onclick = cargarResumenDia;
-
-      // Actualizar estados desde ML
-      actualizarEstadosBtn.onclick = function() {
-        actualizarEstadosBtn.disabled = true;
-        actualizarEstadosBtn.textContent = 'Actualizando...';
-        resumenStatus.className = 'resumen-status vacio';
-        resumenStatus.textContent = 'Consultando estados en MercadoLibre...';
-
-        fetch(API_URL + '/api/actualizar-estados', { method: 'POST' })
-          .then(function(response) { return response.json(); })
-          .then(function(data) {
-            actualizarEstadosBtn.disabled = false;
-            actualizarEstadosBtn.textContent = 'Actualizar estados';
-
-            if (data.actualizados > 0) {
-              resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = data.actualizados + ' envio(s) marcados como despachados';
-            } else {
-              resumenStatus.className = 'resumen-status vacio';
-              resumenStatus.textContent = 'No hay cambios de estado';
-            }
-            cargarResumenDia();
-          })
-          .catch(function(err) {
-            actualizarEstadosBtn.disabled = false;
-            actualizarEstadosBtn.textContent = 'Actualizar estados';
-            resumenStatus.className = 'resumen-status vacio';
-            resumenStatus.textContent = 'Error actualizando estados';
-            console.error(err);
-          });
-      };
-
-      // Sincronizar envíos
+      // Sincronizar envíos (trae nuevos + actualiza estados)
       var resumenSync = document.getElementById('resumenSync');
       var syncProgress = document.getElementById('syncProgress');
 
@@ -1325,7 +1223,11 @@
 
             if (data.success) {
               resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = 'Sincronizacion completada - ' + (data.hoja || '');
+              var msg = 'Sincronizado';
+              if (data.estadosActualizados > 0) {
+                msg += ' (' + data.estadosActualizados + ' estado(s) actualizado(s))';
+              }
+              resumenStatus.textContent = msg;
               cargarResumenDia();
             } else {
               resumenStatus.className = 'resumen-status vacio';
@@ -1342,48 +1244,13 @@
           });
       };
 
-      // Limpiar duplicados
-      var limpiarDuplicadosBtn = document.getElementById('limpiarDuplicados');
-      limpiarDuplicadosBtn.onclick = function() {
-        limpiarDuplicadosBtn.disabled = true;
-        limpiarDuplicadosBtn.textContent = 'Limpiando...';
-        resumenStatus.className = 'resumen-status vacio';
-        resumenStatus.textContent = 'Limpiando duplicados...';
-
-        fetch(API_URL + '/api/limpiar-duplicados', { method: 'POST' })
-          .then(function(response) { return response.json(); })
-          .then(function(data) {
-            limpiarDuplicadosBtn.disabled = false;
-            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
-
-            if (data.error) {
-              resumenStatus.className = 'resumen-status vacio';
-              resumenStatus.textContent = 'Error: ' + data.error;
-            } else if (data.eliminados > 0) {
-              resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = 'Eliminados ' + data.eliminados + ' duplicados (' + data.totalAntes + ' -> ' + data.totalDespues + ')';
-              cargarResumenDia();
-            } else {
-              resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = data.mensaje || 'No hay duplicados';
-            }
-          })
-          .catch(function(err) {
-            limpiarDuplicadosBtn.disabled = false;
-            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
-            resumenStatus.className = 'resumen-status vacio';
-            resumenStatus.textContent = 'Error de conexion';
-            console.error(err);
-          });
-      };
-
       // Cargar resumen al iniciar
       cargarResumenDia();
 
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v15 - Claude Vision verification + product photo button');
+      console.log('App iniciada v18 - Mejoras OCR: marca todas las unidades, scroll a camara, boton mas grande');
     })();
   </script>
 </body>
