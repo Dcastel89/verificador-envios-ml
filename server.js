@@ -1853,32 +1853,50 @@ function normalizeSKU(sku) {
   return normalized;
 }
 
-// Función para extraer posibles SKUs (optimizada para códigos tipo A16, B22)
+// Función para extraer posibles SKUs (optimizada para códigos tipo A25, A36)
 function extractPossibleSKUs(text, words) {
   var skuPatterns = [];
 
   var allText = (text + ' ' + words.join(' ')).toUpperCase();
 
-  // Patrón principal: 1-2 letras + 1-3 números (A16, B22, AB1, C7)
-  var matches = allText.match(/[A-Z]{1,2}[0-9]{1,3}/g) || [];
-  matches.forEach(function(match) {
-    skuPatterns.push(normalizeSKU(match));
+  // Palabras comunes a ignorar (no son SKUs)
+  var ignoreWords = [
+    'FOR', 'NEW', 'CASE', 'PHONE', 'GOOD', 'QUALITY', 'FASHION', 'MOBILE',
+    'COVER', 'PRODUCTS', 'MADE', 'CHINA', 'IN', 'THE', 'AND', 'PRO', 'MAX',
+    '4G', '5G', 'LTE', 'SX', 'FT'  // Prefijos comunes de modelos
+  ];
+
+  // Patrón principal: 1 letra + 2-3 números (A25, A36, B22)
+  // Este es el formato más probable de SKU
+  var primaryMatches = allText.match(/\b[A-Z][0-9]{2,3}\b/g) || [];
+  primaryMatches.forEach(function(match) {
+    var normalized = normalizeSKU(match);
+    if (!ignoreWords.includes(normalized)) {
+      skuPatterns.push(normalized);
+    }
   });
 
-  // También números + letras (16A, 22B)
-  var numLetterMatches = allText.match(/[0-9]{1,3}[A-Z]{1,2}/g) || [];
-  numLetterMatches.forEach(function(match) {
-    skuPatterns.push(normalizeSKU(match));
-  });
+  // Si no encontró con el patrón principal, buscar más amplio
+  if (skuPatterns.length === 0) {
+    var secondaryMatches = allText.match(/[A-Z]{1,2}[0-9]{1,3}/g) || [];
+    secondaryMatches.forEach(function(match) {
+      var normalized = normalizeSKU(match);
+      if (!ignoreWords.includes(normalized) && normalized.length >= 2) {
+        skuPatterns.push(normalized);
+      }
+    });
+  }
 
-  // Filtrar duplicados y priorizar formato LETRA+NÚMERO
+  // Filtrar duplicados
   var unique = [...new Set(skuPatterns)];
+
+  // Priorizar: 1 letra + 2 números primero (A25 antes que AB12)
   unique.sort(function(a, b) {
-    var aIsLetterNum = /^[A-Z][0-9]/.test(a);
-    var bIsLetterNum = /^[A-Z][0-9]/.test(b);
-    if (aIsLetterNum && !bIsLetterNum) return -1;
-    if (!aIsLetterNum && bIsLetterNum) return 1;
-    return a.length - b.length; // Más cortos primero
+    var aIsPerfect = /^[A-Z][0-9]{2}$/.test(a);  // A25
+    var bIsPerfect = /^[A-Z][0-9]{2}$/.test(b);
+    if (aIsPerfect && !bIsPerfect) return -1;
+    if (!aIsPerfect && bIsPerfect) return 1;
+    return a.length - b.length;
   });
 
   return unique;
@@ -2027,23 +2045,33 @@ app.post('/api/vision/analyze', async function(req, res) {
   }
 });
 
-// Función para nombrar colores básicos
+// Función para nombrar colores básicos (optimizada para fundas de celular)
 function getColorName(r, g, b) {
   var colors = {
     'Negro': { r: 0, g: 0, b: 0 },
     'Blanco': { r: 255, g: 255, b: 255 },
     'Rojo': { r: 255, g: 0, b: 0 },
-    'Verde': { r: 0, g: 255, b: 0 },
+    'Verde': { r: 0, g: 200, b: 0 },
+    'Verde Oscuro': { r: 0, g: 100, b: 0 },
     'Azul': { r: 0, g: 0, b: 255 },
+    'Azul Marino': { r: 0, g: 0, b: 128 },
     'Amarillo': { r: 255, g: 255, b: 0 },
-    'Rosa': { r: 255, g: 192, b: 203 },
+    'Rosa': { r: 255, g: 105, b: 180 },
+    'Rosa Claro': { r: 255, g: 182, b: 193 },
+    'Lila': { r: 200, g: 162, b: 200 },
+    'Lavanda': { r: 230, g: 190, b: 230 },
     'Naranja': { r: 255, g: 165, b: 0 },
     'Morado': { r: 128, g: 0, b: 128 },
+    'Violeta': { r: 148, g: 0, b: 211 },
     'Celeste': { r: 135, g: 206, b: 235 },
     'Gris': { r: 128, g: 128, b: 128 },
+    'Gris Oscuro': { r: 64, g: 64, b: 64 },
     'Marron': { r: 139, g: 69, b: 19 },
     'Beige': { r: 245, g: 245, b: 220 },
-    'Turquesa': { r: 64, g: 224, b: 208 }
+    'Turquesa': { r: 64, g: 224, b: 208 },
+    'Coral': { r: 255, g: 127, b: 80 },
+    'Bordo': { r: 128, g: 0, b: 32 },
+    'Transparente': { r: 250, g: 250, b: 250 }
   };
 
   var minDistance = Infinity;
