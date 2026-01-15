@@ -4,15 +4,22 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const { google } = require('googleapis');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Google Sheets setup
+// Anthropic (Claude) setup
+var anthropic = null;
+if (process.env.ANTHROPIC_API_KEY) {
+  anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  console.log('Claude API configurada');
+}
+
+// Google Sheets setup (solo para Sheets, ya no usamos Vision de Google)
 var sheets = null;
-var vision = null;
 var SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
@@ -20,13 +27,9 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) 
     process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     null,
     process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/cloud-vision'
-    ]
+    ['https://www.googleapis.com/auth/spreadsheets']
   );
   sheets = google.sheets({ version: 'v4', auth: auth });
-  vision = google.vision({ version: 'v1', auth: auth });
 }
 
 // Cuentas de MercadoLibre - los tokens se actualizan desde Google Sheets
@@ -470,25 +473,45 @@ async function getCutoffTimeFlex(account) {
     // Paso 2: Obtener configuración con user_id y service_id (formato GraphQL)
     var configUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/configuration/v3';
 
-    // La API espera una query en formato GraphQL
-    var graphqlQuery = '{ configuration (user_id: ' + userId + ', service_id: ' + serviceId + ') { delivery_ranges { week { capacity type processing_time from to et_hour calculated_cutoff cutoff } saturday { calculated_cutoff cutoff } sunday { calculated_cutoff cutoff } } availables { cutoff capacity_range { from to } } } }';
+    // Query GraphQL simplificada - solo campos necesarios para cutoff
+    var graphqlQuery = '{ configuration (user_id: ' + userId + ', service_id: ' + serviceId + ') { delivery_ranges { week { from to calculated_cutoff } saturday { calculated_cutoff } sunday { calculated_cutoff } } delivery_window } }';
 
+    console.log(account.name + ' - Consultando FLEX config para user=' + userId + ', service=' + serviceId);
     var responseData = await mlApiRequestPost(account, configUrl, { query: graphqlQuery });
+
+    // Si GraphQL falla, intentar endpoint REST alternativo
+    if (!responseData) {
+      console.log(account.name + ' - GraphQL falló, intentando endpoint REST alternativo...');
+      var restUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/users/' + userId + '/services/' + serviceId + '/configuration/v3';
+      responseData = await mlApiRequest(account, restUrl);
+    }
 
     if (!responseData) {
       console.log(account.name + ' - No se pudo obtener configuración de FLEX');
       return null;
     }
 
-    // La respuesta GraphQL puede venir en data.configuration o directamente en configuration
+    // La respuesta puede venir en diferentes formatos
     var configData = responseData.data ? responseData.data.configuration : (responseData.configuration || responseData);
 
     if (!configData) {
-      console.log(account.name + ' - No se pudo parsear configuración de FLEX');
-      return null;
+      configData = responseData; // Usar respuesta directa si no tiene wrapper
     }
 
-    // Extraer el cutoff de delivery_ranges.week
+    console.log(account.name + ' - FLEX config recibida:', JSON.stringify(configData).substring(0, 200));
+
+    // Opción 1: delivery_window directo (formato HH:MM)
+    if (configData.delivery_window) {
+      var dw = configData.delivery_window;
+      if (typeof dw === 'string' && dw.includes(':')) {
+        var parts = dw.split(':');
+        var minutos = parseInt(parts[0]) * 60 + (parts[1] ? parseInt(parts[1]) : 0);
+        console.log(account.name + ' - Cutoff FLEX obtenido (delivery_window): ' + dw);
+        return minutos;
+      }
+    }
+
+    // Opción 2: Extraer el cutoff de delivery_ranges.week
     if (configData.delivery_ranges && configData.delivery_ranges.week) {
       var weekRanges = configData.delivery_ranges.week;
       if (Array.isArray(weekRanges) && weekRanges.length > 0) {
@@ -509,7 +532,7 @@ async function getCutoffTimeFlex(account) {
       }
     }
 
-    // Fallback: buscar en availables
+    // Opción 3: buscar en availables
     if (configData.availables && configData.availables.cutoff !== undefined) {
       var cutoff = configData.availables.cutoff;
       if (typeof cutoff === 'number') {
@@ -1020,7 +1043,8 @@ async function mlApiRequestPost(account, url, data, options = {}) {
         }
       }
     }
-    console.error('Error en POST API:', error.message);
+    var errorDetail = error.response && error.response.data ? JSON.stringify(error.response.data) : error.message;
+    console.error('Error en POST API:', error.message, '- Detalle:', errorDetail);
     return null;
   }
 }
@@ -1789,111 +1813,87 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
 });
 
 // ============================================
-// GOOGLE VISION API - OCR Y DETECCIÓN DE COLOR
+// VISION API - Análisis de imágenes con Claude
 // ============================================
 
 app.post('/api/vision/analyze', async function(req, res) {
-  if (!vision) {
-    return res.status(500).json({ error: 'Vision API no configurada' });
+  if (!anthropic) {
+    return res.status(500).json({ error: 'Claude API no configurada. Agregá ANTHROPIC_API_KEY en las variables de entorno.' });
   }
 
-  var imageBase64 = req.body.image; // Imagen en base64 (sin el prefijo data:image/...)
+  var imageBase64 = req.body.image;
   if (!imageBase64) {
-    return res.status(400).json({ error: 'No se recibio imagen' });
+    return res.status(400).json({ error: 'No se recibió imagen' });
   }
 
-  // Remover prefijo data:image si existe
-  if (imageBase64.includes('base64,')) {
+  // Remover prefijo data:image si existe y detectar tipo
+  var mediaType = 'image/jpeg';
+  if (imageBase64.includes('data:image/')) {
+    var matches = imageBase64.match(/data:(image\/[a-z]+);base64,/);
+    if (matches) {
+      mediaType = matches[1];
+    }
     imageBase64 = imageBase64.split('base64,')[1];
   }
 
   try {
-    var response = await vision.images.annotate({
-      requestBody: {
-        requests: [{
-          image: { content: imageBase64 },
-          features: [
-            { type: 'TEXT_DETECTION', maxResults: 10 },
-            { type: 'IMAGE_PROPERTIES', maxResults: 5 }
-          ]
-        }]
-      }
+    var response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: imageBase64
+            }
+          },
+          {
+            type: 'text',
+            text: `Analizá esta imagen de una funda de celular.
+
+Extraé:
+1. **SKU/Código**: Buscá el código del producto en etiquetas. Suele ser formato letra+números (ej: A25, A36, B12). Ignorá textos como "Fashion Case", "New", "4G/5G", etc.
+2. **Color de la funda**: Identificá el color REAL de la funda (no del fondo, empaque o etiquetas). Usá nombres simples: Negro, Blanco, Rojo, Azul, Verde, Rosa, Lila, Celeste, Amarillo, Naranja, Gris, Transparente, etc.
+
+Respondé SOLO con JSON válido, sin explicaciones:
+{"sku": "CODIGO", "color": "COLOR", "confianza": "alta/media/baja"}`
+          }
+        ]
+      }]
     });
 
-    var result = response.data.responses[0];
-    var textAnnotations = result.textAnnotations || [];
-    var imageProperties = result.imagePropertiesAnnotation || {};
+    // Parsear respuesta de Claude
+    var claudeText = response.content[0].text.trim();
 
-    // Extraer texto detectado
-    var fullText = textAnnotations.length > 0 ? textAnnotations[0].description : '';
-    var words = textAnnotations.slice(1).map(function(t) { return t.description; });
-
-    // Extraer colores dominantes
-    var dominantColors = [];
-    if (imageProperties.dominantColors && imageProperties.dominantColors.colors) {
-      dominantColors = imageProperties.dominantColors.colors.slice(0, 5).map(function(c) {
-        var rgb = c.color;
-        return {
-          red: rgb.red || 0,
-          green: rgb.green || 0,
-          blue: rgb.blue || 0,
-          score: c.score,
-          pixelFraction: c.pixelFraction,
-          name: getColorName(rgb.red || 0, rgb.green || 0, rgb.blue || 0)
-        };
+    // Intentar extraer JSON de la respuesta
+    var jsonMatch = claudeText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(500).json({
+        error: 'Claude no devolvió JSON válido',
+        rawResponse: claudeText
       });
     }
 
+    var result = JSON.parse(jsonMatch[0]);
+
     res.json({
       success: true,
-      text: fullText,
-      words: words,
-      colors: dominantColors
+      sku: result.sku || null,
+      color: result.color || null,
+      confianza: result.confianza || 'media',
+      modelo: result.modelo || null,
+      rawResponse: claudeText
     });
 
   } catch (error) {
-    console.error('Error en Vision API:', error.message);
-    res.status(500).json({ error: 'Error procesando imagen: ' + error.message });
+    console.error('Error en Claude Vision:', error.message);
+    res.status(500).json({ error: 'Error procesando imagen con Claude: ' + error.message });
   }
 });
-
-// Función para nombrar colores básicos
-function getColorName(r, g, b) {
-  var colors = {
-    'Negro': { r: 0, g: 0, b: 0 },
-    'Blanco': { r: 255, g: 255, b: 255 },
-    'Rojo': { r: 255, g: 0, b: 0 },
-    'Verde': { r: 0, g: 255, b: 0 },
-    'Azul': { r: 0, g: 0, b: 255 },
-    'Amarillo': { r: 255, g: 255, b: 0 },
-    'Rosa': { r: 255, g: 192, b: 203 },
-    'Naranja': { r: 255, g: 165, b: 0 },
-    'Morado': { r: 128, g: 0, b: 128 },
-    'Celeste': { r: 135, g: 206, b: 235 },
-    'Gris': { r: 128, g: 128, b: 128 },
-    'Marron': { r: 139, g: 69, b: 19 },
-    'Beige': { r: 245, g: 245, b: 220 },
-    'Turquesa': { r: 64, g: 224, b: 208 }
-  };
-
-  var minDistance = Infinity;
-  var closestColor = 'Desconocido';
-
-  for (var name in colors) {
-    var c = colors[name];
-    var distance = Math.sqrt(
-      Math.pow(r - c.r, 2) +
-      Math.pow(g - c.g, 2) +
-      Math.pow(b - c.b, 2)
-    );
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestColor = name;
-    }
-  }
-
-  return closestColor;
-}
 
 app.get('/api/sync', async function(req, res) {
   await syncPendingShipments();
