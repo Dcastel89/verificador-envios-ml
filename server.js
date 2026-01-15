@@ -473,70 +473,53 @@ async function getCutoffTimeFlex(account) {
     // La API espera una query en formato GraphQL
     var graphqlQuery = '{ configuration (user_id: ' + userId + ', service_id: ' + serviceId + ') { delivery_ranges { week { capacity type processing_time from to et_hour calculated_cutoff cutoff } saturday { calculated_cutoff cutoff } sunday { calculated_cutoff cutoff } } availables { cutoff capacity_range { from to } } } }';
 
-    var config = {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + account.accessToken,
-        'Content-Type': 'application/json'
-      },
-      data: {
-        query: graphqlQuery
-      }
-    };
+    var responseData = await mlApiRequestPost(account, configUrl, { query: graphqlQuery });
 
-    try {
-      var response = await axios(configUrl, config);
-      var responseData = response.data;
+    if (!responseData) {
+      console.log(account.name + ' - No se pudo obtener configuración de FLEX');
+      return null;
+    }
 
-      if (!responseData) {
-        console.log(account.name + ' - No se pudo obtener configuración de FLEX');
-        return null;
-      }
+    // La respuesta GraphQL puede venir en data.configuration o directamente en configuration
+    var configData = responseData.data ? responseData.data.configuration : (responseData.configuration || responseData);
 
-      // La respuesta GraphQL puede venir en data.configuration o directamente en configuration
-      var configData = responseData.data ? responseData.data.configuration : (responseData.configuration || responseData);
+    if (!configData) {
+      console.log(account.name + ' - No se pudo parsear configuración de FLEX');
+      return null;
+    }
 
-      if (!configData) {
-        console.log(account.name + ' - No se pudo parsear configuración de FLEX');
-        return null;
-      }
-
-      // Extraer el cutoff de delivery_ranges.week
-      if (configData.delivery_ranges && configData.delivery_ranges.week) {
-        var weekRanges = configData.delivery_ranges.week;
-        if (Array.isArray(weekRanges) && weekRanges.length > 0) {
-          var cutoff = weekRanges[0].calculated_cutoff || weekRanges[0].cutoff;
-          if (cutoff !== null && cutoff !== undefined) {
-            if (typeof cutoff === 'number') {
-              console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff + ':00');
-              return cutoff * 60;
-            } else if (typeof cutoff === 'string') {
-              var parts = cutoff.split(':');
-              if (parts.length >= 1) {
-                var minutos = parseInt(parts[0]) * 60 + (parts[1] ? parseInt(parts[1]) : 0);
-                console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff);
-                return minutos;
-              }
+    // Extraer el cutoff de delivery_ranges.week
+    if (configData.delivery_ranges && configData.delivery_ranges.week) {
+      var weekRanges = configData.delivery_ranges.week;
+      if (Array.isArray(weekRanges) && weekRanges.length > 0) {
+        var cutoff = weekRanges[0].calculated_cutoff || weekRanges[0].cutoff;
+        if (cutoff !== null && cutoff !== undefined) {
+          if (typeof cutoff === 'number') {
+            console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff + ':00');
+            return cutoff * 60;
+          } else if (typeof cutoff === 'string') {
+            var parts = cutoff.split(':');
+            if (parts.length >= 1) {
+              var minutos = parseInt(parts[0]) * 60 + (parts[1] ? parseInt(parts[1]) : 0);
+              console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff);
+              return minutos;
             }
           }
         }
       }
-
-      // Fallback: buscar en availables
-      if (configData.availables && configData.availables.cutoff !== undefined) {
-        var cutoff = configData.availables.cutoff;
-        if (typeof cutoff === 'number') {
-          console.log(account.name + ' - Cutoff FLEX obtenido (availables): ' + cutoff + ':00');
-          return cutoff * 60;
-        }
-      }
-
-      console.log(account.name + ' - No se encontró cutoff en configuración de FLEX');
-      return null;
-    } catch (apiError) {
-      console.error(account.name + ' - Error obteniendo configuración FLEX:', apiError.message);
-      return null;
     }
+
+    // Fallback: buscar en availables
+    if (configData.availables && configData.availables.cutoff !== undefined) {
+      var cutoff = configData.availables.cutoff;
+      if (typeof cutoff === 'number') {
+        console.log(account.name + ' - Cutoff FLEX obtenido (availables): ' + cutoff + ':00');
+        return cutoff * 60;
+      }
+    }
+
+    console.log(account.name + ' - No se encontró cutoff en configuración de FLEX');
+    return null;
   } catch (error) {
     console.error(account.name + ' - Error obteniendo cutoff FLEX:', error.message);
     return null;
@@ -1000,6 +983,44 @@ async function mlApiRequest(account, url, options = {}) {
         }
       }
     }
+    return null;
+  }
+}
+
+async function mlApiRequestPost(account, url, data, options = {}) {
+  if (!account.accessToken) return null;
+
+  var config = {
+    method: 'POST',
+    url: url,
+    data: data,
+    headers: {
+      'Authorization': 'Bearer ' + account.accessToken,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  };
+
+  try {
+    var response = await axios(config);
+    return response.data;
+  } catch (error) {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.log('Token expirado para ' + account.name + ' (POST), intentando renovar...');
+      var renewed = await refreshAccessToken(account);
+
+      if (renewed) {
+        config.headers['Authorization'] = 'Bearer ' + account.accessToken;
+        try {
+          var retryResponse = await axios(config);
+          return retryResponse.data;
+        } catch (retryError) {
+          console.error('Error después de renovar token (POST):', retryError.message);
+          return null;
+        }
+      }
+    }
+    console.error('Error en POST API:', error.message);
     return null;
   }
 }
@@ -1610,55 +1631,32 @@ async function findShipmentInAccount(account, shipmentId) {
   var data = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId);
 
   if (data) {
-    return { account: account.name, shipment: data, token: account.accessToken };
+    return { account: account.name, shipment: data, accountObj: account };
   }
   return null;
 }
 
-async function getShipmentItems(token, shipmentId) {
-  try {
-    var response = await axios.get(
-      'https://api.mercadolibre.com/shipments/' + shipmentId + '/items',
-      { headers: { 'Authorization': 'Bearer ' + token } }
-    );
-    return response.data;
-  } catch (error) {
-    return [];
-  }
+async function getShipmentItems(account, shipmentId) {
+  var data = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId + '/items');
+  return data || [];
 }
 
-async function getItemWithVariations(token, itemId) {
-  try {
-    var response = await axios.get(
-      'https://api.mercadolibre.com/items/' + itemId + '?include_attributes=all',
-      { headers: { 'Authorization': 'Bearer ' + token } }
-    );
-    return response.data;
-  } catch (error) {
-    return null;
-  }
+async function getItemWithVariations(account, itemId) {
+  return await mlApiRequest(account, 'https://api.mercadolibre.com/items/' + itemId + '?include_attributes=all');
 }
 
-async function getUserProductSKU(token, userProductId) {
+async function getUserProductSKU(account, userProductId) {
   if (!userProductId) return null;
-  try {
-    var response = await axios.get(
-      'https://api.mercadolibre.com/user-products/' + userProductId,
-      { headers: { 'Authorization': 'Bearer ' + token } }
-    );
-    var data = response.data;
-    if (data && data.attributes) {
-      for (var i = 0; i < data.attributes.length; i++) {
-        var attr = data.attributes[i];
-        if (attr.id === 'SELLER_SKU' && attr.values && attr.values[0] && attr.values[0].name) {
-          return attr.values[0].name;
-        }
+  var data = await mlApiRequest(account, 'https://api.mercadolibre.com/user-products/' + userProductId);
+  if (data && data.attributes) {
+    for (var i = 0; i < data.attributes.length; i++) {
+      var attr = data.attributes[i];
+      if (attr.id === 'SELLER_SKU' && attr.values && attr.values[0] && attr.values[0].name) {
+        return attr.values[0].name;
       }
     }
-    return null;
-  } catch (error) {
-    return null;
   }
+  return null;
 }
 
 function findSKUInVariation(item, variationId) {
@@ -1718,8 +1716,8 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     return res.status(404).json({ error: 'Envio no encontrado en ninguna cuenta' });
   }
 
-  var token = found.token;
-  var items = await getShipmentItems(token, shipmentId);
+  var accountObj = found.accountObj;
+  var items = await getShipmentItems(accountObj, shipmentId);
   var processedItems = [];
 
   for (var i = 0; i < items.length; i++) {
@@ -1727,12 +1725,12 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     var sku = null;
 
     if (item.variation_id) {
-      var itemData = await getItemWithVariations(token, item.item_id);
+      var itemData = await getItemWithVariations(accountObj, item.item_id);
       sku = findSKUInVariation(itemData, item.variation_id);
     }
 
     if (!sku && item.user_product_id) {
-      sku = await getUserProductSKU(token, item.user_product_id);
+      sku = await getUserProductSKU(accountObj, item.user_product_id);
     }
 
     var components = parseSKU(sku);
