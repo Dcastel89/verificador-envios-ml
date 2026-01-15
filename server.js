@@ -1813,31 +1813,8 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
 // GOOGLE VISION API - OCR Y DETECCIÓN DE COLOR
 // ============================================
 
-// Función para limpiar y normalizar texto OCR
+// Función para limpiar texto OCR (conservadora - mantiene letras)
 function cleanOCRText(text) {
-  if (!text) return '';
-
-  var cleaned = text
-    .toUpperCase()
-    .trim()
-    // Eliminar saltos de línea y espacios extras
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    // Correcciones comunes de OCR
-    .replace(/[oO]/g, '0')  // O -> 0 (asumiendo que son códigos)
-    .replace(/[lI|]/g, '1') // l, I, | -> 1
-    .replace(/[Ss]/g, '5')  // S -> 5 (común en códigos)
-    .replace(/[Zz]/g, '2')  // Z -> 2
-    .replace(/[Bb]/g, '8')  // B -> 8
-    .replace(/[Gg]/g, '6')  // G -> 6
-    .replace(/[Tt]/g, '7')  // T -> 7 (menos común)
-    .replace(/[^A-Z0-9\s\-\.]/g, ''); // Solo alfanuméricos, espacios, guiones, puntos
-
-  return cleaned;
-}
-
-// Función alternativa: limpiar pero mantener letras (para cuando necesites texto real)
-function cleanOCRTextPreserveLetters(text) {
   if (!text) return '';
 
   return text
@@ -1845,29 +1822,66 @@ function cleanOCRTextPreserveLetters(text) {
     .trim()
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
-    // Solo correcciones obvias
-    .replace(/[|]/g, 'I')
-    .replace(/[0]/g, 'O') // En contexto de texto, 0 suele ser O
+    .replace(/[|]/g, 'I')      // | siempre es I
     .replace(/[^A-Z0-9\s\-\.]/g, '');
 }
 
-// Función para extraer posibles SKUs del texto
+// Función para normalizar un SKU específico (corrige según contexto)
+function normalizeSKU(sku) {
+  if (!sku) return '';
+
+  var normalized = sku.toUpperCase().trim();
+
+  // Si tiene formato LETRA+NÚMEROS (A16, B22), mantener la letra
+  if (/^[A-Z][0-9]+$/.test(normalized)) {
+    return normalized; // Ya está bien
+  }
+
+  // Corregir 0 al inicio -> probablemente es O (letra)
+  if (/^0[0-9]+$/.test(normalized)) {
+    normalized = 'O' + normalized.substring(1);
+  }
+
+  // Corregir O entre números -> probablemente es 0
+  normalized = normalized.replace(/([0-9])O([0-9])/g, '$10$2');
+  normalized = normalized.replace(/([0-9])O$/g, '$10');
+
+  // Corregir I/l entre números -> probablemente es 1
+  normalized = normalized.replace(/([0-9])[Il]([0-9])/g, '$11$2');
+  normalized = normalized.replace(/([0-9])[Il]$/g, '$11');
+
+  return normalized;
+}
+
+// Función para extraer posibles SKUs (optimizada para códigos tipo A16, B22)
 function extractPossibleSKUs(text, words) {
   var skuPatterns = [];
 
-  // Buscar patrones comunes de SKU (3-15 caracteres alfanuméricos)
   var allText = (text + ' ' + words.join(' ')).toUpperCase();
-  var matches = allText.match(/[A-Z0-9]{3,15}/g) || [];
 
+  // Patrón principal: 1-2 letras + 1-3 números (A16, B22, AB1, C7)
+  var matches = allText.match(/[A-Z]{1,2}[0-9]{1,3}/g) || [];
   matches.forEach(function(match) {
-    // Filtrar palabras comunes que no son SKUs
-    var commonWords = ['THE', 'AND', 'FOR', 'CON', 'SIN', 'PARA', 'COLOR', 'TALLE', 'SIZE'];
-    if (!commonWords.includes(match) && match.length >= 3) {
-      skuPatterns.push(match);
-    }
+    skuPatterns.push(normalizeSKU(match));
   });
 
-  return [...new Set(skuPatterns)]; // Eliminar duplicados
+  // También números + letras (16A, 22B)
+  var numLetterMatches = allText.match(/[0-9]{1,3}[A-Z]{1,2}/g) || [];
+  numLetterMatches.forEach(function(match) {
+    skuPatterns.push(normalizeSKU(match));
+  });
+
+  // Filtrar duplicados y priorizar formato LETRA+NÚMERO
+  var unique = [...new Set(skuPatterns)];
+  unique.sort(function(a, b) {
+    var aIsLetterNum = /^[A-Z][0-9]/.test(a);
+    var bIsLetterNum = /^[A-Z][0-9]/.test(b);
+    if (aIsLetterNum && !bIsLetterNum) return -1;
+    if (!aIsLetterNum && bIsLetterNum) return 1;
+    return a.length - b.length; // Más cortos primero
+  });
+
+  return unique;
 }
 
 // Función para determinar el color dominante del PRODUCTO (no del fondo)
