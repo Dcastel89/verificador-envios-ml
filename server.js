@@ -470,25 +470,45 @@ async function getCutoffTimeFlex(account) {
     // Paso 2: Obtener configuración con user_id y service_id (formato GraphQL)
     var configUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/configuration/v3';
 
-    // La API espera una query en formato GraphQL
-    var graphqlQuery = '{ configuration (user_id: ' + userId + ', service_id: ' + serviceId + ') { delivery_ranges { week { capacity type processing_time from to et_hour calculated_cutoff cutoff } saturday { calculated_cutoff cutoff } sunday { calculated_cutoff cutoff } } availables { cutoff capacity_range { from to } } } }';
+    // Query GraphQL simplificada - solo campos necesarios para cutoff
+    var graphqlQuery = '{ configuration (user_id: ' + userId + ', service_id: ' + serviceId + ') { delivery_ranges { week { from to calculated_cutoff } saturday { calculated_cutoff } sunday { calculated_cutoff } } delivery_window } }';
 
+    console.log(account.name + ' - Consultando FLEX config para user=' + userId + ', service=' + serviceId);
     var responseData = await mlApiRequestPost(account, configUrl, { query: graphqlQuery });
+
+    // Si GraphQL falla, intentar endpoint REST alternativo
+    if (!responseData) {
+      console.log(account.name + ' - GraphQL falló, intentando endpoint REST alternativo...');
+      var restUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/users/' + userId + '/services/' + serviceId + '/configuration/v3';
+      responseData = await mlApiRequest(account, restUrl);
+    }
 
     if (!responseData) {
       console.log(account.name + ' - No se pudo obtener configuración de FLEX');
       return null;
     }
 
-    // La respuesta GraphQL puede venir en data.configuration o directamente en configuration
+    // La respuesta puede venir en diferentes formatos
     var configData = responseData.data ? responseData.data.configuration : (responseData.configuration || responseData);
 
     if (!configData) {
-      console.log(account.name + ' - No se pudo parsear configuración de FLEX');
-      return null;
+      configData = responseData; // Usar respuesta directa si no tiene wrapper
     }
 
-    // Extraer el cutoff de delivery_ranges.week
+    console.log(account.name + ' - FLEX config recibida:', JSON.stringify(configData).substring(0, 200));
+
+    // Opción 1: delivery_window directo (formato HH:MM)
+    if (configData.delivery_window) {
+      var dw = configData.delivery_window;
+      if (typeof dw === 'string' && dw.includes(':')) {
+        var parts = dw.split(':');
+        var minutos = parseInt(parts[0]) * 60 + (parts[1] ? parseInt(parts[1]) : 0);
+        console.log(account.name + ' - Cutoff FLEX obtenido (delivery_window): ' + dw);
+        return minutos;
+      }
+    }
+
+    // Opción 2: Extraer el cutoff de delivery_ranges.week
     if (configData.delivery_ranges && configData.delivery_ranges.week) {
       var weekRanges = configData.delivery_ranges.week;
       if (Array.isArray(weekRanges) && weekRanges.length > 0) {
@@ -509,7 +529,7 @@ async function getCutoffTimeFlex(account) {
       }
     }
 
-    // Fallback: buscar en availables
+    // Opción 3: buscar en availables
     if (configData.availables && configData.availables.cutoff !== undefined) {
       var cutoff = configData.availables.cutoff;
       if (typeof cutoff === 'number') {
