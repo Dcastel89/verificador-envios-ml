@@ -1466,9 +1466,12 @@ async function syncMorningShipments() {
 
   var sheetName = getTodaySheetName();
 
-  // Limpiar la hoja del día (sobreescribir)
-  await clearDaySheet(sheetName);
+  // NO limpiar la hoja - preservar estados de verificación existentes
   await ensureDaySheetExists(sheetName);
+
+  // Obtener IDs existentes para no duplicar y preservar sus estados
+  var existingIds = await getExistingShipmentIds(sheetName);
+  console.log('Envíos existentes en hoja: ' + existingIds.length);
 
   var allShipments = [];
 
@@ -1483,12 +1486,13 @@ async function syncMorningShipments() {
     allShipments = allShipments.concat(filtered);
   }
 
+  // Solo agregar envíos nuevos (addPendingShipments ya filtra duplicados)
   if (allShipments.length > 0) {
     await addPendingShipments(allShipments, sheetName);
   }
 
   lastMorningSyncDate = today;
-  console.log('Sync matutino completado. Total: ' + allShipments.length + ' envios');
+  console.log('Sync matutino completado. Total desde ML: ' + allShipments.length + ', existentes preservados: ' + existingIds.length);
 }
 
 async function syncPendingShipments() {
