@@ -69,6 +69,29 @@ const accounts = [
 ];
 
 // ============================================
+// MUTEX PARA PREVENIR DUPLICADOS
+// ============================================
+
+var sheetWriteLock = false;
+
+async function acquireSheetLock(timeout = 5000) {
+  var start = Date.now();
+  while (sheetWriteLock) {
+    if (Date.now() - start > timeout) {
+      console.log('Timeout esperando lock de escritura');
+      return false;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  sheetWriteLock = true;
+  return true;
+}
+
+function releaseSheetLock() {
+  sheetWriteLock = false;
+}
+
+// ============================================
 // SISTEMA DE TOKENS CON GOOGLE SHEETS
 // ============================================
 
@@ -287,6 +310,7 @@ function getSkuByBarcode(barcode) {
 // Cache: { "TIENDA|flex": 600, "TIENDA|colecta": 780, ... } (minutos desde medianoche)
 var horariosCache = {};
 var HORARIO_DEFAULT = 13 * 60; // 13:00 por defecto
+var lastHorariosLoadDate = null; // Para cargar horarios solo una vez al día
 
 // Mapeo de logistic_type a nombre amigable
 function getTipoEnvio(logisticType) {
@@ -400,6 +424,373 @@ function getHorarioCorte(cuenta, logisticType) {
   }
 
   return HORARIO_DEFAULT;
+}
+
+// ============================================
+// OBTENCIÓN DE HORARIOS DESDE API DE ML
+// ============================================
+
+async function getCutoffTimeFlex(account) {
+  // Obtiene el horario de corte de FLEX desde la API de ML
+  if (!account.accessToken) return null;
+
+  try {
+    // Primero obtener el user ID
+    var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
+    if (!userInfo || !userInfo.id) {
+      console.log(account.name + ' - No se pudo obtener user ID para horarios FLEX');
+      return null;
+    }
+    var userId = userInfo.id;
+
+    // Paso 1: Obtener las suscripciones para conseguir el service_id
+    var subscriptionsUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/users/' + userId + '/subscriptions/v1';
+    var subscriptions = await mlApiRequest(account, subscriptionsUrl);
+
+    if (!subscriptions || !Array.isArray(subscriptions) || subscriptions.length === 0) {
+      console.log(account.name + ' - No tiene suscripciones FLEX activas');
+      return null;
+    }
+
+    // Buscar suscripción activa de Flex (case-insensitive)
+    var flexSubscription = subscriptions.find(function(sub) {
+      var mode = sub.mode ? sub.mode.toLowerCase() : '';
+      var statusId = sub.status && sub.status.id ? sub.status.id.toLowerCase() : '';
+      return mode === 'flex' && statusId === 'in';
+    });
+
+    if (!flexSubscription || !flexSubscription.service_id) {
+      console.log(account.name + ' - No se encontró suscripción FLEX activa');
+      return null;
+    }
+
+    var serviceId = flexSubscription.service_id;
+    console.log(account.name + ' - Service ID FLEX: ' + serviceId);
+
+    // Paso 2: Obtener configuración con user_id y service_id (formato GraphQL)
+    var configUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/configuration/v3';
+
+    // La API espera una query en formato GraphQL
+    var graphqlQuery = '{ configuration (user_id: ' + userId + ', service_id: ' + serviceId + ') { delivery_ranges { week { capacity type processing_time from to et_hour calculated_cutoff cutoff } saturday { calculated_cutoff cutoff } sunday { calculated_cutoff cutoff } } availables { cutoff capacity_range { from to } } } }';
+
+    var config = {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + account.accessToken,
+        'Content-Type': 'application/json'
+      },
+      data: {
+        query: graphqlQuery
+      }
+    };
+
+    try {
+      var response = await axios(configUrl, config);
+      var responseData = response.data;
+
+      if (!responseData) {
+        console.log(account.name + ' - No se pudo obtener configuración de FLEX');
+        return null;
+      }
+
+      // La respuesta GraphQL puede venir en data.configuration o directamente en configuration
+      var configData = responseData.data ? responseData.data.configuration : (responseData.configuration || responseData);
+
+      if (!configData) {
+        console.log(account.name + ' - No se pudo parsear configuración de FLEX');
+        return null;
+      }
+
+      // Extraer el cutoff de delivery_ranges.week
+      if (configData.delivery_ranges && configData.delivery_ranges.week) {
+        var weekRanges = configData.delivery_ranges.week;
+        if (Array.isArray(weekRanges) && weekRanges.length > 0) {
+          var cutoff = weekRanges[0].calculated_cutoff || weekRanges[0].cutoff;
+          if (cutoff !== null && cutoff !== undefined) {
+            if (typeof cutoff === 'number') {
+              console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff + ':00');
+              return cutoff * 60;
+            } else if (typeof cutoff === 'string') {
+              var parts = cutoff.split(':');
+              if (parts.length >= 1) {
+                var minutos = parseInt(parts[0]) * 60 + (parts[1] ? parseInt(parts[1]) : 0);
+                console.log(account.name + ' - Cutoff FLEX obtenido: ' + cutoff);
+                return minutos;
+              }
+            }
+          }
+        }
+      }
+
+      // Fallback: buscar en availables
+      if (configData.availables && configData.availables.cutoff !== undefined) {
+        var cutoff = configData.availables.cutoff;
+        if (typeof cutoff === 'number') {
+          console.log(account.name + ' - Cutoff FLEX obtenido (availables): ' + cutoff + ':00');
+          return cutoff * 60;
+        }
+      }
+
+      console.log(account.name + ' - No se encontró cutoff en configuración de FLEX');
+      return null;
+    } catch (apiError) {
+      console.error(account.name + ' - Error obteniendo configuración FLEX:', apiError.message);
+      return null;
+    }
+  } catch (error) {
+    console.error(account.name + ' - Error obteniendo cutoff FLEX:', error.message);
+    return null;
+  }
+}
+
+async function getCutoffTimeColecta(account) {
+  // Obtiene el horario de corte de COLECTA (cross_docking) desde la API de ML
+  if (!account.accessToken) return null;
+
+  try {
+    // Primero obtener el user ID y verificar si tiene Multi-Origin
+    var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
+    if (!userInfo || !userInfo.id) {
+      console.log(account.name + ' - No se pudo obtener user ID para horarios COLECTA');
+      return null;
+    }
+    var userId = userInfo.id;
+
+    // Verificar si el usuario tiene Multi-Origin (warehouse_management)
+    var hasMultiOrigin = userInfo.tags && userInfo.tags.includes('warehouse_management');
+
+    var scheduleData = null;
+
+    // Si tiene Multi-Origin, intentar primero con el endpoint de nodos
+    if (hasMultiOrigin) {
+      console.log(account.name + ' - Usuario con Multi-Origin detectado, buscando nodos...');
+
+      // Obtener los nodos del usuario
+      var nodesUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/warehouses';
+      var nodesData = await mlApiRequest(account, nodesUrl);
+
+      if (nodesData && Array.isArray(nodesData) && nodesData.length > 0) {
+        // Usar el primer nodo activo
+        var activeNode = nodesData.find(function(node) { return node.status === 'active'; }) || nodesData[0];
+        if (activeNode && activeNode.id) {
+          var nodeScheduleUrl = 'https://api.mercadolibre.com/nodes/' + activeNode.id + '/schedule/cross_docking';
+          scheduleData = await mlApiRequest(account, nodeScheduleUrl);
+          if (scheduleData) {
+            console.log(account.name + ' - Schedule obtenido desde nodo: ' + activeNode.id);
+          }
+        }
+      }
+    }
+
+    // Si no se obtuvo con nodos, intentar con USER_ID (método tradicional)
+    if (!scheduleData) {
+      var scheduleUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/schedule/cross_docking';
+      scheduleData = await mlApiRequest(account, scheduleUrl);
+    }
+
+    // Si aún no hay datos, intentar con xd_drop_off como alternativa
+    if (!scheduleData) {
+      var altScheduleUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/schedule/xd_drop_off';
+      scheduleData = await mlApiRequest(account, altScheduleUrl);
+      if (scheduleData) {
+        console.log(account.name + ' - Schedule obtenido desde xd_drop_off');
+      }
+    }
+
+    if (!scheduleData) {
+      console.log(account.name + ' - No se pudo obtener schedule de COLECTA');
+      return null;
+    }
+
+    // Extraer cutoff - puede estar en diferentes estructuras
+    var cutoff = null;
+
+    // Estructura 1: monday.available_options
+    if (scheduleData.monday && scheduleData.monday.available_options && scheduleData.monday.available_options.length > 0) {
+      var selectedOption = scheduleData.monday.available_options.find(function(opt) { return opt.selected; });
+      if (!selectedOption && scheduleData.monday.available_options.length > 0) {
+        selectedOption = scheduleData.monday.available_options[0];
+      }
+      if (selectedOption && selectedOption.cutoff) {
+        cutoff = selectedOption.cutoff;
+      }
+    }
+
+    // Estructura 2: cutoff directo
+    if (!cutoff && scheduleData.cutoff) {
+      cutoff = scheduleData.cutoff;
+    }
+
+    // Estructura 3: default_cutoff
+    if (!cutoff && scheduleData.default_cutoff) {
+      cutoff = scheduleData.default_cutoff;
+    }
+
+    if (cutoff) {
+      // cutoff viene en formato "HH:MM" (ej: "13:00")
+      var parts = cutoff.split(':');
+      if (parts.length === 2) {
+        var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        console.log(account.name + ' - Cutoff COLECTA obtenido: ' + cutoff);
+        return minutos;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error(account.name + ' - Error obteniendo cutoff COLECTA:', error.message);
+    return null;
+  }
+}
+
+async function getCutoffTimeDespacho(account) {
+  // Obtiene el horario máximo de despacho en PUNTO DE DESPACHO (xd_drop_off) desde la API de ML
+  if (!account.accessToken) return null;
+
+  try {
+    // Primero obtener el user ID
+    var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
+    if (!userInfo || !userInfo.id) {
+      console.log(account.name + ' - No se pudo obtener user ID para horarios DESPACHO');
+      return null;
+    }
+    var userId = userInfo.id;
+
+    // Obtener processing time para xd_drop_off (con header X-Version: v3)
+    var processingUrl = 'https://api.mercadolibre.com/shipping/users/' + userId + '/processing_time_middleend/xd_drop_off';
+
+    var config = {
+      headers: {
+        'Authorization': 'Bearer ' + account.accessToken,
+        'X-Version': 'v3'
+      }
+    };
+
+    try {
+      var response = await axios.get(processingUrl, config);
+      var processingData = response.data;
+
+      if (!processingData) {
+        console.log(account.name + ' - No se pudo obtener processing time de DESPACHO');
+        return null;
+      }
+
+      // El processing time puede tener diferentes días, usar monday como referencia
+      var maximumTime = null;
+      if (processingData.monday && processingData.monday.available_options && processingData.monday.available_options.length > 0) {
+        var selectedOption = processingData.monday.available_options.find(function(opt) { return opt.selected; });
+        if (!selectedOption && processingData.monday.available_options.length > 0) {
+          selectedOption = processingData.monday.available_options[0];
+        }
+        if (selectedOption && selectedOption.maximum_time) {
+          maximumTime = selectedOption.maximum_time;
+        } else if (selectedOption && selectedOption.cutoff) {
+          // Usar cutoff si no hay maximum_time
+          maximumTime = selectedOption.cutoff;
+        }
+      }
+
+      if (maximumTime) {
+        // maximum_time viene en formato "HH:MM" (ej: "17:45")
+        var parts = maximumTime.split(':');
+        if (parts.length === 2) {
+          var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+          console.log(account.name + ' - Horario máximo DESPACHO obtenido: ' + maximumTime);
+          return minutos;
+        }
+      }
+    } catch (apiError) {
+      // Si falla con 401/403, intentar renovar token
+      if (apiError.response && (apiError.response.status === 401 || apiError.response.status === 403)) {
+        console.log('Token expirado para ' + account.name + ', intentando renovar...');
+        var renewed = await refreshAccessToken(account);
+
+        if (renewed) {
+          config.headers['Authorization'] = 'Bearer ' + account.accessToken;
+          try {
+            var retryResponse = await axios.get(processingUrl, config);
+            var retryData = retryResponse.data;
+
+            if (retryData && retryData.monday && retryData.monday.available_options && retryData.monday.available_options.length > 0) {
+              var selectedOption = retryData.monday.available_options.find(function(opt) { return opt.selected; });
+              if (!selectedOption && retryData.monday.available_options.length > 0) {
+                selectedOption = retryData.monday.available_options[0];
+              }
+              if (selectedOption && (selectedOption.maximum_time || selectedOption.cutoff)) {
+                var time = selectedOption.maximum_time || selectedOption.cutoff;
+                var parts = time.split(':');
+                if (parts.length === 2) {
+                  var minutos = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+                  console.log(account.name + ' - Horario máximo DESPACHO obtenido (retry): ' + time);
+                  return minutos;
+                }
+              }
+            }
+          } catch (retryError) {
+            console.error(account.name + ' - Error después de renovar token:', retryError.message);
+          }
+        }
+      } else {
+        console.error(account.name + ' - Error obteniendo processing time:', apiError.message);
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error(account.name + ' - Error obteniendo cutoff DESPACHO:', error.message);
+    return null;
+  }
+}
+
+async function loadHorariosFromAPI() {
+  // Carga los horarios de corte desde la API de ML para todas las cuentas
+  console.log('=== Cargando horarios desde API de ML ===');
+
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
+    if (!account.accessToken) {
+      console.log(account.name + ' - Sin token, saltando');
+      continue;
+    }
+
+    console.log('Obteniendo horarios para cuenta: ' + account.name);
+
+    // Obtener horario FLEX
+    var flexCutoff = await getCutoffTimeFlex(account);
+    if (flexCutoff !== null) {
+      var key = account.name.toUpperCase() + '|flex';
+      horariosCache[key] = flexCutoff;
+      console.log('✓ ' + key + ' = ' + flexCutoff + ' minutos');
+    }
+
+    // Obtener horario COLECTA
+    var colectaCutoff = await getCutoffTimeColecta(account);
+    if (colectaCutoff !== null) {
+      var key = account.name.toUpperCase() + '|colecta';
+      horariosCache[key] = colectaCutoff;
+      console.log('✓ ' + key + ' = ' + colectaCutoff + ' minutos');
+    }
+
+    // Obtener horario DESPACHO
+    var despachoCutoff = await getCutoffTimeDespacho(account);
+    if (despachoCutoff !== null) {
+      var key = account.name.toUpperCase() + '|despacho';
+      horariosCache[key] = despachoCutoff;
+      console.log('✓ ' + key + ' = ' + despachoCutoff + ' minutos');
+    }
+
+    // Pequeña pausa entre cuentas para no saturar la API
+    await new Promise(function(resolve) { setTimeout(resolve, 500); });
+  }
+
+  console.log('=== Horarios cargados desde API: ' + Object.keys(horariosCache).length + ' configuraciones ===');
+
+  // Si no se cargó ningún horario desde la API, usar Sheets como fallback
+  if (Object.keys(horariosCache).length === 0) {
+    console.log('No se cargaron horarios desde API, intentando fallback a Sheets...');
+    await loadHorariosFromSheets();
+    console.log('Horarios cargados desde Sheets (fallback): ' + Object.keys(horariosCache).length + ' configuraciones');
+  }
 }
 
 async function saveTokenToSheets(accountName, accessToken, refreshToken) {
@@ -549,23 +940,34 @@ function isTodayOrder(dateCreated) {
   return orderDate.toLocaleDateString('es-AR') === today.toLocaleDateString('es-AR');
 }
 
-function shouldProcessOrder(dateCreated, cuenta, logisticType) {
-  // Una orden se procesa si:
-  // 1. Es de hoy Y fue creada antes del corte horario (variable por cuenta/tipo)
-  // 2. O es de un día anterior (ya debería estar procesada)
+function isYesterday(dateCreated) {
+  // Verifica si la orden es de ayer
   var orderDate = getArgentinaDate(new Date(dateCreated));
   var today = getArgentinaTime();
+  var yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return orderDate.toLocaleDateString('es-AR') === yesterday.toLocaleDateString('es-AR');
+}
 
-  var orderDateStr = orderDate.toLocaleDateString('es-AR');
-  var todayStr = today.toLocaleDateString('es-AR');
+function shouldProcessOrder(dateCreated, cuenta, logisticType) {
+  // Determina si un envío corresponde al día de trabajo actual según su corte específico:
+  // - Usa el horario de corte de la cuenta y tipo de logística del envío
+  // - Órdenes de AYER creadas DESPUÉS del corte → entran hoy
+  // - Órdenes de HOY creadas ANTES del corte → entran hoy
+  // - Órdenes de HOY creadas DESPUÉS del corte → NO entran (corresponden a mañana)
 
-  if (orderDateStr === todayStr) {
-    // Es de hoy, verificar corte horario específico
-    return isBeforeCutoff(dateCreated, cuenta, logisticType);
+  var orderDate = getArgentinaDate(new Date(dateCreated));
+  var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+  var corte = getHorarioCorte(cuenta, logisticType);
+
+  if (isTodayOrder(dateCreated)) {
+    return orderTimeInMinutes < corte;
+  }
+  if (isYesterday(dateCreated)) {
+    return orderTimeInMinutes >= corte;
   }
 
-  // Es de un día anterior, siempre procesar
-  return true;
+  return false;
 }
 
 async function mlApiRequest(account, url, options = {}) {
@@ -653,12 +1055,63 @@ async function getReadyToShipOrders(account) {
 
   console.log(account.name + ' - Órdenes con shipping: ' + ordersWithShipping.length);
 
-  // Obtener detalles de cada envío
-  var pendingShipments = [];
+  // Agrupar órdenes por shipping_id y manejar packs
+  var shipmentMap = {}; // shipping_id -> { orderIds: [], packId: null }
+  var processedPacks = {}; // Para evitar procesar el mismo pack múltiples veces
 
   for (var i = 0; i < ordersWithShipping.length; i++) {
     var order = ordersWithShipping[i];
-    var shippingId = order.shipping.id;
+    var shippingId = order.shipping.id.toString();
+
+    // Inicializar entrada si no existe
+    if (!shipmentMap[shippingId]) {
+      shipmentMap[shippingId] = {
+        orderIds: [],
+        packId: null,
+        dateCreated: order.date_created
+      };
+    }
+
+    // Si la orden tiene pack_id, es parte de un carrito
+    if (order.pack_id && !processedPacks[order.pack_id]) {
+      processedPacks[order.pack_id] = true;
+      shipmentMap[shippingId].packId = order.pack_id;
+
+      // Obtener información completa del pack
+      try {
+        var packData = await mlApiRequest(account, 'https://api.mercadolibre.com/packs/' + order.pack_id);
+        if (packData && packData.orders && Array.isArray(packData.orders)) {
+          // Agregar todos los order_ids del pack
+          packData.orders.forEach(function(packOrder) {
+            var packOrderId = packOrder.id ? packOrder.id.toString() : null;
+            if (packOrderId && shipmentMap[shippingId].orderIds.indexOf(packOrderId) === -1) {
+              shipmentMap[shippingId].orderIds.push(packOrderId);
+            }
+          });
+          console.log(account.name + ' - Pack ' + order.pack_id + ' con ' + packData.orders.length + ' órdenes detectado');
+        }
+      } catch (packError) {
+        // Si falla obtener el pack, agregar solo este order_id
+        if (shipmentMap[shippingId].orderIds.indexOf(order.id.toString()) === -1) {
+          shipmentMap[shippingId].orderIds.push(order.id.toString());
+        }
+      }
+    } else if (!order.pack_id) {
+      // Orden individual (sin pack)
+      if (shipmentMap[shippingId].orderIds.indexOf(order.id.toString()) === -1) {
+        shipmentMap[shippingId].orderIds.push(order.id.toString());
+      }
+    }
+  }
+
+  // Obtener detalles de cada envío único
+  var pendingShipments = [];
+  var shippingIds = Object.keys(shipmentMap);
+  var logCount = 0;
+
+  for (var j = 0; j < shippingIds.length; j++) {
+    var shippingId = shippingIds[j];
+    var shipmentInfo = shipmentMap[shippingId];
 
     // Obtener detalles completos del envío
     var shipment = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shippingId);
@@ -666,13 +1119,15 @@ async function getReadyToShipOrders(account) {
     if (!shipment) continue;
 
     // Log para debug (primeros 5)
-    if (i < 5) {
+    if (logCount < 5) {
       console.log(account.name + ' - Envío ' + shippingId + ': status=' + shipment.status + ', logistic_type=' + shipment.logistic_type + ', mode=' + shipment.mode);
+      logCount++;
     }
 
-    // Filtrar por status pendiente
     var status = shipment.status;
-    if (status !== 'ready_to_ship' && status !== 'pending' && status !== 'handling') {
+
+    // Excluir cancelados
+    if (status === 'cancelled') {
       continue;
     }
 
@@ -687,10 +1142,12 @@ async function getReadyToShipOrders(account) {
     }
 
     pendingShipments.push({
-      id: shippingId.toString(),
-      orderId: order.id.toString(),
+      id: shippingId,
+      orderId: shipmentInfo.orderIds.join(','), // Múltiples order_ids separados por coma
+      orderIds: shipmentInfo.orderIds, // Array de order_ids para uso interno
+      packId: shipmentInfo.packId,
       account: account.name,
-      dateCreated: order.date_created,
+      dateCreated: shipmentInfo.dateCreated,
       receiverName: shipment.receiver_address ? shipment.receiver_address.receiver_name : 'N/A',
       logisticType: shipment.logistic_type || '',
       status: status,
@@ -700,18 +1157,7 @@ async function getReadyToShipOrders(account) {
 
   console.log(account.name + ' - Envíos pendientes: ' + pendingShipments.length);
 
-  // Eliminar duplicados por ID
-  var seen = {};
-  var unique = [];
-  for (var i = 0; i < pendingShipments.length; i++) {
-    var id = pendingShipments[i].id;
-    if (!seen[id]) {
-      seen[id] = true;
-      unique.push(pendingShipments[i]);
-    }
-  }
-
-  return unique;
+  return pendingShipments;
 }
 
 // ============================================
@@ -745,10 +1191,10 @@ async function ensureDaySheetExists(sheetName) {
 
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: sheetName + '!A1:I1',
+          range: sheetName + '!A1:J1',
           valueInputOption: 'USER_ENTERED',
           resource: {
-            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo']]
+            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo', 'TipoLogistica']]
           }
         });
 
@@ -778,10 +1224,10 @@ async function clearDaySheet(sheetName) {
 
     if (!sheet) return;
 
-    // Limpiar contenido (excepto encabezados)
+    // Limpiar contenido (excepto encabezados) - todas las columnas A-J
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A2:H1000'
+      range: sheetName + '!A2:J1000'
     });
 
     console.log('Hoja ' + sheetName + ' limpiada');
@@ -817,27 +1263,47 @@ async function addPendingShipments(shipments, sheetName) {
   if (!sheets || !SHEET_ID || shipments.length === 0) return;
   sheetName = sheetName || getTodaySheetName();
 
+  // Adquirir lock para prevenir race conditions
+  var lockAcquired = await acquireSheetLock();
+  if (!lockAcquired) {
+    console.log('No se pudo adquirir lock, reintentando más tarde');
+    return;
+  }
+
   try {
     await ensureDaySheetExists(sheetName);
 
-    var rows = shipments.map(function(s) {
+    // Verificar duplicados DENTRO del lock para prevenir race conditions
+    var existingIds = await getExistingShipmentIds(sheetName);
+    var uniqueShipments = shipments.filter(function(s) {
+      return existingIds.indexOf(s.id.toString()) === -1;
+    });
+
+    if (uniqueShipments.length === 0) {
+      console.log('Todos los envios ya existen, nada que agregar');
+      return;
+    }
+
+    var rows = uniqueShipments.map(function(s) {
       var argentinaDate = getArgentinaDate(new Date(s.dateCreated));
       var fecha = argentinaDate.toLocaleDateString('es-AR');
       var hora = argentinaDate.toLocaleTimeString('es-AR');
 
-      return [fecha, hora, s.id, s.account, s.receiverName, '', 'Pendiente', ''];
+      return [fecha, hora, s.id, s.account, s.receiverName, '', 'Pendiente', '', '', s.logisticType || ''];
     });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:H',
+      range: sheetName + '!A:J',
       valueInputOption: 'USER_ENTERED',
       resource: { values: rows }
     });
 
-    console.log('Agregados ' + shipments.length + ' envios a ' + sheetName);
+    console.log('Agregados ' + uniqueShipments.length + ' envios a ' + sheetName + ' (filtrados ' + (shipments.length - uniqueShipments.length) + ' duplicados)');
   } catch (error) {
     console.error('Error agregando envios:', error.message);
+  } finally {
+    releaseSheetLock();
   }
 }
 
@@ -851,7 +1317,7 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:J'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -887,11 +1353,12 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
     }
 
     if (rowIndex === -1) {
+      // Append nueva fila con todas las 10 columnas (A-J)
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: sheetName + '!A:I',
+        range: sheetName + '!A:J',
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr]] }
+        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr, '']] }
       });
     } else {
       await sheets.spreadsheets.values.update({
@@ -906,6 +1373,72 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
   } catch (error) {
     console.error('Error marcando verificado:', error.message);
   }
+}
+
+async function markAsDespachado(shipmentId, estadoML) {
+  // Marca un envío como despachado (enviado sin escanear) en la hoja
+  if (!sheets || !SHEET_ID) return;
+
+  var sheetName = getTodaySheetName();
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+    var rows = response.data.values || [];
+    var rowIndex = -1;
+
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][2] && rows[i][2].toString() === shipmentId.toString()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      console.log('Envio ' + shipmentId + ' no encontrado en ' + sheetName + ' para marcar despachado');
+      return false;
+    }
+
+    var estadoActual = rows[rowIndex - 1][6] || '';
+
+    // Solo marcar si no está ya verificado
+    if (estadoActual === 'Verificado') {
+      return false;
+    }
+
+    var argentinaTime = getArgentinaTime();
+    var hora = argentinaTime.toLocaleTimeString('es-AR');
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!G' + rowIndex + ':I' + rowIndex,
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: [[estadoML, hora, 'Sin escanear']] }
+    });
+
+    console.log('Envio ' + shipmentId + ' marcado como ' + estadoML + ' en ' + sheetName);
+    return true;
+  } catch (error) {
+    console.error('Error marcando despachado:', error.message);
+    return false;
+  }
+}
+
+async function getShipmentStatus(account, shipmentId) {
+  // Obtiene el estado actual de un envío desde ML
+  if (!account.accessToken) return null;
+
+  var url = 'https://api.mercadolibre.com/shipments/' + shipmentId;
+  var data = await mlApiRequest(account, url);
+
+  if (data && data.status) {
+    return data.status;
+  }
+  return null;
 }
 
 // ============================================
@@ -923,13 +1456,27 @@ async function syncMorningShipments() {
     return;
   }
 
+  // Cargar horarios de corte desde API de ML (una vez al día)
+  if (lastHorariosLoadDate !== today) {
+    console.log('=== Cargando horarios de corte desde API de ML ===');
+    try {
+      await loadHorariosFromAPI();
+      lastHorariosLoadDate = today;
+    } catch (error) {
+      console.error('Error cargando horarios:', error.message);
+    }
+  }
+
   console.log('=== SINCRONIZACIÓN MATUTINA 9:00 AM ===');
 
   var sheetName = getTodaySheetName();
 
-  // Limpiar la hoja del día (sobreescribir)
-  await clearDaySheet(sheetName);
+  // NO limpiar la hoja - preservar estados de verificación existentes
   await ensureDaySheetExists(sheetName);
+
+  // Obtener IDs existentes para no duplicar y preservar sus estados
+  var existingIds = await getExistingShipmentIds(sheetName);
+  console.log('Envíos existentes en hoja: ' + existingIds.length);
 
   var allShipments = [];
 
@@ -944,12 +1491,13 @@ async function syncMorningShipments() {
     allShipments = allShipments.concat(filtered);
   }
 
+  // Solo agregar envíos nuevos (addPendingShipments ya filtra duplicados)
   if (allShipments.length > 0) {
     await addPendingShipments(allShipments, sheetName);
   }
 
   lastMorningSyncDate = today;
-  console.log('Sync matutino completado. Total: ' + allShipments.length + ' envios');
+  console.log('Sync matutino completado. Total desde ML: ' + allShipments.length + ', existentes preservados: ' + existingIds.length);
 }
 
 async function syncPendingShipments() {
@@ -1004,7 +1552,8 @@ async function syncPendingShipments() {
   console.log('Sync completado. Nuevos: ' + newShipments.length);
 }
 
-setInterval(syncPendingShipments, 60000);
+// Sync automático desactivado - ahora se usa solo sync manual + webhooks
+// setInterval(syncPendingShipments, 60000);
 
 function describeSKU(sku) {
   if (!sku) return '';
@@ -1426,6 +1975,56 @@ app.get('/api/sync-morning', async function(req, res) {
   }
 });
 
+// Endpoint para obtener envíos del día desde Google Sheets (persistente)
+app.get('/api/envios-del-dia', async function(req, res) {
+  try {
+    var sheetName = getTodaySheetName();
+    var now = getArgentinaTime();
+
+    if (!sheets || !SHEET_ID) {
+      return res.json({
+        fecha: now.toLocaleDateString('es-AR'),
+        total: 0,
+        envios: []
+      });
+    }
+
+    await ensureDaySheetExists(sheetName);
+
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+
+    var rows = response.data.values || [];
+    var envios = [];
+
+    // Saltar encabezado (fila 0)
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row || !row[2]) continue; // Sin ID de envío
+
+      envios.push({
+        id: row[2] || '',
+        cuenta: row[3] || '',
+        receptor: row[4] || '',
+        estado: row[6] || 'Pendiente',
+        logisticType: row[9] || ''
+      });
+    }
+
+    res.json({
+      fecha: now.toLocaleDateString('es-AR'),
+      total: envios.length,
+      envios: envios
+    });
+  } catch (error) {
+    console.error('Error obteniendo envios del dia:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 app.get('/api/tokens/status', async function(req, res) {
   var status = [];
 
@@ -1576,6 +2175,22 @@ app.post('/webhooks/ml', async function(req, res) {
     var shipmentId = orderData.shipping.id.toString();
     var dateCreated = orderData.date_created;
 
+    // Manejar packs (carritos) - obtener todos los order_ids relacionados
+    var allOrderIds = [orderId];
+    var packId = orderData.pack_id || null;
+
+    if (packId) {
+      try {
+        var packData = await mlApiRequest(account, 'https://api.mercadolibre.com/packs/' + packId);
+        if (packData && packData.orders && Array.isArray(packData.orders)) {
+          allOrderIds = packData.orders.map(function(o) { return o.id ? o.id.toString() : null; }).filter(Boolean);
+          console.log('Pack ' + packId + ' detectado con ' + allOrderIds.length + ' órdenes');
+        }
+      } catch (packError) {
+        console.log('Error obteniendo pack ' + packId + ':', packError.message);
+      }
+    }
+
     // Verificar si el envío ya existe en la hoja de hoy
     var sheetName = getTodaySheetName();
     var existingIds = await getExistingShipmentIds(sheetName);
@@ -1620,6 +2235,9 @@ app.post('/webhooks/ml', async function(req, res) {
 
     var shipment = {
       id: shipmentId,
+      orderId: allOrderIds.join(','), // Múltiples order_ids separados por coma
+      orderIds: allOrderIds, // Array de order_ids
+      packId: packId,
       account: account.name,
       dateCreated: dateCreated,
       receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
@@ -1627,7 +2245,7 @@ app.post('/webhooks/ml', async function(req, res) {
     };
 
     await addPendingShipments([shipment], sheetName);
-    console.log('Nuevo envío agregado via webhook:', shipmentId, 'cuenta:', account.name);
+    console.log('Nuevo envío agregado via webhook:', shipmentId, 'cuenta:', account.name, packId ? '(pack: ' + packId + ')' : '');
   } catch (error) {
     console.error('Error procesando webhook:', error.message);
   }
@@ -1688,10 +2306,29 @@ app.post('/api/barcodes/reload', async function(req, res) {
   res.json({ success: true, count: Object.keys(barcodeCache).length });
 });
 
-// Recargar horarios desde Sheets
+// Recargar horarios desde Sheets (fallback/manual)
 app.post('/api/horarios/reload', async function(req, res) {
   await loadHorariosFromSheets();
-  res.json({ success: true, horarios: horariosCache });
+  res.json({ success: true, horarios: horariosCache, fuente: 'sheets' });
+});
+
+// Recargar horarios desde API de ML
+app.post('/api/horarios/refresh', async function(req, res) {
+  try {
+    await loadHorariosFromAPI();
+    res.json({
+      success: true,
+      mensaje: 'Horarios actualizados desde API de ML',
+      horarios: horariosCache,
+      count: Object.keys(horariosCache).length
+    });
+  } catch (error) {
+    console.error('Error refrescando horarios:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // Obtener horarios actuales
@@ -1729,16 +2366,20 @@ app.get('/api/resumen-dia', async function(req, res) {
     // Asegurar que la hoja existe
     await ensureDaySheetExists(sheetName);
 
-    // Leer datos de la hoja del día
+    // Leer datos de la hoja del día (todas las columnas A-J)
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:H'
+      range: sheetName + '!A:J'
     });
 
     var rows = response.data.values || [];
     var total = 0;
     var verificados = 0;
+    var despachados = 0;
     var pendientes = [];
+
+    // Estados que indican que el envío ya salió (sin escanear)
+    var estadosDespachados = ['Despachado', 'Entregado', 'No entregado', 'Cancelado'];
 
     // Recorrer filas (saltando encabezado)
     for (var i = 1; i < rows.length; i++) {
@@ -1755,7 +2396,11 @@ app.get('/api/resumen-dia', async function(req, res) {
       total++;
       if (estado === 'Verificado') {
         verificados++;
+      } else if (estadosDespachados.indexOf(estado) !== -1) {
+        // Despachado sin escanear
+        despachados++;
       } else {
+        // Pendiente real (ni verificado ni despachado)
         pendientes.push({
           id: envioId,
           cuenta: cuenta,
@@ -1769,6 +2414,7 @@ app.get('/api/resumen-dia', async function(req, res) {
       hoja: sheetName,
       total: total,
       verificados: verificados,
+      despachados: despachados,
       pendientesCount: pendientes.length,
       pendientes: pendientes,
       completo: pendientes.length === 0 && total > 0
@@ -1776,6 +2422,289 @@ app.get('/api/resumen-dia', async function(req, res) {
   } catch (error) {
     console.error('Error obteniendo resumen:', error.message);
     res.json({ error: error.message, total: 0, verificados: 0, pendientes: [] });
+  }
+});
+
+// Endpoint para limpiar duplicados de la hoja del día
+app.post('/api/limpiar-duplicados', async function(req, res) {
+  if (!sheets || !SHEET_ID) {
+    return res.json({ error: 'Sheets no configurado', eliminados: 0 });
+  }
+
+  var sheetName = getTodaySheetName();
+
+  var lockAcquired = await acquireSheetLock(10000);
+  if (!lockAcquired) {
+    return res.json({ error: 'No se pudo adquirir lock', eliminados: 0 });
+  }
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length <= 1) {
+      releaseSheetLock();
+      return res.json({ mensaje: 'Hoja vacía', eliminados: 0 });
+    }
+
+    var header = rows[0];
+    var seen = {};
+    var uniqueRows = [header];
+    var duplicados = 0;
+
+    for (var i = 1; i < rows.length; i++) {
+      var envioId = rows[i][2];
+      if (!envioId) continue;
+
+      if (!seen[envioId]) {
+        seen[envioId] = true;
+        uniqueRows.push(rows[i]);
+      } else {
+        duplicados++;
+      }
+    }
+
+    if (duplicados === 0) {
+      releaseSheetLock();
+      return res.json({ mensaje: 'No hay duplicados', eliminados: 0 });
+    }
+
+    // Limpiar y reescribir la hoja sin duplicados (todas las columnas A-J)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A1',
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: uniqueRows }
+    });
+
+    console.log('Limpiados ' + duplicados + ' duplicados de ' + sheetName);
+    res.json({
+      mensaje: 'Duplicados eliminados',
+      eliminados: duplicados,
+      totalAntes: rows.length - 1,
+      totalDespues: uniqueRows.length - 1
+    });
+  } catch (error) {
+    console.error('Error limpiando duplicados:', error.message);
+    res.json({ error: error.message, eliminados: 0 });
+  } finally {
+    releaseSheetLock();
+  }
+});
+
+// ============================================
+// AGREGAR ORDEN FALTANTE POR ID
+// ============================================
+
+// Endpoint para buscar una orden por ID y agregar el envío a la hoja del día
+app.post('/api/agregar-orden/:orderId', async function(req, res) {
+  var orderId = req.params.orderId;
+  console.log('Buscando orden faltante:', orderId);
+
+  var orderData = null;
+  var accountFound = null;
+
+  // Buscar la orden en todas las cuentas
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
+    if (!account.accessToken) continue;
+
+    var data = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+    if (data && data.id) {
+      orderData = data;
+      accountFound = account;
+      console.log('Orden encontrada en cuenta:', account.name);
+      break;
+    }
+  }
+
+  if (!orderData) {
+    return res.status(404).json({ error: 'Orden no encontrada en ninguna cuenta', orderId: orderId });
+  }
+
+  // Verificar que tenga shipping
+  if (!orderData.shipping || !orderData.shipping.id) {
+    return res.status(400).json({ error: 'La orden no tiene envío asociado', orderId: orderId });
+  }
+
+  var shipmentId = orderData.shipping.id.toString();
+
+  // Verificar si ya existe en la hoja
+  var sheetName = getTodaySheetName();
+  var existingIds = await getExistingShipmentIds(sheetName);
+
+  if (existingIds.indexOf(shipmentId) !== -1) {
+    return res.json({
+      mensaje: 'El envío ya existe en la hoja',
+      orderId: orderId,
+      shipmentId: shipmentId,
+      cuenta: accountFound.name,
+      yaExiste: true
+    });
+  }
+
+  // Obtener datos del envío
+  var shipmentData = await mlApiRequest(accountFound, 'https://api.mercadolibre.com/shipments/' + shipmentId);
+
+  if (!shipmentData) {
+    return res.status(400).json({ error: 'No se pudo obtener datos del envío', shipmentId: shipmentId });
+  }
+
+  // Crear el objeto de envío
+  var shipment = {
+    id: shipmentId,
+    orderId: orderId,
+    account: accountFound.name,
+    dateCreated: orderData.date_created,
+    receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
+    logisticType: shipmentData.logistic_type || '',
+    status: shipmentData.status,
+    mode: shipmentData.mode || ''
+  };
+
+  // Agregar a la hoja (sin filtrar por corte horario)
+  await addPendingShipments([shipment], sheetName);
+
+  console.log('Orden agregada manualmente:', orderId, '-> Envío:', shipmentId);
+
+  res.json({
+    mensaje: 'Envío agregado exitosamente',
+    orderId: orderId,
+    shipmentId: shipmentId,
+    cuenta: accountFound.name,
+    receptor: shipment.receiverName,
+    estado: shipmentData.status,
+    logisticType: shipmentData.logistic_type,
+    hoja: sheetName
+  });
+});
+
+// Endpoint GET para ver información de una orden sin agregarla
+app.get('/api/orden/:orderId', async function(req, res) {
+  var orderId = req.params.orderId;
+
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
+    if (!account.accessToken) continue;
+
+    var data = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+    if (data && data.id) {
+      var shipmentData = null;
+      if (data.shipping && data.shipping.id) {
+        shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + data.shipping.id);
+      }
+
+      return res.json({
+        cuenta: account.name,
+        orderId: data.id,
+        status: data.status,
+        dateCreated: data.date_created,
+        shipmentId: data.shipping ? data.shipping.id : null,
+        shipment: shipmentData ? {
+          status: shipmentData.status,
+          logisticType: shipmentData.logistic_type,
+          mode: shipmentData.mode,
+          receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A'
+        } : null
+      });
+    }
+  }
+
+  res.status(404).json({ error: 'Orden no encontrada', orderId: orderId });
+});
+
+// Endpoint para actualizar estados de envíos desde ML
+// Consulta la API de ML y marca como despachados los que ya salieron
+app.post('/api/actualizar-estados', async function(req, res) {
+  if (!sheets || !SHEET_ID) {
+    return res.json({ error: 'Sheets no configurado', actualizados: 0 });
+  }
+
+  var sheetName = getTodaySheetName();
+
+  try {
+    await ensureDaySheetExists(sheetName);
+
+    // Leer todos los envíos de la hoja (todas las columnas A-J)
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+
+    var rows = response.data.values || [];
+    var actualizados = 0;
+    var errores = 0;
+
+    // Procesar cada envío que no esté verificado
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row || !row[2]) continue;
+
+      var envioId = row[2];
+      var cuenta = row[3] || '';
+      var estadoActual = row[6] || '';
+
+      // Solo procesar si no está ya verificado o marcado
+      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado') {
+        continue;
+      }
+
+      // Encontrar la cuenta correspondiente
+      var account = accounts.find(function(a) {
+        return a.name.toUpperCase() === cuenta.toUpperCase();
+      });
+
+      if (!account || !account.accessToken) {
+        continue;
+      }
+
+      // Consultar estado en ML
+      var estadoML = await getShipmentStatus(account, envioId);
+
+      if (estadoML && estadoML !== 'ready_to_ship') {
+        // Mapear estados de ML a texto legible
+        var estadoTexto = 'Despachado';
+        if (estadoML === 'shipped') {
+          estadoTexto = 'Despachado';
+        } else if (estadoML === 'delivered') {
+          estadoTexto = 'Entregado';
+        } else if (estadoML === 'not_delivered') {
+          estadoTexto = 'No entregado';
+        } else if (estadoML === 'cancelled') {
+          estadoTexto = 'Cancelado';
+        }
+
+        var marcado = await markAsDespachado(envioId, estadoTexto);
+        if (marcado) {
+          actualizados++;
+        }
+      }
+
+      // Pequeña pausa para no saturar la API
+      await new Promise(function(resolve) { setTimeout(resolve, 100); });
+    }
+
+    console.log('Estados actualizados: ' + actualizados + ', Errores: ' + errores);
+    res.json({
+      mensaje: 'Estados actualizados',
+      actualizados: actualizados,
+      errores: errores
+    });
+  } catch (error) {
+    console.error('Error actualizando estados:', error.message);
+    res.json({ error: error.message, actualizados: 0 });
   }
 });
 
@@ -1793,8 +2722,19 @@ async function initializeServer() {
   try {
     await loadTokensFromSheets();
     await loadBarcodesFromSheets();
-    await loadHorariosFromSheets();
-    console.log('Datos cargados desde Sheets');
+
+    // Intentar cargar horarios desde API de ML (fuente principal)
+    try {
+      await loadHorariosFromAPI();
+      console.log('✓ Horarios cargados desde API de ML');
+    } catch (apiError) {
+      console.error('Error cargando horarios desde API, usando Sheets como fallback:', apiError.message);
+      // Fallback: cargar desde Sheets si la API falla
+      await loadHorariosFromSheets();
+      console.log('✓ Horarios cargados desde Google Sheets (fallback)');
+    }
+
+    console.log('Datos cargados exitosamente');
   } catch (error) {
     console.error('Error cargando datos:', error.message);
   }

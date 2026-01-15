@@ -97,11 +97,29 @@
     .resumen-stat.total { background: #eff6ff; }
     .resumen-stat.verificados { background: #f0fdf4; }
     .resumen-stat.pendientes { background: #fef2f2; }
-    .resumen-stat-number { font-size: 28px; font-weight: 700; }
+    .resumen-stat-number { font-size: 24px; font-weight: 700; }
     .resumen-stat.total .resumen-stat-number { color: #2563eb; }
     .resumen-stat.verificados .resumen-stat-number { color: #16a34a; }
     .resumen-stat.pendientes .resumen-stat-number { color: #dc2626; }
     .resumen-stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    /* Botones de cuentas */
+    .cuentas-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+    .cuenta-btn { flex: 1; min-width: 60px; padding: 10px 8px; border: 2px solid #e5e7eb; background: white; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.2s; }
+    .cuenta-btn:hover { border-color: #2563eb; background: #eff6ff; }
+    .cuenta-btn.active { border-color: #2563eb; background: #2563eb; color: white; }
+    .cuenta-desglose { background: #f9fafb; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: none; }
+    .cuenta-desglose.show { display: block; }
+    .cuenta-desglose-title { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+    .cuenta-desglose-items { display: flex; gap: 16px; justify-content: center; }
+    .cuenta-desglose-item { text-align: center; }
+    .cuenta-desglose-num { font-size: 20px; font-weight: 700; }
+    .cuenta-desglose-num.flex { color: #7c3aed; }
+    .cuenta-desglose-num.colecta { color: #059669; }
+    .cuenta-desglose-num.pickit { color: #ea580c; }
+    .cuenta-desglose-label { font-size: 11px; color: #6b7280; }
+    .cuenta-btn-total { background: #f0fdf4; border-color: #22c55e; }
+    .cuenta-btn-total:hover { background: #dcfce7; border-color: #16a34a; }
+    .cuenta-btn-total.active { background: #22c55e; border-color: #22c55e; color: white; }
     .resumen-status { padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; }
     .resumen-status.completo { background: #dcfce7; color: #16a34a; }
     .resumen-status.pendiente { background: #fef3c7; color: #b45309; }
@@ -123,6 +141,7 @@
     .sync-progress.active { display: block; }
     .sync-progress-bar { height: 100%; background: #2563eb; border-radius: 2px; animation: progress 2s ease-in-out infinite; width: 30%; }
     @keyframes progress { 0% { margin-left: 0; } 50% { margin-left: 70%; } 100% { margin-left: 0; } }
+
   </style>
 </head>
 <body>
@@ -139,7 +158,7 @@
     <!-- Resumen del día -->
     <div class="resumen-section" id="resumenSection">
       <div class="resumen-header">
-        <h2>Resumen del dia</h2>
+        <h2 id="resumenTitulo">Envios del Dia</h2>
         <span class="resumen-fecha" id="resumenFecha">--/--/----</span>
       </div>
       <div class="resumen-stats">
@@ -149,14 +168,41 @@
         </div>
         <div class="resumen-stat verificados">
           <div class="resumen-stat-number" id="resumenVerificados">-</div>
-          <div class="resumen-stat-label">VERIFICADOS</div>
+          <div class="resumen-stat-label">VERIF</div>
         </div>
         <div class="resumen-stat pendientes">
           <div class="resumen-stat-number" id="resumenPendientes">-</div>
-          <div class="resumen-stat-label">PENDIENTES</div>
+          <div class="resumen-stat-label">PEND</div>
         </div>
       </div>
       <div class="resumen-status vacio" id="resumenStatus">Cargando...</div>
+      <div class="cuentas-btns" id="cuentasBtns">
+        <button type="button" class="cuenta-btn cuenta-btn-total" data-cuenta="TOTAL">TOTAL</button>
+      </div>
+      <div class="cuentas-btns" id="cuentasBtnsIndividuales">
+        <button type="button" class="cuenta-btn" data-cuenta="TIENDA">TIENDA</button>
+        <button type="button" class="cuenta-btn" data-cuenta="SHOP">SHOP</button>
+        <button type="button" class="cuenta-btn" data-cuenta="FURST">FURST</button>
+        <button type="button" class="cuenta-btn" data-cuenta="MUN1">MUN1</button>
+        <button type="button" class="cuenta-btn" data-cuenta="MUN2">MUN2</button>
+      </div>
+      <div class="cuenta-desglose" id="cuentaDesglose">
+        <div class="cuenta-desglose-title" id="cuentaDesgloseTitulo">-</div>
+        <div class="cuenta-desglose-items" id="cuentaDesgloseItems">
+          <div class="cuenta-desglose-item">
+            <div class="cuenta-desglose-num flex" id="cuentaFlex">0</div>
+            <div class="cuenta-desglose-label">FLEX</div>
+          </div>
+          <div class="cuenta-desglose-item" id="cuentaColectaItem">
+            <div class="cuenta-desglose-num colecta" id="cuentaColecta">0</div>
+            <div class="cuenta-desglose-label" id="cuentaColectaLabel">COLECTA</div>
+          </div>
+          <div class="cuenta-desglose-item hidden" id="cuentaPickitItem">
+            <div class="cuenta-desglose-num pickit" id="cuentaPickit">0</div>
+            <div class="cuenta-desglose-label">PICKIT</div>
+          </div>
+        </div>
+      </div>
       <div class="resumen-pendientes-list hidden" id="resumenPendientesList"></div>
       <div style="text-align: center; margin-top: 12px;">
         <button type="button" class="resumen-sync-btn" id="resumenSync">
@@ -166,6 +212,8 @@
         <div class="sync-progress" id="syncProgress">
           <div class="sync-progress-bar"></div>
         </div>
+        <button type="button" class="resumen-refresh" id="actualizarEstados">Actualizar estados</button>
+        <button type="button" class="resumen-refresh" id="limpiarDuplicados">Limpiar duplicados</button>
         <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
     </div>
@@ -935,58 +983,233 @@
       var resumenStatus = document.getElementById('resumenStatus');
       var resumenPendientesList = document.getElementById('resumenPendientesList');
       var resumenRefresh = document.getElementById('resumenRefresh');
+      var actualizarEstadosBtn = document.getElementById('actualizarEstados');
+      var cuentasBtns = document.getElementById('cuentasBtns');
+      var cuentasBtnsIndividuales = document.getElementById('cuentasBtnsIndividuales');
+      var cuentaDesglose = document.getElementById('cuentaDesglose');
+      var cuentaDesgloseTitulo = document.getElementById('cuentaDesgloseTitulo');
+      var cuentaFlex = document.getElementById('cuentaFlex');
+      var cuentaColecta = document.getElementById('cuentaColecta');
+      var cuentaColectaLabel = document.getElementById('cuentaColectaLabel');
+      var cuentaColectaItem = document.getElementById('cuentaColectaItem');
+      var cuentaPickit = document.getElementById('cuentaPickit');
+      var cuentaPickitItem = document.getElementById('cuentaPickitItem');
+
+      var enviosDelDia = []; // Guardar envíos para filtrar por cuenta
+      var cuentaSeleccionada = null;
+
+      // Cuentas que usan COLECTA vs PICKIT
+      var cuentasColecta = ['TIENDA', 'FURST'];
+      var cuentasPickit = ['SHOP', 'MUN1', 'MUN2'];
 
       function cargarResumenDia() {
-        fetch(API_URL + '/api/resumen-dia')
+        fetch(API_URL + '/api/envios-del-dia')
           .then(function(response) { return response.json(); })
           .then(function(data) {
-            resumenFecha.textContent = data.fecha || '--/--/----';
+            var now = new Date();
+            resumenFecha.textContent = now.toLocaleDateString('es-AR');
             resumenTotal.textContent = data.total || 0;
-            resumenVerificados.textContent = data.verificados || 0;
-            resumenPendientes.textContent = data.pendientesCount || 0;
 
-            // Actualizar estado
+            enviosDelDia = data.envios || [];
+
+            // Contar verificados y pendientes según el estado
+            var verificados = 0;
+            var pendientes = 0;
+            var enviosPendientes = [];
+
+            for (var i = 0; i < enviosDelDia.length; i++) {
+              var estado = enviosDelDia[i].estado || 'Pendiente';
+              if (estado === 'Verificado') {
+                verificados++;
+              } else if (estado === 'Pendiente') {
+                pendientes++;
+                enviosPendientes.push(enviosDelDia[i]);
+              }
+              // Los despachados/entregados no se cuentan como pendientes
+            }
+
+            resumenVerificados.textContent = verificados;
+            resumenPendientes.textContent = pendientes;
+
             resumenStatus.className = 'resumen-status';
             if (data.total === 0) {
               resumenStatus.classList.add('vacio');
-              resumenStatus.textContent = 'No hay envios registrados hoy';
+              resumenStatus.textContent = 'No hay envios del dia';
               resumenPendientesList.classList.add('hidden');
-            } else if (data.completo) {
+              cuentaDesglose.classList.remove('show');
+            } else if (pendientes === 0) {
               resumenStatus.classList.add('completo');
-              resumenStatus.textContent = 'Todos los envios verificados!';
+              resumenStatus.textContent = 'Todos verificados (' + verificados + ')';
               resumenPendientesList.classList.add('hidden');
             } else {
               resumenStatus.classList.add('pendiente');
-              resumenStatus.textContent = 'Faltan ' + data.pendientesCount + ' envio(s) por verificar';
+              resumenStatus.textContent = pendientes + ' pendiente(s), ' + verificados + ' verificado(s)';
+              mostrarListaPendientes(enviosPendientes);
+            }
 
-              // Mostrar lista de pendientes
-              if (data.pendientes && data.pendientes.length > 0) {
-                resumenPendientesList.innerHTML = '';
-                resumenPendientesList.classList.remove('hidden');
-                for (var i = 0; i < data.pendientes.length; i++) {
-                  var p = data.pendientes[i];
-                  var item = document.createElement('div');
-                  item.className = 'resumen-pendiente-item';
-                  item.setAttribute('data-id', p.id);
-                  item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + '</span>';
-                  item.onclick = function() {
-                    var id = this.getAttribute('data-id');
-                    shipmentInput.value = id;
-                    searchShipment(id);
-                  };
-                  resumenPendientesList.appendChild(item);
-                }
+            // Si hay cuenta seleccionada, actualizar desglose
+            if (cuentaSeleccionada) {
+              if (cuentaSeleccionada === 'TOTAL') {
+                mostrarDesgloseTotal();
+              } else {
+                mostrarDesgloseCuenta(cuentaSeleccionada);
               }
             }
           })
           .catch(function(err) {
             resumenStatus.className = 'resumen-status vacio';
-            resumenStatus.textContent = 'Error cargando resumen';
+            resumenStatus.textContent = 'Error cargando envios';
             console.error(err);
           });
       }
 
+      function mostrarListaPendientes(envios) {
+        resumenPendientesList.innerHTML = '';
+        if (envios.length > 0) {
+          resumenPendientesList.classList.remove('hidden');
+          for (var i = 0; i < envios.length; i++) {
+            var p = envios[i];
+            var item = document.createElement('div');
+            item.className = 'resumen-pendiente-item';
+            item.setAttribute('data-id', p.id);
+            item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + ' - ' + (p.receptor || '') + '</span>';
+            item.onclick = function() {
+              var id = this.getAttribute('data-id');
+              shipmentInput.value = id;
+              searchShipment(id);
+            };
+            resumenPendientesList.appendChild(item);
+          }
+        } else {
+          resumenPendientesList.classList.add('hidden');
+        }
+      }
+
+      function mostrarDesgloseTotal() {
+        var flexCount = 0;
+        var colectaCount = 0;
+        var pickitCount = 0;
+
+        for (var i = 0; i < enviosDelDia.length; i++) {
+          var e = enviosDelDia[i];
+          if (e.logisticType === 'self_service') {
+            flexCount++;
+          } else if (e.logisticType === 'cross_docking') {
+            colectaCount++;
+          } else {
+            pickitCount++;
+          }
+        }
+
+        cuentaDesgloseTitulo.textContent = 'TOTAL (' + enviosDelDia.length + ' envios)';
+        cuentaFlex.textContent = flexCount;
+        cuentaColecta.textContent = colectaCount;
+        cuentaColectaLabel.textContent = 'COLECTA';
+        cuentaColectaItem.classList.remove('hidden');
+        cuentaPickit.textContent = pickitCount;
+        cuentaPickitItem.classList.remove('hidden');
+        cuentaDesglose.classList.add('show');
+
+        mostrarListaPendientes(enviosDelDia);
+      }
+
+      function mostrarDesgloseCuenta(cuenta) {
+        var enviosCuenta = enviosDelDia.filter(function(e) { return e.cuenta === cuenta; });
+        var flexCount = 0;
+        var otrosCount = 0;
+
+        var usaColecta = cuentasColecta.indexOf(cuenta) !== -1;
+
+        for (var i = 0; i < enviosCuenta.length; i++) {
+          if (enviosCuenta[i].logisticType === 'self_service') {
+            flexCount++;
+          } else {
+            otrosCount++;
+          }
+        }
+
+        cuentaDesgloseTitulo.textContent = cuenta + ' (' + enviosCuenta.length + ' envios)';
+        cuentaFlex.textContent = flexCount;
+        cuentaColecta.textContent = otrosCount;
+        cuentaColectaLabel.textContent = usaColecta ? 'COLECTA' : 'PICKIT';
+        cuentaColectaItem.classList.remove('hidden');
+        cuentaPickitItem.classList.add('hidden');
+        cuentaDesglose.classList.add('show');
+
+        // Mostrar solo los pendientes de esta cuenta
+        mostrarListaPendientes(enviosCuenta);
+      }
+
+      // Deseleccionar todos los botones
+      function deseleccionarTodos() {
+        var allBtns = document.querySelectorAll('.cuenta-btn');
+        for (var i = 0; i < allBtns.length; i++) {
+          allBtns[i].classList.remove('active');
+        }
+      }
+
+      // Manejar click en botón TOTAL
+      function handleCuentaClick(e) {
+        if (!e.target.classList.contains('cuenta-btn')) return;
+
+        var cuenta = e.target.getAttribute('data-cuenta');
+
+        // Toggle: si ya está seleccionada, deseleccionar
+        if (cuentaSeleccionada === cuenta) {
+          cuentaSeleccionada = null;
+          e.target.classList.remove('active');
+          cuentaDesglose.classList.remove('show');
+          mostrarListaPendientes(enviosDelDia);
+        } else {
+          // Deseleccionar todos
+          deseleccionarTodos();
+          // Seleccionar nuevo
+          e.target.classList.add('active');
+          cuentaSeleccionada = cuenta;
+
+          if (cuenta === 'TOTAL') {
+            mostrarDesgloseTotal();
+          } else {
+            mostrarDesgloseCuenta(cuenta);
+          }
+        }
+      }
+
+      cuentasBtns.onclick = handleCuentaClick;
+      cuentasBtnsIndividuales.onclick = handleCuentaClick;
+
       resumenRefresh.onclick = cargarResumenDia;
+
+      // Actualizar estados desde ML
+      actualizarEstadosBtn.onclick = function() {
+        actualizarEstadosBtn.disabled = true;
+        actualizarEstadosBtn.textContent = 'Actualizando...';
+        resumenStatus.className = 'resumen-status vacio';
+        resumenStatus.textContent = 'Consultando estados en MercadoLibre...';
+
+        fetch(API_URL + '/api/actualizar-estados', { method: 'POST' })
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            actualizarEstadosBtn.disabled = false;
+            actualizarEstadosBtn.textContent = 'Actualizar estados';
+
+            if (data.actualizados > 0) {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = data.actualizados + ' envio(s) marcados como despachados';
+            } else {
+              resumenStatus.className = 'resumen-status vacio';
+              resumenStatus.textContent = 'No hay cambios de estado';
+            }
+            cargarResumenDia();
+          })
+          .catch(function(err) {
+            actualizarEstadosBtn.disabled = false;
+            actualizarEstadosBtn.textContent = 'Actualizar estados';
+            resumenStatus.className = 'resumen-status vacio';
+            resumenStatus.textContent = 'Error actualizando estados';
+            console.error(err);
+          });
+      };
 
       // Sincronizar envíos
       var resumenSync = document.getElementById('resumenSync');
@@ -1025,13 +1248,48 @@
           });
       };
 
+      // Limpiar duplicados
+      var limpiarDuplicadosBtn = document.getElementById('limpiarDuplicados');
+      limpiarDuplicadosBtn.onclick = function() {
+        limpiarDuplicadosBtn.disabled = true;
+        limpiarDuplicadosBtn.textContent = 'Limpiando...';
+        resumenStatus.className = 'resumen-status vacio';
+        resumenStatus.textContent = 'Limpiando duplicados...';
+
+        fetch(API_URL + '/api/limpiar-duplicados', { method: 'POST' })
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            limpiarDuplicadosBtn.disabled = false;
+            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
+
+            if (data.error) {
+              resumenStatus.className = 'resumen-status vacio';
+              resumenStatus.textContent = 'Error: ' + data.error;
+            } else if (data.eliminados > 0) {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = 'Eliminados ' + data.eliminados + ' duplicados (' + data.totalAntes + ' -> ' + data.totalDespues + ')';
+              cargarResumenDia();
+            } else {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = data.mensaje || 'No hay duplicados';
+            }
+          })
+          .catch(function(err) {
+            limpiarDuplicadosBtn.disabled = false;
+            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
+            resumenStatus.className = 'resumen-status vacio';
+            resumenStatus.textContent = 'Error de conexion';
+            console.error(err);
+          });
+      };
+
       // Cargar resumen al iniciar
       cargarResumenDia();
 
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v11 - con Vision API OCR');
+      console.log('App iniciada v14 - Vision API OCR + vista dia simplificada');
     })();
   </script>
 </body>
