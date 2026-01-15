@@ -45,7 +45,7 @@
     .items-header { padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
     .items-header h2 { font-size: 16px; font-weight: 600; color: #374151; }
     .items-count { font-size: 14px; color: #6b7280; }
-    .item-card { padding: 16px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; }
+    .item-card { padding: 16px; padding-right: 70px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; position: relative; }
     .item-card:last-child { border-bottom: none; }
     .item-card.checked { background: #f0fdf4; }
     .item-card.highlight { background: #fef3c7; animation: pulse 0.5s ease-in-out; }
@@ -86,6 +86,11 @@
     /* Scan mode indicator */
     .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
     .scan-mode-indicator.show { display: block; }
+
+    /* Verify photo button */
+    .verify-photo-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: #7c3aed; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(124,58,237,0.3); transition: all 0.2s; }
+    .verify-photo-btn:hover { background: #6d28d9; transform: translateY(-50%) scale(1.1); }
+    .verify-photo-btn:active { transform: translateY(-50%) scale(0.95); }
 
     /* Resumen del día */
     .resumen-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -280,6 +285,7 @@
       var scanMode = 'shipment'; // 'shipment' o 'product'
       var pendingBarcode = null;
       var selectedSkuForModal = null;
+      var productoAVerificar = null; // Producto seleccionado para verificar con foto
 
       var shipmentInput = document.getElementById('shipmentInput');
       var searchBtn = document.getElementById('searchBtn');
@@ -487,12 +493,25 @@
             unitsDiv.appendChild(unitCb);
           }
 
+          // Botón para verificar con foto
+          var verifyBtn = document.createElement('button');
+          verifyBtn.className = 'verify-photo-btn';
+          verifyBtn.textContent = '📷';
+          verifyBtn.title = 'Verificar con foto';
+          verifyBtn.setAttribute('data-index', i);
+          verifyBtn.onclick = function(e) {
+            e.stopPropagation();
+            var idx = parseInt(this.getAttribute('data-index'));
+            iniciarVerificacionFoto(idx);
+          };
+
           info.appendChild(descDiv);
           info.appendChild(skuDiv);
           info.appendChild(qtyDiv);
           info.appendChild(unitsDiv);
           card.appendChild(mainCheckbox);
           card.appendChild(info);
+          card.appendChild(verifyBtn);
           itemsList.appendChild(card);
         }
         updateItemsCount();
@@ -805,8 +824,21 @@
       }
 
       // ============================================
-      // VISION API - OCR Y DETECCIÓN DE COLOR
+      // VISION API - Verificación inteligente con Claude
       // ============================================
+
+      function iniciarVerificacionFoto(itemIndex) {
+        productoAVerificar = {
+          index: itemIndex,
+          item: currentItems[itemIndex],
+          descripcion: currentItems[itemIndex].description || currentItems[itemIndex].title || currentItems[itemIndex].sku
+        };
+        showStatus('Verificando: ' + productoAVerificar.descripcion, 'loading');
+
+        // Abrir cámara en modo producto
+        scanMode = 'product';
+        startCamera();
+      }
 
       function capturePhoto() {
         if (!video.srcObject) {
@@ -816,7 +848,7 @@
 
         capturePhotoBtn.disabled = true;
         capturePhotoBtn.textContent = 'Analizando...';
-        showStatus('Analizando imagen...', 'loading');
+        showStatus('Claude está analizando...', 'loading');
 
         // Crear canvas para capturar el frame
         var canvas = document.createElement('canvas');
@@ -828,11 +860,17 @@
         // Convertir a base64
         var imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
 
+        // Preparar body con producto a verificar si existe
+        var requestBody = { image: imageBase64 };
+        if (productoAVerificar) {
+          requestBody.producto = productoAVerificar.descripcion;
+        }
+
         // Enviar al servidor
         fetch(API_URL + '/api/vision/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: imageBase64 })
+          body: JSON.stringify(requestBody)
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
@@ -840,11 +878,15 @@
           capturePhotoBtn.textContent = 'Foto OCR';
 
           if (data.success) {
-            showVisionResult(data);
-
-            // Intentar hacer match con SKU si hay texto
-            if (data.text && scanMode === 'product') {
-              tryMatchTextWithSku(data.text, data.words);
+            // Si hay verificación con producto específico
+            if (productoAVerificar && data.correcto !== undefined) {
+              mostrarResultadoVerificacion(data);
+            } else {
+              // Modo extracción simple (sin producto específico)
+              showVisionResult(data);
+              if (data.modeloDetectado && scanMode === 'product') {
+                tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
+              }
             }
           } else {
             showStatus('Error: ' + (data.error || 'Error desconocido'), 'error');
@@ -856,6 +898,58 @@
           showStatus('Error de conexion', 'error');
           console.error(err);
         });
+      }
+
+      function mostrarResultadoVerificacion(data) {
+        stopCamera();
+
+        if (data.correcto) {
+          // ✅ Producto correcto - marcar automáticamente
+          showStatus('✅ CORRECTO: ' + data.productoDetectado, 'success');
+          marcarProductoVerificado(productoAVerificar.index, 'claude');
+        } else {
+          // ❌ Producto incorrecto
+          showStatus('❌ INCORRECTO: ' + (data.motivo || 'No coincide'), 'error');
+        }
+
+        // Mostrar detalles
+        visionText.textContent = 'Modelo: ' + (data.modeloDetectado || '?') + ' | Color: ' + (data.colorDetectado || '?');
+        visionColors.innerHTML = '<strong>Confianza:</strong> ' + (data.confianza || 'media');
+        visionResult.classList.remove('hidden');
+
+        // Limpiar producto a verificar
+        productoAVerificar = null;
+      }
+
+      function marcarProductoVerificado(itemIndex, method) {
+        var item = currentItems[itemIndex];
+        if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
+
+        // Marcar la primera unidad no verificada
+        for (var j = 0; j < item.quantity; j++) {
+          if (!unitChecks[itemIndex][j] || !unitChecks[itemIndex][j].checked) {
+            unitChecks[itemIndex][j] = { checked: true, method: method };
+            break;
+          }
+        }
+        updateCard(itemIndex);
+        updateItemsCount();
+      }
+
+      function tryMatchModelWithItems(modelo, color) {
+        if (!modelo) return;
+        var modeloUpper = modelo.toUpperCase();
+
+        for (var i = 0; i < currentItems.length; i++) {
+          var desc = (currentItems[i].description || '').toUpperCase();
+          if (desc.indexOf(modeloUpper) !== -1 || modeloUpper.indexOf(desc.split(' ').pop()) !== -1) {
+            // Encontró match
+            showStatus('Match encontrado: ' + currentItems[i].description, 'success');
+            marcarProductoVerificado(i, 'claude-auto');
+            return;
+          }
+        }
+        showStatus('Modelo detectado: ' + modelo + ' (sin match automático)', 'info');
       }
 
       function showVisionResult(data) {
@@ -1289,7 +1383,7 @@
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v14 - Vision API OCR + vista dia simplificada');
+      console.log('App iniciada v15 - Claude Vision verification + product photo button');
     })();
   </script>
 </body>

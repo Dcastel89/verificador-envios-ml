@@ -1912,7 +1912,7 @@ Respondé SOLO con este JSON:
     var claudeText = response.content[0].text.trim();
     console.log('Claude response:', claudeText);
 
-    // Intentar extraer JSON de la respuesta
+    // Intentar extraer JSON de la respuesta (puede venir con ```json ... ```)
     var jsonMatch = claudeText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return res.status(500).json({
@@ -1922,6 +1922,11 @@ Respondé SOLO con este JSON:
     }
 
     var result = JSON.parse(jsonMatch[0]);
+
+    res.json({
+      success: true,
+      ...result
+    });
 
   } catch (error) {
     console.error('Error en Claude Vision:', error.message);
