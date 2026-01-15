@@ -1020,7 +1020,8 @@ async function mlApiRequestPost(account, url, data, options = {}) {
         }
       }
     }
-    console.error('Error en POST API:', error.message);
+    var errorDetail = error.response && error.response.data ? JSON.stringify(error.response.data) : error.message;
+    console.error('Error en POST API:', error.message, '- Detalle:', errorDetail);
     return null;
   }
 }
