@@ -1219,10 +1219,10 @@ async function clearDaySheet(sheetName) {
 
     if (!sheet) return;
 
-    // Limpiar contenido (excepto encabezados)
+    // Limpiar contenido (excepto encabezados) - todas las columnas A-J
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A2:H1000'
+      range: sheetName + '!A2:J1000'
     });
 
     console.log('Hoja ' + sheetName + ' limpiada');
@@ -1312,7 +1312,7 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:J'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -1348,11 +1348,12 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
     }
 
     if (rowIndex === -1) {
+      // Append nueva fila con todas las 10 columnas (A-J)
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: sheetName + '!A:I',
+        range: sheetName + '!A:J',
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr]] }
+        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr, '']] }
       });
     } else {
       await sheets.spreadsheets.values.update({
@@ -1380,7 +1381,7 @@ async function markAsDespachado(shipmentId, estadoML) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:J'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -2249,10 +2250,10 @@ app.get('/api/resumen-dia', async function(req, res) {
     // Asegurar que la hoja existe
     await ensureDaySheetExists(sheetName);
 
-    // Leer datos de la hoja del día
+    // Leer datos de la hoja del día (todas las columnas A-J)
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:H'
+      range: sheetName + '!A:J'
     });
 
     var rows = response.data.values || [];
@@ -2326,7 +2327,7 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:J'
     });
 
     var rows = response.data.values || [];
@@ -2357,10 +2358,10 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
       return res.json({ mensaje: 'No hay duplicados', eliminados: 0 });
     }
 
-    // Limpiar y reescribir la hoja sin duplicados
+    // Limpiar y reescribir la hoja sin duplicados (todas las columnas A-J)
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:J'
     });
 
     await sheets.spreadsheets.values.update({
@@ -2520,10 +2521,10 @@ app.post('/api/actualizar-estados', async function(req, res) {
   try {
     await ensureDaySheetExists(sheetName);
 
-    // Leer todos los envíos de la hoja
+    // Leer todos los envíos de la hoja (todas las columnas A-J)
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:J'
     });
 
     var rows = response.data.values || [];
