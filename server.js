@@ -4,11 +4,19 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const { google } = require('googleapis');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Anthropic (Claude) setup
+var anthropic = null;
+if (process.env.ANTHROPIC_API_KEY) {
+  anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  console.log('Claude API configurada');
+}
 
 // Google Sheets setup
 var sheets = null;
@@ -2042,6 +2050,89 @@ app.post('/api/vision/analyze', async function(req, res) {
   } catch (error) {
     console.error('Error en Vision API:', error.message);
     res.status(500).json({ error: 'Error procesando imagen: ' + error.message });
+  }
+});
+
+// ============================================
+// CLAUDE VISION API - Análisis inteligente de imágenes
+// ============================================
+
+app.post('/api/vision/analyze-claude', async function(req, res) {
+  if (!anthropic) {
+    return res.status(500).json({ error: 'Claude API no configurada. Agregá ANTHROPIC_API_KEY en las variables de entorno.' });
+  }
+
+  var imageBase64 = req.body.image;
+  if (!imageBase64) {
+    return res.status(400).json({ error: 'No se recibió imagen' });
+  }
+
+  // Remover prefijo data:image si existe y detectar tipo
+  var mediaType = 'image/jpeg';
+  if (imageBase64.includes('data:image/')) {
+    var matches = imageBase64.match(/data:(image\/[a-z]+);base64,/);
+    if (matches) {
+      mediaType = matches[1];
+    }
+    imageBase64 = imageBase64.split('base64,')[1];
+  }
+
+  try {
+    var response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: imageBase64
+            }
+          },
+          {
+            type: 'text',
+            text: `Analizá esta imagen de una funda de celular.
+
+Extraé:
+1. **SKU/Código**: Buscá el código del producto en etiquetas. Suele ser formato letra+números (ej: A25, A36, B12). Ignorá textos como "Fashion Case", "New", "4G/5G", etc.
+2. **Color de la funda**: Identificá el color REAL de la funda (no del fondo, empaque o etiquetas). Usá nombres simples: Negro, Blanco, Rojo, Azul, Verde, Rosa, Lila, Celeste, Amarillo, Naranja, Gris, Transparente, etc.
+
+Respondé SOLO con JSON válido, sin explicaciones:
+{"sku": "CODIGO", "color": "COLOR", "confianza": "alta/media/baja"}`
+          }
+        ]
+      }]
+    });
+
+    // Parsear respuesta de Claude
+    var claudeText = response.content[0].text.trim();
+
+    // Intentar extraer JSON de la respuesta
+    var jsonMatch = claudeText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(500).json({
+        error: 'Claude no devolvió JSON válido',
+        rawResponse: claudeText
+      });
+    }
+
+    var result = JSON.parse(jsonMatch[0]);
+
+    res.json({
+      success: true,
+      sku: result.sku || null,
+      color: result.color || null,
+      confianza: result.confianza || 'media',
+      modelo: result.modelo || null,
+      rawResponse: claudeText
+    });
+
+  } catch (error) {
+    console.error('Error en Claude Vision:', error.message);
+    res.status(500).json({ error: 'Error procesando imagen con Claude: ' + error.message });
   }
 });
 
