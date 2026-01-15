@@ -447,9 +447,11 @@ async function getCutoffTimeFlex(account) {
       return null;
     }
 
-    // Buscar suscripción activa de Flex
+    // Buscar suscripción activa de Flex (case-insensitive)
     var flexSubscription = subscriptions.find(function(sub) {
-      return sub.mode === 'flex' && sub.status && sub.status.id === 'in';
+      var mode = sub.mode ? sub.mode.toLowerCase() : '';
+      var statusId = sub.status && sub.status.id ? sub.status.id.toLowerCase() : '';
+      return mode === 'flex' && statusId === 'in';
     });
 
     if (!flexSubscription || !flexSubscription.service_id) {
@@ -460,8 +462,11 @@ async function getCutoffTimeFlex(account) {
     var serviceId = flexSubscription.service_id;
     console.log(account.name + ' - Service ID FLEX: ' + serviceId);
 
-    // Paso 2: Obtener configuración con user_id y service_id
+    // Paso 2: Obtener configuración con user_id y service_id (formato GraphQL)
     var configUrl = 'https://api.mercadolibre.com/shipping/flex/sites/MLA/configuration/v3';
+
+    // La API espera una query en formato GraphQL
+    var graphqlQuery = '{ configuration (user_id: ' + userId + ', service_id: ' + serviceId + ') { delivery_ranges { week { capacity type processing_time from to et_hour calculated_cutoff cutoff } saturday { calculated_cutoff cutoff } sunday { calculated_cutoff cutoff } } availables { cutoff capacity_range { from to } } } }';
 
     var config = {
       method: 'POST',
@@ -470,17 +475,24 @@ async function getCutoffTimeFlex(account) {
         'Content-Type': 'application/json'
       },
       data: {
-        user_id: userId,
-        service_id: serviceId
+        query: graphqlQuery
       }
     };
 
     try {
       var response = await axios(configUrl, config);
-      var configData = response.data;
+      var responseData = response.data;
+
+      if (!responseData) {
+        console.log(account.name + ' - No se pudo obtener configuración de FLEX');
+        return null;
+      }
+
+      // La respuesta GraphQL puede venir en data.configuration o directamente en configuration
+      var configData = responseData.data ? responseData.data.configuration : (responseData.configuration || responseData);
 
       if (!configData) {
-        console.log(account.name + ' - No se pudo obtener configuración de FLEX');
+        console.log(account.name + ' - No se pudo parsear configuración de FLEX');
         return null;
       }
 
@@ -531,7 +543,7 @@ async function getCutoffTimeColecta(account) {
   if (!account.accessToken) return null;
 
   try {
-    // Primero obtener el user ID
+    // Primero obtener el user ID y verificar si tiene Multi-Origin
     var userInfo = await mlApiRequest(account, 'https://api.mercadolibre.com/users/me');
     if (!userInfo || !userInfo.id) {
       console.log(account.name + ' - No se pudo obtener user ID para horarios COLECTA');
@@ -539,17 +551,56 @@ async function getCutoffTimeColecta(account) {
     }
     var userId = userInfo.id;
 
-    // Obtener schedule de cross_docking
-    var scheduleUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/schedule/cross_docking';
-    var scheduleData = await mlApiRequest(account, scheduleUrl);
+    // Verificar si el usuario tiene Multi-Origin (warehouse_management)
+    var hasMultiOrigin = userInfo.tags && userInfo.tags.includes('warehouse_management');
+
+    var scheduleData = null;
+
+    // Si tiene Multi-Origin, intentar primero con el endpoint de nodos
+    if (hasMultiOrigin) {
+      console.log(account.name + ' - Usuario con Multi-Origin detectado, buscando nodos...');
+
+      // Obtener los nodos del usuario
+      var nodesUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/warehouses';
+      var nodesData = await mlApiRequest(account, nodesUrl);
+
+      if (nodesData && Array.isArray(nodesData) && nodesData.length > 0) {
+        // Usar el primer nodo activo
+        var activeNode = nodesData.find(function(node) { return node.status === 'active'; }) || nodesData[0];
+        if (activeNode && activeNode.id) {
+          var nodeScheduleUrl = 'https://api.mercadolibre.com/nodes/' + activeNode.id + '/schedule/cross_docking';
+          scheduleData = await mlApiRequest(account, nodeScheduleUrl);
+          if (scheduleData) {
+            console.log(account.name + ' - Schedule obtenido desde nodo: ' + activeNode.id);
+          }
+        }
+      }
+    }
+
+    // Si no se obtuvo con nodos, intentar con USER_ID (método tradicional)
+    if (!scheduleData) {
+      var scheduleUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/schedule/cross_docking';
+      scheduleData = await mlApiRequest(account, scheduleUrl);
+    }
+
+    // Si aún no hay datos, intentar con xd_drop_off como alternativa
+    if (!scheduleData) {
+      var altScheduleUrl = 'https://api.mercadolibre.com/users/' + userId + '/shipping/schedule/xd_drop_off';
+      scheduleData = await mlApiRequest(account, altScheduleUrl);
+      if (scheduleData) {
+        console.log(account.name + ' - Schedule obtenido desde xd_drop_off');
+      }
+    }
 
     if (!scheduleData) {
       console.log(account.name + ' - No se pudo obtener schedule de COLECTA');
       return null;
     }
 
-    // El schedule puede tener diferentes días, usar monday como referencia
+    // Extraer cutoff - puede estar en diferentes estructuras
     var cutoff = null;
+
+    // Estructura 1: monday.available_options
     if (scheduleData.monday && scheduleData.monday.available_options && scheduleData.monday.available_options.length > 0) {
       var selectedOption = scheduleData.monday.available_options.find(function(opt) { return opt.selected; });
       if (!selectedOption && scheduleData.monday.available_options.length > 0) {
@@ -558,6 +609,16 @@ async function getCutoffTimeColecta(account) {
       if (selectedOption && selectedOption.cutoff) {
         cutoff = selectedOption.cutoff;
       }
+    }
+
+    // Estructura 2: cutoff directo
+    if (!cutoff && scheduleData.cutoff) {
+      cutoff = scheduleData.cutoff;
+    }
+
+    // Estructura 3: default_cutoff
+    if (!cutoff && scheduleData.default_cutoff) {
+      cutoff = scheduleData.default_cutoff;
     }
 
     if (cutoff) {
@@ -989,12 +1050,63 @@ async function getReadyToShipOrders(account) {
 
   console.log(account.name + ' - Órdenes con shipping: ' + ordersWithShipping.length);
 
-  // Obtener detalles de cada envío
-  var pendingShipments = [];
+  // Agrupar órdenes por shipping_id y manejar packs
+  var shipmentMap = {}; // shipping_id -> { orderIds: [], packId: null }
+  var processedPacks = {}; // Para evitar procesar el mismo pack múltiples veces
 
   for (var i = 0; i < ordersWithShipping.length; i++) {
     var order = ordersWithShipping[i];
-    var shippingId = order.shipping.id;
+    var shippingId = order.shipping.id.toString();
+
+    // Inicializar entrada si no existe
+    if (!shipmentMap[shippingId]) {
+      shipmentMap[shippingId] = {
+        orderIds: [],
+        packId: null,
+        dateCreated: order.date_created
+      };
+    }
+
+    // Si la orden tiene pack_id, es parte de un carrito
+    if (order.pack_id && !processedPacks[order.pack_id]) {
+      processedPacks[order.pack_id] = true;
+      shipmentMap[shippingId].packId = order.pack_id;
+
+      // Obtener información completa del pack
+      try {
+        var packData = await mlApiRequest(account, 'https://api.mercadolibre.com/packs/' + order.pack_id);
+        if (packData && packData.orders && Array.isArray(packData.orders)) {
+          // Agregar todos los order_ids del pack
+          packData.orders.forEach(function(packOrder) {
+            var packOrderId = packOrder.id ? packOrder.id.toString() : null;
+            if (packOrderId && shipmentMap[shippingId].orderIds.indexOf(packOrderId) === -1) {
+              shipmentMap[shippingId].orderIds.push(packOrderId);
+            }
+          });
+          console.log(account.name + ' - Pack ' + order.pack_id + ' con ' + packData.orders.length + ' órdenes detectado');
+        }
+      } catch (packError) {
+        // Si falla obtener el pack, agregar solo este order_id
+        if (shipmentMap[shippingId].orderIds.indexOf(order.id.toString()) === -1) {
+          shipmentMap[shippingId].orderIds.push(order.id.toString());
+        }
+      }
+    } else if (!order.pack_id) {
+      // Orden individual (sin pack)
+      if (shipmentMap[shippingId].orderIds.indexOf(order.id.toString()) === -1) {
+        shipmentMap[shippingId].orderIds.push(order.id.toString());
+      }
+    }
+  }
+
+  // Obtener detalles de cada envío único
+  var pendingShipments = [];
+  var shippingIds = Object.keys(shipmentMap);
+  var logCount = 0;
+
+  for (var j = 0; j < shippingIds.length; j++) {
+    var shippingId = shippingIds[j];
+    var shipmentInfo = shipmentMap[shippingId];
 
     // Obtener detalles completos del envío
     var shipment = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shippingId);
@@ -1002,8 +1114,9 @@ async function getReadyToShipOrders(account) {
     if (!shipment) continue;
 
     // Log para debug (primeros 5)
-    if (i < 5) {
+    if (logCount < 5) {
       console.log(account.name + ' - Envío ' + shippingId + ': status=' + shipment.status + ', logistic_type=' + shipment.logistic_type + ', mode=' + shipment.mode);
+      logCount++;
     }
 
     var status = shipment.status;
@@ -1024,10 +1137,12 @@ async function getReadyToShipOrders(account) {
     }
 
     pendingShipments.push({
-      id: shippingId.toString(),
-      orderId: order.id.toString(),
+      id: shippingId,
+      orderId: shipmentInfo.orderIds.join(','), // Múltiples order_ids separados por coma
+      orderIds: shipmentInfo.orderIds, // Array de order_ids para uso interno
+      packId: shipmentInfo.packId,
       account: account.name,
-      dateCreated: order.date_created,
+      dateCreated: shipmentInfo.dateCreated,
       receiverName: shipment.receiver_address ? shipment.receiver_address.receiver_name : 'N/A',
       logisticType: shipment.logistic_type || '',
       status: status,
@@ -1037,18 +1152,7 @@ async function getReadyToShipOrders(account) {
 
   console.log(account.name + ' - Envíos pendientes: ' + pendingShipments.length);
 
-  // Eliminar duplicados por ID
-  var seen = {};
-  var unique = [];
-  for (var i = 0; i < pendingShipments.length; i++) {
-    var id = pendingShipments[i].id;
-    if (!seen[id]) {
-      seen[id] = true;
-      unique.push(pendingShipments[i]);
-    }
-  }
-
-  return unique;
+  return pendingShipments;
 }
 
 // ============================================
@@ -1954,6 +2058,22 @@ app.post('/webhooks/ml', async function(req, res) {
     var shipmentId = orderData.shipping.id.toString();
     var dateCreated = orderData.date_created;
 
+    // Manejar packs (carritos) - obtener todos los order_ids relacionados
+    var allOrderIds = [orderId];
+    var packId = orderData.pack_id || null;
+
+    if (packId) {
+      try {
+        var packData = await mlApiRequest(account, 'https://api.mercadolibre.com/packs/' + packId);
+        if (packData && packData.orders && Array.isArray(packData.orders)) {
+          allOrderIds = packData.orders.map(function(o) { return o.id ? o.id.toString() : null; }).filter(Boolean);
+          console.log('Pack ' + packId + ' detectado con ' + allOrderIds.length + ' órdenes');
+        }
+      } catch (packError) {
+        console.log('Error obteniendo pack ' + packId + ':', packError.message);
+      }
+    }
+
     // Verificar si el envío ya existe en la hoja de hoy
     var sheetName = getTodaySheetName();
     var existingIds = await getExistingShipmentIds(sheetName);
@@ -1998,6 +2118,9 @@ app.post('/webhooks/ml', async function(req, res) {
 
     var shipment = {
       id: shipmentId,
+      orderId: allOrderIds.join(','), // Múltiples order_ids separados por coma
+      orderIds: allOrderIds, // Array de order_ids
+      packId: packId,
       account: account.name,
       dateCreated: dateCreated,
       receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
@@ -2005,7 +2128,7 @@ app.post('/webhooks/ml', async function(req, res) {
     };
 
     await addPendingShipments([shipment], sheetName);
-    console.log('Nuevo envío agregado via webhook:', shipmentId, 'cuenta:', account.name);
+    console.log('Nuevo envío agregado via webhook:', shipmentId, 'cuenta:', account.name, packId ? '(pack: ' + packId + ')' : '');
   } catch (error) {
     console.error('Error procesando webhook:', error.message);
   }
