@@ -45,7 +45,7 @@
     .items-header { padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
     .items-header h2 { font-size: 16px; font-weight: 600; color: #374151; }
     .items-count { font-size: 14px; color: #6b7280; }
-    .item-card { padding: 16px; padding-right: 70px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; position: relative; }
+    .item-card { padding: 16px; padding-right: 80px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; position: relative; }
     .item-card:last-child { border-bottom: none; }
     .item-card.checked { background: #f0fdf4; }
     .item-card.highlight { background: #fef3c7; animation: pulse 0.5s ease-in-out; }
@@ -87,10 +87,10 @@
     .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
     .scan-mode-indicator.show { display: block; }
 
-    /* Verify photo button */
-    .verify-photo-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: #7c3aed; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(124,58,237,0.3); transition: all 0.2s; }
+    /* Verify photo button - grande y fácil de tocar */
+    .verify-photo-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #7c3aed; color: white; border: none; width: 56px; height: 56px; border-radius: 50%; font-size: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(124,58,237,0.4); transition: all 0.2s; }
     .verify-photo-btn:hover { background: #6d28d9; transform: translateY(-50%) scale(1.1); }
-    .verify-photo-btn:active { transform: translateY(-50%) scale(0.95); }
+    .verify-photo-btn:active { background: #5b21b6; transform: translateY(-50%) scale(0.95); }
 
     /* Resumen del día */
     .resumen-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -834,6 +834,11 @@
         // Abrir cámara en modo producto
         scanMode = 'product';
         startCamera();
+
+        // Scroll suave a la cámara
+        setTimeout(function() {
+          cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
       }
 
       function capturePhoto() {
@@ -921,14 +926,26 @@
         var item = currentItems[itemIndex];
         if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
 
-        // Marcar la primera unidad no verificada
+        // Marcar TODAS las unidades del producto
         for (var j = 0; j < item.quantity; j++) {
-          if (!unitChecks[itemIndex][j] || !unitChecks[itemIndex][j].checked) {
-            unitChecks[itemIndex][j] = { checked: true, method: method };
-            break;
+          unitChecks[itemIndex][j] = { checked: true, method: method };
+          // Actualizar checkbox en UI
+          var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
+          if (checkbox) {
+            checkbox.checked = true;
+            checkbox.classList.add('scanned');
           }
         }
+        // Quitar clase scanned después de animación
+        setTimeout(function() {
+          var checkboxes = document.querySelectorAll('.unit-checkbox[data-item="' + itemIndex + '"]');
+          for (var k = 0; k < checkboxes.length; k++) {
+            checkboxes[k].classList.remove('scanned');
+          }
+        }, 2000);
+
         updateCard(itemIndex);
+        highlightCard(itemIndex);
         updateItemsCount();
       }
 
@@ -1236,7 +1253,7 @@
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v17 - UI simplificada: boton Sincronizar unificado');
+      console.log('App iniciada v18 - Mejoras OCR: marca todas las unidades, scroll a camara, boton mas grande');
     })();
   </script>
 </body>
