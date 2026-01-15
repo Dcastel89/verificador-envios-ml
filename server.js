@@ -18,9 +18,8 @@ if (process.env.ANTHROPIC_API_KEY) {
   console.log('Claude API configurada');
 }
 
-// Google Sheets setup
+// Google Sheets setup (solo para Sheets, ya no usamos Vision de Google)
 var sheets = null;
-var vision = null;
 var SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
@@ -28,13 +27,9 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) 
     process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     null,
     process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/cloud-vision'
-    ]
+    ['https://www.googleapis.com/auth/spreadsheets']
   );
   sheets = google.sheets({ version: 'v4', auth: auth });
-  vision = google.vision({ version: 'v1', auth: auth });
 }
 
 // Cuentas de MercadoLibre - los tokens se actualizan desde Google Sheets
@@ -1818,246 +1813,10 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
 });
 
 // ============================================
-// GOOGLE VISION API - OCR Y DETECCIÓN DE COLOR
+// VISION API - Análisis de imágenes con Claude
 // ============================================
-
-// Función para limpiar texto OCR (conservadora - mantiene letras)
-function cleanOCRText(text) {
-  if (!text) return '';
-
-  return text
-    .toUpperCase()
-    .trim()
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/[|]/g, 'I')      // | siempre es I
-    .replace(/[^A-Z0-9\s\-\.]/g, '');
-}
-
-// Función para normalizar un SKU específico (corrige según contexto)
-function normalizeSKU(sku) {
-  if (!sku) return '';
-
-  var normalized = sku.toUpperCase().trim();
-
-  // Si tiene formato LETRA+NÚMEROS (A16, B22), mantener la letra
-  if (/^[A-Z][0-9]+$/.test(normalized)) {
-    return normalized; // Ya está bien
-  }
-
-  // Corregir 0 al inicio -> probablemente es O (letra)
-  if (/^0[0-9]+$/.test(normalized)) {
-    normalized = 'O' + normalized.substring(1);
-  }
-
-  // Corregir O entre números -> probablemente es 0
-  normalized = normalized.replace(/([0-9])O([0-9])/g, '$10$2');
-  normalized = normalized.replace(/([0-9])O$/g, '$10');
-
-  // Corregir I/l entre números -> probablemente es 1
-  normalized = normalized.replace(/([0-9])[Il]([0-9])/g, '$11$2');
-  normalized = normalized.replace(/([0-9])[Il]$/g, '$11');
-
-  return normalized;
-}
-
-// Función para extraer posibles SKUs (optimizada para códigos tipo A25, A36)
-function extractPossibleSKUs(text, words) {
-  var skuPatterns = [];
-
-  var allText = (text + ' ' + words.join(' ')).toUpperCase();
-
-  // Palabras comunes a ignorar (no son SKUs)
-  var ignoreWords = [
-    'FOR', 'NEW', 'CASE', 'PHONE', 'GOOD', 'QUALITY', 'FASHION', 'MOBILE',
-    'COVER', 'PRODUCTS', 'MADE', 'CHINA', 'IN', 'THE', 'AND', 'PRO', 'MAX',
-    '4G', '5G', 'LTE', 'SX', 'FT'  // Prefijos comunes de modelos
-  ];
-
-  // Patrón principal: 1 letra + 2-3 números (A25, A36, B22)
-  // Este es el formato más probable de SKU
-  var primaryMatches = allText.match(/\b[A-Z][0-9]{2,3}\b/g) || [];
-  primaryMatches.forEach(function(match) {
-    var normalized = normalizeSKU(match);
-    if (!ignoreWords.includes(normalized)) {
-      skuPatterns.push(normalized);
-    }
-  });
-
-  // Si no encontró con el patrón principal, buscar más amplio
-  if (skuPatterns.length === 0) {
-    var secondaryMatches = allText.match(/[A-Z]{1,2}[0-9]{1,3}/g) || [];
-    secondaryMatches.forEach(function(match) {
-      var normalized = normalizeSKU(match);
-      if (!ignoreWords.includes(normalized) && normalized.length >= 2) {
-        skuPatterns.push(normalized);
-      }
-    });
-  }
-
-  // Filtrar duplicados
-  var unique = [...new Set(skuPatterns)];
-
-  // Priorizar: 1 letra + 2 números primero (A25 antes que AB12)
-  unique.sort(function(a, b) {
-    var aIsPerfect = /^[A-Z][0-9]{2}$/.test(a);  // A25
-    var bIsPerfect = /^[A-Z][0-9]{2}$/.test(b);
-    if (aIsPerfect && !bIsPerfect) return -1;
-    if (!aIsPerfect && bIsPerfect) return 1;
-    return a.length - b.length;
-  });
-
-  return unique;
-}
-
-// Función para determinar el color dominante del PRODUCTO (no del fondo)
-function getDominantProductColor(colors) {
-  if (!colors || colors.length === 0) return null;
-
-  // Filtrar colores que probablemente son fondo
-  var productColors = colors.filter(function(c) {
-    var rgb = c.color || c;
-    var r = rgb.red || 0;
-    var g = rgb.green || 0;
-    var b = rgb.blue || 0;
-
-    // Calcular luminosidad
-    var luminance = (0.299 * r + 0.587 * g + 0.114 * b);
-
-    // Calcular saturación aproximada
-    var max = Math.max(r, g, b);
-    var min = Math.min(r, g, b);
-    var saturation = max === 0 ? 0 : (max - min) / max;
-
-    // Filtrar:
-    // - Colores muy claros (fondo blanco) - luminance > 240
-    // - Colores muy oscuros (fondo negro) - luminance < 15
-    // - Colores grises (baja saturación y luminancia media)
-    var isBackground = (luminance > 240) ||
-                       (luminance < 15) ||
-                       (saturation < 0.1 && luminance > 100 && luminance < 200);
-
-    return !isBackground;
-  });
-
-  // Si no quedó ninguno, usar el de mayor score (excluyendo blancos puros)
-  if (productColors.length === 0) {
-    productColors = colors.filter(function(c) {
-      var rgb = c.color || c;
-      var luminance = (0.299 * (rgb.red || 0) + 0.587 * (rgb.green || 0) + 0.114 * (rgb.blue || 0));
-      return luminance < 250; // Excluir solo blancos muy puros
-    });
-  }
-
-  // Retornar el color con mayor score entre los filtrados
-  if (productColors.length === 0) return colors[0]; // Fallback al primero
-
-  return productColors.reduce(function(best, current) {
-    return (current.score || 0) > (best.score || 0) ? current : best;
-  }, productColors[0]);
-}
 
 app.post('/api/vision/analyze', async function(req, res) {
-  if (!vision) {
-    return res.status(500).json({ error: 'Vision API no configurada' });
-  }
-
-  var imageBase64 = req.body.image; // Imagen en base64 (sin el prefijo data:image/...)
-  if (!imageBase64) {
-    return res.status(400).json({ error: 'No se recibio imagen' });
-  }
-
-  // Remover prefijo data:image si existe
-  if (imageBase64.includes('base64,')) {
-    imageBase64 = imageBase64.split('base64,')[1];
-  }
-
-  try {
-    var response = await vision.images.annotate({
-      requestBody: {
-        requests: [{
-          image: { content: imageBase64 },
-          features: [
-            { type: 'TEXT_DETECTION', maxResults: 10 },
-            { type: 'IMAGE_PROPERTIES', maxResults: 10 }
-          ]
-        }]
-      }
-    });
-
-    var result = response.data.responses[0];
-    var textAnnotations = result.textAnnotations || [];
-    var imageProperties = result.imagePropertiesAnnotation || {};
-
-    // Extraer texto detectado
-    var rawText = textAnnotations.length > 0 ? textAnnotations[0].description : '';
-    var words = textAnnotations.slice(1).map(function(t) { return t.description; });
-
-    // Texto limpio (convertido a números donde hay ambigüedad)
-    var cleanedText = cleanOCRText(rawText);
-
-    // Posibles SKUs extraídos
-    var possibleSKUs = extractPossibleSKUs(rawText, words);
-
-    // Extraer colores dominantes
-    var allColors = [];
-    if (imageProperties.dominantColors && imageProperties.dominantColors.colors) {
-      allColors = imageProperties.dominantColors.colors.map(function(c) {
-        var rgb = c.color;
-        return {
-          red: rgb.red || 0,
-          green: rgb.green || 0,
-          blue: rgb.blue || 0,
-          score: c.score,
-          pixelFraction: c.pixelFraction,
-          color: c.color,
-          name: getColorName(rgb.red || 0, rgb.green || 0, rgb.blue || 0)
-        };
-      });
-    }
-
-    // Obtener el color dominante del producto (no del fondo)
-    var dominantProductColor = getDominantProductColor(allColors);
-    var mainColor = dominantProductColor ? {
-      name: getColorName(dominantProductColor.red || (dominantProductColor.color && dominantProductColor.color.red) || 0,
-                         dominantProductColor.green || (dominantProductColor.color && dominantProductColor.color.green) || 0,
-                         dominantProductColor.blue || (dominantProductColor.color && dominantProductColor.color.blue) || 0),
-      rgb: {
-        red: dominantProductColor.red || (dominantProductColor.color && dominantProductColor.color.red) || 0,
-        green: dominantProductColor.green || (dominantProductColor.color && dominantProductColor.color.green) || 0,
-        blue: dominantProductColor.blue || (dominantProductColor.color && dominantProductColor.color.blue) || 0
-      },
-      score: dominantProductColor.score,
-      pixelFraction: dominantProductColor.pixelFraction
-    } : null;
-
-    res.json({
-      success: true,
-      // Texto original
-      rawText: rawText,
-      // Texto limpio (para códigos/SKUs)
-      text: cleanedText,
-      // Palabras individuales
-      words: words,
-      // Posibles SKUs detectados
-      possibleSKUs: possibleSKUs,
-      // Color principal del producto
-      mainColor: mainColor,
-      // Todos los colores (para debug)
-      allColors: allColors.slice(0, 5)
-    });
-
-  } catch (error) {
-    console.error('Error en Vision API:', error.message);
-    res.status(500).json({ error: 'Error procesando imagen: ' + error.message });
-  }
-});
-
-// ============================================
-// CLAUDE VISION API - Análisis inteligente de imágenes
-// ============================================
-
-app.post('/api/vision/analyze-claude', async function(req, res) {
   if (!anthropic) {
     return res.status(500).json({ error: 'Claude API no configurada. Agregá ANTHROPIC_API_KEY en las variables de entorno.' });
   }
@@ -2135,54 +1894,6 @@ Respondé SOLO con JSON válido, sin explicaciones:
     res.status(500).json({ error: 'Error procesando imagen con Claude: ' + error.message });
   }
 });
-
-// Función para nombrar colores básicos (optimizada para fundas de celular)
-function getColorName(r, g, b) {
-  var colors = {
-    'Negro': { r: 0, g: 0, b: 0 },
-    'Blanco': { r: 255, g: 255, b: 255 },
-    'Rojo': { r: 255, g: 0, b: 0 },
-    'Verde': { r: 0, g: 200, b: 0 },
-    'Verde Oscuro': { r: 0, g: 100, b: 0 },
-    'Azul': { r: 0, g: 0, b: 255 },
-    'Azul Marino': { r: 0, g: 0, b: 128 },
-    'Amarillo': { r: 255, g: 255, b: 0 },
-    'Rosa': { r: 255, g: 105, b: 180 },
-    'Rosa Claro': { r: 255, g: 182, b: 193 },
-    'Lila': { r: 200, g: 162, b: 200 },
-    'Lavanda': { r: 230, g: 190, b: 230 },
-    'Naranja': { r: 255, g: 165, b: 0 },
-    'Morado': { r: 128, g: 0, b: 128 },
-    'Violeta': { r: 148, g: 0, b: 211 },
-    'Celeste': { r: 135, g: 206, b: 235 },
-    'Gris': { r: 128, g: 128, b: 128 },
-    'Gris Oscuro': { r: 64, g: 64, b: 64 },
-    'Marron': { r: 139, g: 69, b: 19 },
-    'Beige': { r: 245, g: 245, b: 220 },
-    'Turquesa': { r: 64, g: 224, b: 208 },
-    'Coral': { r: 255, g: 127, b: 80 },
-    'Bordo': { r: 128, g: 0, b: 32 },
-    'Transparente': { r: 250, g: 250, b: 250 }
-  };
-
-  var minDistance = Infinity;
-  var closestColor = 'Desconocido';
-
-  for (var name in colors) {
-    var c = colors[name];
-    var distance = Math.sqrt(
-      Math.pow(r - c.r, 2) +
-      Math.pow(g - c.g, 2) +
-      Math.pow(b - c.b, 2)
-    );
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestColor = name;
-    }
-  }
-
-  return closestColor;
-}
 
 app.get('/api/sync', async function(req, res) {
   await syncPendingShipments();
