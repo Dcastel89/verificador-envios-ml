@@ -234,10 +234,10 @@
       <div class="camera-container" id="cameraContainer">
         <video id="video" playsinline></video>
         <button type="button" class="close-camera" id="closeCamera">X</button>
-        <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Foto OCR</button>
+        <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar</button>
       </div>
       <div class="vision-result hidden" id="visionResult">
-        <div><strong>Texto detectado:</strong></div>
+        <div><strong>Resultado:</strong></div>
         <div class="vision-result-text" id="visionText"></div>
         <div class="vision-result-colors" id="visionColors"></div>
       </div>
@@ -875,7 +875,7 @@
         .then(function(response) { return response.json(); })
         .then(function(data) {
           capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Foto OCR';
+          capturePhotoBtn.textContent = 'Analizar';
 
           if (data.success) {
             // Si hay verificación con producto específico
@@ -894,7 +894,7 @@
         })
         .catch(function(err) {
           capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Foto OCR';
+          capturePhotoBtn.textContent = 'Analizar';
           showStatus('Error de conexion', 'error');
           console.error(err);
         });
@@ -953,94 +953,17 @@
       }
 
       function showVisionResult(data) {
-        visionText.textContent = data.text || '(sin texto)';
+        // Mostrar info de Claude (modelo, color, tipo)
+        var info = [];
+        if (data.modeloDetectado) info.push('Modelo: ' + data.modeloDetectado);
+        if (data.colorDetectado) info.push('Color: ' + data.colorDetectado);
+        if (data.tipoProducto) info.push('Tipo: ' + data.tipoProducto);
 
-        // Mostrar colores
-        visionColors.innerHTML = '';
-        if (data.colors && data.colors.length > 0) {
-          var colorLabel = document.createElement('span');
-          colorLabel.textContent = 'Colores: ';
-          colorLabel.style.fontWeight = 'bold';
-          visionColors.appendChild(colorLabel);
-
-          data.colors.forEach(function(c) {
-            var chip = document.createElement('span');
-            chip.className = 'vision-color-chip';
-            chip.textContent = c.name;
-            chip.style.backgroundColor = 'rgb(' + c.red + ',' + c.green + ',' + c.blue + ')';
-            chip.style.color = (c.red + c.green + c.blue) > 380 ? '#000' : '#fff';
-            visionColors.appendChild(chip);
-          });
-        }
+        visionText.textContent = info.length > 0 ? info.join(' | ') : '(sin datos)';
+        visionColors.innerHTML = data.confianza ? '<strong>Confianza:</strong> ' + data.confianza : '';
 
         visionResult.classList.remove('hidden');
         hideStatus();
-      }
-
-      function tryMatchTextWithSku(fullText, words) {
-        // Buscar en el texto detectado si hay algún SKU que coincida
-        var textUpper = fullText.toUpperCase().replace(/\s+/g, '');
-
-        for (var i = 0; i < currentItems.length; i++) {
-          var item = currentItems[i];
-          var sku = item.sku.toUpperCase();
-
-          // Buscar coincidencia exacta o parcial del SKU en el texto
-          if (textUpper.includes(sku) || sku.includes(textUpper)) {
-            var unitIndex = findNextUncheckedUnit(i);
-            if (unitIndex >= 0) {
-              // Marcar como verificado via OCR
-              if (!unitChecks[i]) unitChecks[i] = [];
-              unitChecks[i][unitIndex] = { checked: true, method: 'scanned' };
-
-              var checkbox = document.querySelector('.unit-checkbox[data-item="' + i + '"][data-unit="' + unitIndex + '"]');
-              if (checkbox) {
-                checkbox.checked = true;
-                checkbox.classList.add('scanned');
-                setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
-              }
-
-              updateCard(i);
-              highlightCard(i);
-              showStatus('OCR Match: ' + item.sku, 'success');
-              if (navigator.vibrate) navigator.vibrate(100);
-              return;
-            } else {
-              showStatus('SKU ya verificado: ' + item.sku, 'error');
-              return;
-            }
-          }
-        }
-
-        // También buscar cada palabra individual
-        for (var w = 0; w < words.length; w++) {
-          var word = words[w].toUpperCase();
-          for (var j = 0; j < currentItems.length; j++) {
-            var itemJ = currentItems[j];
-            if (word === itemJ.sku.toUpperCase()) {
-              var unitIdx = findNextUncheckedUnit(j);
-              if (unitIdx >= 0) {
-                if (!unitChecks[j]) unitChecks[j] = [];
-                unitChecks[j][unitIdx] = { checked: true, method: 'scanned' };
-
-                var cb = document.querySelector('.unit-checkbox[data-item="' + j + '"][data-unit="' + unitIdx + '"]');
-                if (cb) {
-                  cb.checked = true;
-                  cb.classList.add('scanned');
-                  setTimeout(function() { cb.classList.remove('scanned'); }, 2000);
-                }
-
-                updateCard(j);
-                highlightCard(j);
-                showStatus('OCR Match: ' + itemJ.sku, 'success');
-                if (navigator.vibrate) navigator.vibrate(100);
-                return;
-              }
-            }
-          }
-        }
-
-        showStatus('Texto detectado, sin match con SKUs', 'loading');
       }
 
       capturePhotoBtn.onclick = capturePhoto;
@@ -1383,7 +1306,7 @@
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v15 - Claude Vision verification + product photo button');
+      console.log('App iniciada v16 - Claude Vision cleanup + dead code removal');
     })();
   </script>
 </body>
