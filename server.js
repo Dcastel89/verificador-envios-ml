@@ -1813,6 +1813,110 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
 // GOOGLE VISION API - OCR Y DETECCIÓN DE COLOR
 // ============================================
 
+// Función para limpiar y normalizar texto OCR
+function cleanOCRText(text) {
+  if (!text) return '';
+
+  var cleaned = text
+    .toUpperCase()
+    .trim()
+    // Eliminar saltos de línea y espacios extras
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    // Correcciones comunes de OCR
+    .replace(/[oO]/g, '0')  // O -> 0 (asumiendo que son códigos)
+    .replace(/[lI|]/g, '1') // l, I, | -> 1
+    .replace(/[Ss]/g, '5')  // S -> 5 (común en códigos)
+    .replace(/[Zz]/g, '2')  // Z -> 2
+    .replace(/[Bb]/g, '8')  // B -> 8
+    .replace(/[Gg]/g, '6')  // G -> 6
+    .replace(/[Tt]/g, '7')  // T -> 7 (menos común)
+    .replace(/[^A-Z0-9\s\-\.]/g, ''); // Solo alfanuméricos, espacios, guiones, puntos
+
+  return cleaned;
+}
+
+// Función alternativa: limpiar pero mantener letras (para cuando necesites texto real)
+function cleanOCRTextPreserveLetters(text) {
+  if (!text) return '';
+
+  return text
+    .toUpperCase()
+    .trim()
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    // Solo correcciones obvias
+    .replace(/[|]/g, 'I')
+    .replace(/[0]/g, 'O') // En contexto de texto, 0 suele ser O
+    .replace(/[^A-Z0-9\s\-\.]/g, '');
+}
+
+// Función para extraer posibles SKUs del texto
+function extractPossibleSKUs(text, words) {
+  var skuPatterns = [];
+
+  // Buscar patrones comunes de SKU (3-15 caracteres alfanuméricos)
+  var allText = (text + ' ' + words.join(' ')).toUpperCase();
+  var matches = allText.match(/[A-Z0-9]{3,15}/g) || [];
+
+  matches.forEach(function(match) {
+    // Filtrar palabras comunes que no son SKUs
+    var commonWords = ['THE', 'AND', 'FOR', 'CON', 'SIN', 'PARA', 'COLOR', 'TALLE', 'SIZE'];
+    if (!commonWords.includes(match) && match.length >= 3) {
+      skuPatterns.push(match);
+    }
+  });
+
+  return [...new Set(skuPatterns)]; // Eliminar duplicados
+}
+
+// Función para determinar el color dominante del PRODUCTO (no del fondo)
+function getDominantProductColor(colors) {
+  if (!colors || colors.length === 0) return null;
+
+  // Filtrar colores que probablemente son fondo
+  var productColors = colors.filter(function(c) {
+    var rgb = c.color || c;
+    var r = rgb.red || 0;
+    var g = rgb.green || 0;
+    var b = rgb.blue || 0;
+
+    // Calcular luminosidad
+    var luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+
+    // Calcular saturación aproximada
+    var max = Math.max(r, g, b);
+    var min = Math.min(r, g, b);
+    var saturation = max === 0 ? 0 : (max - min) / max;
+
+    // Filtrar:
+    // - Colores muy claros (fondo blanco) - luminance > 240
+    // - Colores muy oscuros (fondo negro) - luminance < 15
+    // - Colores grises (baja saturación y luminancia media)
+    var isBackground = (luminance > 240) ||
+                       (luminance < 15) ||
+                       (saturation < 0.1 && luminance > 100 && luminance < 200);
+
+    return !isBackground;
+  });
+
+  // Si no quedó ninguno, usar el de mayor score (excluyendo blancos puros)
+  if (productColors.length === 0) {
+    productColors = colors.filter(function(c) {
+      var rgb = c.color || c;
+      var luminance = (0.299 * (rgb.red || 0) + 0.587 * (rgb.green || 0) + 0.114 * (rgb.blue || 0));
+      return luminance < 250; // Excluir solo blancos muy puros
+    });
+  }
+
+  // Retornar el color con mayor score entre los filtrados
+  if (productColors.length === 0) return colors[0]; // Fallback al primero
+
+  return productColors.reduce(function(best, current) {
+    return (current.score || 0) > (best.score || 0) ? current : best;
+  }, productColors[0]);
+}
+
 app.post('/api/vision/analyze', async function(req, res) {
   if (!vision) {
     return res.status(500).json({ error: 'Vision API no configurada' });
@@ -1835,7 +1939,7 @@ app.post('/api/vision/analyze', async function(req, res) {
           image: { content: imageBase64 },
           features: [
             { type: 'TEXT_DETECTION', maxResults: 10 },
-            { type: 'IMAGE_PROPERTIES', maxResults: 5 }
+            { type: 'IMAGE_PROPERTIES', maxResults: 10 }
           ]
         }]
       }
@@ -1846,13 +1950,19 @@ app.post('/api/vision/analyze', async function(req, res) {
     var imageProperties = result.imagePropertiesAnnotation || {};
 
     // Extraer texto detectado
-    var fullText = textAnnotations.length > 0 ? textAnnotations[0].description : '';
+    var rawText = textAnnotations.length > 0 ? textAnnotations[0].description : '';
     var words = textAnnotations.slice(1).map(function(t) { return t.description; });
 
+    // Texto limpio (convertido a números donde hay ambigüedad)
+    var cleanedText = cleanOCRText(rawText);
+
+    // Posibles SKUs extraídos
+    var possibleSKUs = extractPossibleSKUs(rawText, words);
+
     // Extraer colores dominantes
-    var dominantColors = [];
+    var allColors = [];
     if (imageProperties.dominantColors && imageProperties.dominantColors.colors) {
-      dominantColors = imageProperties.dominantColors.colors.slice(0, 5).map(function(c) {
+      allColors = imageProperties.dominantColors.colors.map(function(c) {
         var rgb = c.color;
         return {
           red: rgb.red || 0,
@@ -1860,16 +1970,41 @@ app.post('/api/vision/analyze', async function(req, res) {
           blue: rgb.blue || 0,
           score: c.score,
           pixelFraction: c.pixelFraction,
+          color: c.color,
           name: getColorName(rgb.red || 0, rgb.green || 0, rgb.blue || 0)
         };
       });
     }
 
+    // Obtener el color dominante del producto (no del fondo)
+    var dominantProductColor = getDominantProductColor(allColors);
+    var mainColor = dominantProductColor ? {
+      name: getColorName(dominantProductColor.red || (dominantProductColor.color && dominantProductColor.color.red) || 0,
+                         dominantProductColor.green || (dominantProductColor.color && dominantProductColor.color.green) || 0,
+                         dominantProductColor.blue || (dominantProductColor.color && dominantProductColor.color.blue) || 0),
+      rgb: {
+        red: dominantProductColor.red || (dominantProductColor.color && dominantProductColor.color.red) || 0,
+        green: dominantProductColor.green || (dominantProductColor.color && dominantProductColor.color.green) || 0,
+        blue: dominantProductColor.blue || (dominantProductColor.color && dominantProductColor.color.blue) || 0
+      },
+      score: dominantProductColor.score,
+      pixelFraction: dominantProductColor.pixelFraction
+    } : null;
+
     res.json({
       success: true,
-      text: fullText,
+      // Texto original
+      rawText: rawText,
+      // Texto limpio (para códigos/SKUs)
+      text: cleanedText,
+      // Palabras individuales
       words: words,
-      colors: dominantColors
+      // Posibles SKUs detectados
+      possibleSKUs: possibleSKUs,
+      // Color principal del producto
+      mainColor: mainColor,
+      // Todos los colores (para debug)
+      allColors: allColors.slice(0, 5)
     });
 
   } catch (error) {
