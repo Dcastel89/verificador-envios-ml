@@ -1848,25 +1848,47 @@ app.post('/api/vision/analyze', async function(req, res) {
 PRODUCTO ESPERADO DEL PEDIDO:
 ${typeof productoEsperado === 'string' ? productoEsperado : JSON.stringify(productoEsperado, null, 2)}
 
+REGLAS DE COMPARACIÓN DE MODELOS:
+
+1. IGNORAR LA MARCA - Solo importa el código de modelo:
+   - "MOTO G15" = "G15" ✓
+   - "Samsung A25" = "A25" ✓
+   - "Xiaomi Redmi 14" = "Redmi 14" ✓
+   - "iPhone 15" = "15" (para Apple) ✓
+
+2. LOS SUFIJOS DE MODELO SON DIFERENTES - Ser estricto:
+   - A03 ≠ A03s ≠ A03 Core (son modelos distintos!)
+   - A15 ≠ A16 (números diferentes = modelos diferentes)
+   - G24 ≠ G24 Power (con sufijo = modelo diferente)
+   - Redmi 14 ≠ Redmi Note 14 (Note es otro modelo)
+
+3. EJEMPLOS DE COINCIDENCIAS CORRECTAS:
+   - Pedido "G15", foto dice "MOTO G15" → CORRECTO
+   - Pedido "A25", foto dice "For Samsung Galaxy A25" → CORRECTO
+   - Pedido "Redmi 14", foto dice "Xiaomi Redmi 14" → CORRECTO
+
+4. EJEMPLOS DE COINCIDENCIAS INCORRECTAS:
+   - Pedido "A03", foto dice "A03s" → INCORRECTO (sufijo diferente)
+   - Pedido "A15", foto dice "A16" → INCORRECTO (número diferente)
+   - Pedido "G24", foto dice "G24 Power" → INCORRECTO (variante diferente)
+
 INSTRUCCIONES:
-1. Mirá la foto del producto
-2. Compará con lo que se pidió (modelo de celular, color, tipo de producto)
-3. Buscá códigos/etiquetas en la imagen que confirmen el modelo (ej: A25, A36, "For Samsung A06")
-4. Verificá que el COLOR del producto coincida con lo pedido
+1. Extraé el CÓDIGO DE MODELO de la etiqueta (ignorá la marca)
+2. Compará el código con el pedido usando las reglas anteriores
+3. Verificá que el COLOR coincida
 
 IMPORTANTE:
 - El fondo suele ser madera, ignoralo
 - Las fundas vienen en bolsas transparentes con etiquetas
-- Los códigos tipo "A25", "A36" indican el modelo de celular
 - Colores comunes: Negro, Blanco, Transparente, Rojo, Azul, Rosa, Lila, Verde, Celeste, Amarillo
 
 Respondé SOLO con este JSON:
 {
   "correcto": true/false,
   "productoDetectado": "descripción breve de lo que ves en la foto",
-  "modeloDetectado": "código del modelo si lo ves (ej: A25, A36)",
+  "modeloDetectado": "código del modelo sin marca (ej: A25, G15, no Samsung A25)",
   "colorDetectado": "color del producto",
-  "motivo": "si es incorrecto, explicá por qué",
+  "motivo": "si es incorrecto, explicá por qué usando las reglas",
   "confianza": "alta/media/baja"
 }`;
     } else {
