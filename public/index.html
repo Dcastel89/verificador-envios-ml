@@ -842,10 +842,27 @@
             var now = new Date();
             resumenFecha.textContent = now.toLocaleDateString('es-AR');
             resumenTotal.textContent = data.total || 0;
-            resumenVerificados.textContent = '-';
-            resumenPendientes.textContent = data.total || 0;
 
             enviosDelDia = data.envios || [];
+
+            // Contar verificados y pendientes según el estado
+            var verificados = 0;
+            var pendientes = 0;
+            var enviosPendientes = [];
+
+            for (var i = 0; i < enviosDelDia.length; i++) {
+              var estado = enviosDelDia[i].estado || 'Pendiente';
+              if (estado === 'Verificado') {
+                verificados++;
+              } else if (estado === 'Pendiente') {
+                pendientes++;
+                enviosPendientes.push(enviosDelDia[i]);
+              }
+              // Los despachados/entregados no se cuentan como pendientes
+            }
+
+            resumenVerificados.textContent = verificados;
+            resumenPendientes.textContent = pendientes;
 
             resumenStatus.className = 'resumen-status';
             if (data.total === 0) {
@@ -853,10 +870,14 @@
               resumenStatus.textContent = 'No hay envios del dia';
               resumenPendientesList.classList.add('hidden');
               cuentaDesglose.classList.remove('show');
+            } else if (pendientes === 0) {
+              resumenStatus.classList.add('completo');
+              resumenStatus.textContent = 'Todos verificados (' + verificados + ')';
+              resumenPendientesList.classList.add('hidden');
             } else {
               resumenStatus.classList.add('pendiente');
-              resumenStatus.textContent = data.total + ' envio(s) pendientes';
-              mostrarListaPendientes(enviosDelDia);
+              resumenStatus.textContent = pendientes + ' pendiente(s), ' + verificados + ' verificado(s)';
+              mostrarListaPendientes(enviosPendientes);
             }
 
             // Si hay cuenta seleccionada, actualizar desglose
