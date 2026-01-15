@@ -1853,14 +1853,24 @@ app.post('/api/vision/analyze', async function(req, res) {
           },
           {
             type: 'text',
-            text: `Analizá esta imagen de una funda de celular.
+            text: `Analizá esta imagen de un producto (probablemente una funda de celular).
 
-Extraé:
-1. **SKU/Código**: Buscá el código del producto en etiquetas. Suele ser formato letra+números (ej: A25, A36, B12). Ignorá textos como "Fashion Case", "New", "4G/5G", etc.
-2. **Color de la funda**: Identificá el color REAL de la funda (no del fondo, empaque o etiquetas). Usá nombres simples: Negro, Blanco, Rojo, Azul, Verde, Rosa, Lila, Celeste, Amarillo, Naranja, Gris, Transparente, etc.
+TAREA: Extraer el código/SKU y el color del producto.
 
-Respondé SOLO con JSON válido, sin explicaciones:
-{"sku": "CODIGO", "color": "COLOR", "confianza": "alta/media/baja"}`
+DÓNDE BUSCAR EL SKU:
+- En etiquetas blancas pegadas al producto (suelen decir A25, A36, B12, etc.)
+- Impreso en el empaque (puede decir "For A06", "SX A06", etc.)
+- En códigos de barras con texto (ej: FTA06)
+- El SKU suele ser: 1-2 letras + 2-3 números (A25, A06, B12) o similar
+
+IGNORAR: "Fashion Case", "New", "Phone case", "Good Quality", "4G", "5G", "Made in China"
+
+COLOR: Identificá el color de la FUNDA/PRODUCTO en sí (no del fondo de madera, empaque transparente o etiquetas).
+
+Respondé SOLO con este JSON:
+{"sku": "CODIGO_ENCONTRADO", "color": "COLOR_DEL_PRODUCTO", "confianza": "alta/media/baja"}
+
+Si no encontrás SKU, poné null en sku.`
           }
         ]
       }]
@@ -1868,6 +1878,7 @@ Respondé SOLO con JSON válido, sin explicaciones:
 
     // Parsear respuesta de Claude
     var claudeText = response.content[0].text.trim();
+    console.log('Claude response:', claudeText);
 
     // Intentar extraer JSON de la respuesta
     var jsonMatch = claudeText.match(/\{[\s\S]*\}/);
