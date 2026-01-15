@@ -1082,10 +1082,10 @@ async function ensureDaySheetExists(sheetName) {
 
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: sheetName + '!A1:I1',
+          range: sheetName + '!A1:J1',
           valueInputOption: 'USER_ENTERED',
           resource: {
-            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo']]
+            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo', 'TipoLogistica']]
           }
         });
 
@@ -1180,12 +1180,12 @@ async function addPendingShipments(shipments, sheetName) {
       var fecha = argentinaDate.toLocaleDateString('es-AR');
       var hora = argentinaDate.toLocaleTimeString('es-AR');
 
-      return [fecha, hora, s.id, s.account, s.receiverName, '', 'Pendiente', ''];
+      return [fecha, hora, s.id, s.account, s.receiverName, '', 'Pendiente', '', '', s.logisticType || ''];
     });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:H',
+      range: sheetName + '!A:J',
       valueInputOption: 'USER_ENTERED',
       resource: { values: rows }
     });
@@ -1438,7 +1438,8 @@ async function syncPendingShipments() {
   console.log('Sync completado. Nuevos: ' + newShipments.length);
 }
 
-setInterval(syncPendingShipments, 60000);
+// Sync automático desactivado - ahora se usa solo sync manual + webhooks
+// setInterval(syncPendingShipments, 60000);
 
 function describeSKU(sku) {
   if (!sku) return '';
@@ -1753,37 +1754,48 @@ app.get('/api/sync-morning', async function(req, res) {
   }
 });
 
-// Endpoint para obtener envíos del día de trabajo actual (respetando horarios de corte)
+// Endpoint para obtener envíos del día desde Google Sheets (persistente)
 app.get('/api/envios-del-dia', async function(req, res) {
   try {
-    var allShipments = [];
+    var sheetName = getTodaySheetName();
+    var now = getArgentinaTime();
 
-    for (var i = 0; i < accounts.length; i++) {
-      var shipments = await getReadyToShipOrders(accounts[i]);
-
-      // Filtrar envíos que corresponden al día de trabajo actual según horario de corte
-      var filtered = shipments.filter(function(s) {
-        return shouldProcessOrder(s.dateCreated, s.account, s.logisticType);
+    if (!sheets || !SHEET_ID) {
+      return res.json({
+        fecha: now.toLocaleDateString('es-AR'),
+        total: 0,
+        envios: []
       });
-
-      allShipments = allShipments.concat(filtered);
     }
 
-    var now = getArgentinaTime();
+    await ensureDaySheetExists(sheetName);
+
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+
+    var rows = response.data.values || [];
+    var envios = [];
+
+    // Saltar encabezado (fila 0)
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row || !row[2]) continue; // Sin ID de envío
+
+      envios.push({
+        id: row[2] || '',
+        cuenta: row[3] || '',
+        receptor: row[4] || '',
+        estado: row[6] || 'Pendiente',
+        logisticType: row[9] || ''
+      });
+    }
 
     res.json({
       fecha: now.toLocaleDateString('es-AR'),
-      total: allShipments.length,
-      envios: allShipments.map(function(s) {
-        return {
-          id: s.id,
-          orderId: s.orderId,
-          cuenta: s.account,
-          receptor: s.receiverName,
-          fecha: s.dateCreated,
-          logisticType: s.logisticType
-        };
-      })
+      total: envios.length,
+      envios: envios
     });
   } catch (error) {
     console.error('Error obteniendo envios del dia:', error.message);
