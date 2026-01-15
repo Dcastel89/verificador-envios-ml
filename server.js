@@ -12,6 +12,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Google Sheets setup
 var sheets = null;
+var vision = null;
 var SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
@@ -19,9 +20,13 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) 
     process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     null,
     process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    ['https://www.googleapis.com/auth/spreadsheets']
+    [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/cloud-vision'
+    ]
   );
   sheets = google.sheets({ version: 'v4', auth: auth });
+  vision = google.vision({ version: 'v1', auth: auth });
 }
 
 // Cuentas de MercadoLibre - los tokens se actualizan desde Google Sheets
@@ -1235,6 +1240,113 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
 
   res.json({ success: true, message: 'Registro guardado' });
 });
+
+// ============================================
+// GOOGLE VISION API - OCR Y DETECCIÓN DE COLOR
+// ============================================
+
+app.post('/api/vision/analyze', async function(req, res) {
+  if (!vision) {
+    return res.status(500).json({ error: 'Vision API no configurada' });
+  }
+
+  var imageBase64 = req.body.image; // Imagen en base64 (sin el prefijo data:image/...)
+  if (!imageBase64) {
+    return res.status(400).json({ error: 'No se recibio imagen' });
+  }
+
+  // Remover prefijo data:image si existe
+  if (imageBase64.includes('base64,')) {
+    imageBase64 = imageBase64.split('base64,')[1];
+  }
+
+  try {
+    var response = await vision.images.annotate({
+      requestBody: {
+        requests: [{
+          image: { content: imageBase64 },
+          features: [
+            { type: 'TEXT_DETECTION', maxResults: 10 },
+            { type: 'IMAGE_PROPERTIES', maxResults: 5 }
+          ]
+        }]
+      }
+    });
+
+    var result = response.data.responses[0];
+    var textAnnotations = result.textAnnotations || [];
+    var imageProperties = result.imagePropertiesAnnotation || {};
+
+    // Extraer texto detectado
+    var fullText = textAnnotations.length > 0 ? textAnnotations[0].description : '';
+    var words = textAnnotations.slice(1).map(function(t) { return t.description; });
+
+    // Extraer colores dominantes
+    var dominantColors = [];
+    if (imageProperties.dominantColors && imageProperties.dominantColors.colors) {
+      dominantColors = imageProperties.dominantColors.colors.slice(0, 5).map(function(c) {
+        var rgb = c.color;
+        return {
+          red: rgb.red || 0,
+          green: rgb.green || 0,
+          blue: rgb.blue || 0,
+          score: c.score,
+          pixelFraction: c.pixelFraction,
+          name: getColorName(rgb.red || 0, rgb.green || 0, rgb.blue || 0)
+        };
+      });
+    }
+
+    res.json({
+      success: true,
+      text: fullText,
+      words: words,
+      colors: dominantColors
+    });
+
+  } catch (error) {
+    console.error('Error en Vision API:', error.message);
+    res.status(500).json({ error: 'Error procesando imagen: ' + error.message });
+  }
+});
+
+// Función para nombrar colores básicos
+function getColorName(r, g, b) {
+  var colors = {
+    'Negro': { r: 0, g: 0, b: 0 },
+    'Blanco': { r: 255, g: 255, b: 255 },
+    'Rojo': { r: 255, g: 0, b: 0 },
+    'Verde': { r: 0, g: 255, b: 0 },
+    'Azul': { r: 0, g: 0, b: 255 },
+    'Amarillo': { r: 255, g: 255, b: 0 },
+    'Rosa': { r: 255, g: 192, b: 203 },
+    'Naranja': { r: 255, g: 165, b: 0 },
+    'Morado': { r: 128, g: 0, b: 128 },
+    'Celeste': { r: 135, g: 206, b: 235 },
+    'Gris': { r: 128, g: 128, b: 128 },
+    'Marron': { r: 139, g: 69, b: 19 },
+    'Beige': { r: 245, g: 245, b: 220 },
+    'Turquesa': { r: 64, g: 224, b: 208 }
+  };
+
+  var minDistance = Infinity;
+  var closestColor = 'Desconocido';
+
+  for (var name in colors) {
+    var c = colors[name];
+    var distance = Math.sqrt(
+      Math.pow(r - c.r, 2) +
+      Math.pow(g - c.g, 2) +
+      Math.pow(b - c.b, 2)
+    );
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestColor = name;
+    }
+  }
+
+  return closestColor;
+}
 
 app.get('/api/sync', async function(req, res) {
   await syncPendingShipments();
