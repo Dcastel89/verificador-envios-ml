@@ -926,23 +926,20 @@
         var item = currentItems[itemIndex];
         if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
 
-        // Marcar TODAS las unidades del producto
+        // Marcar solo la primera unidad no verificada
         for (var j = 0; j < item.quantity; j++) {
-          unitChecks[itemIndex][j] = { checked: true, method: method };
-          // Actualizar checkbox en UI
-          var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
-          if (checkbox) {
-            checkbox.checked = true;
-            checkbox.classList.add('scanned');
+          if (!unitChecks[itemIndex][j] || !unitChecks[itemIndex][j].checked) {
+            unitChecks[itemIndex][j] = { checked: true, method: method };
+            // Actualizar checkbox en UI
+            var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
+            if (checkbox) {
+              checkbox.checked = true;
+              checkbox.classList.add('scanned');
+              setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
+            }
+            break; // Solo marcar una
           }
         }
-        // Quitar clase scanned después de animación
-        setTimeout(function() {
-          var checkboxes = document.querySelectorAll('.unit-checkbox[data-item="' + itemIndex + '"]');
-          for (var k = 0; k < checkboxes.length; k++) {
-            checkboxes[k].classList.remove('scanned');
-          }
-        }, 2000);
 
         updateCard(itemIndex);
         highlightCard(itemIndex);
