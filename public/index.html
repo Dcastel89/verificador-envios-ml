@@ -108,8 +108,12 @@
     .cuenta-desglose-item { text-align: center; }
     .cuenta-desglose-num { font-size: 20px; font-weight: 700; }
     .cuenta-desglose-num.flex { color: #7c3aed; }
-    .cuenta-desglose-num.otros { color: #059669; }
+    .cuenta-desglose-num.colecta { color: #059669; }
+    .cuenta-desglose-num.pickit { color: #ea580c; }
     .cuenta-desglose-label { font-size: 11px; color: #6b7280; }
+    .cuenta-btn-total { background: #f0fdf4; border-color: #22c55e; }
+    .cuenta-btn-total:hover { background: #dcfce7; border-color: #16a34a; }
+    .cuenta-btn-total.active { background: #22c55e; border-color: #22c55e; color: white; }
     .resumen-status { padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; }
     .resumen-status.completo { background: #dcfce7; color: #16a34a; }
     .resumen-status.pendiente { background: #fef3c7; color: #b45309; }
@@ -167,6 +171,9 @@
       </div>
       <div class="resumen-status vacio" id="resumenStatus">Cargando...</div>
       <div class="cuentas-btns" id="cuentasBtns">
+        <button type="button" class="cuenta-btn cuenta-btn-total" data-cuenta="TOTAL">TOTAL</button>
+      </div>
+      <div class="cuentas-btns" id="cuentasBtnsIndividuales">
         <button type="button" class="cuenta-btn" data-cuenta="TIENDA">TIENDA</button>
         <button type="button" class="cuenta-btn" data-cuenta="SHOP">SHOP</button>
         <button type="button" class="cuenta-btn" data-cuenta="FURST">FURST</button>
@@ -175,14 +182,18 @@
       </div>
       <div class="cuenta-desglose" id="cuentaDesglose">
         <div class="cuenta-desglose-title" id="cuentaDesgloseTitulo">-</div>
-        <div class="cuenta-desglose-items">
+        <div class="cuenta-desglose-items" id="cuentaDesgloseItems">
           <div class="cuenta-desglose-item">
             <div class="cuenta-desglose-num flex" id="cuentaFlex">0</div>
             <div class="cuenta-desglose-label">FLEX</div>
           </div>
-          <div class="cuenta-desglose-item">
-            <div class="cuenta-desglose-num otros" id="cuentaOtros">0</div>
-            <div class="cuenta-desglose-label">OTROS</div>
+          <div class="cuenta-desglose-item" id="cuentaColectaItem">
+            <div class="cuenta-desglose-num colecta" id="cuentaColecta">0</div>
+            <div class="cuenta-desglose-label" id="cuentaColectaLabel">COLECTA</div>
+          </div>
+          <div class="cuenta-desglose-item hidden" id="cuentaPickitItem">
+            <div class="cuenta-desglose-num pickit" id="cuentaPickit">0</div>
+            <div class="cuenta-desglose-label">PICKIT</div>
           </div>
         </div>
       </div>
@@ -807,13 +818,22 @@
       var resumenRefresh = document.getElementById('resumenRefresh');
       var actualizarEstadosBtn = document.getElementById('actualizarEstados');
       var cuentasBtns = document.getElementById('cuentasBtns');
+      var cuentasBtnsIndividuales = document.getElementById('cuentasBtnsIndividuales');
       var cuentaDesglose = document.getElementById('cuentaDesglose');
       var cuentaDesgloseTitulo = document.getElementById('cuentaDesgloseTitulo');
       var cuentaFlex = document.getElementById('cuentaFlex');
-      var cuentaOtros = document.getElementById('cuentaOtros');
+      var cuentaColecta = document.getElementById('cuentaColecta');
+      var cuentaColectaLabel = document.getElementById('cuentaColectaLabel');
+      var cuentaColectaItem = document.getElementById('cuentaColectaItem');
+      var cuentaPickit = document.getElementById('cuentaPickit');
+      var cuentaPickitItem = document.getElementById('cuentaPickitItem');
 
       var enviosDelDia = []; // Guardar envíos para filtrar por cuenta
       var cuentaSeleccionada = null;
+
+      // Cuentas que usan COLECTA vs PICKIT
+      var cuentasColecta = ['TIENDA', 'FURST'];
+      var cuentasPickit = ['SHOP', 'MUN1', 'MUN2'];
 
       function cargarResumenDia() {
         fetch(API_URL + '/api/envios-del-dia')
@@ -841,7 +861,11 @@
 
             // Si hay cuenta seleccionada, actualizar desglose
             if (cuentaSeleccionada) {
-              mostrarDesgloseCuenta(cuentaSeleccionada);
+              if (cuentaSeleccionada === 'TOTAL') {
+                mostrarDesgloseTotal();
+              } else {
+                mostrarDesgloseCuenta(cuentaSeleccionada);
+              }
             }
           })
           .catch(function(err) {
@@ -873,10 +897,40 @@
         }
       }
 
+      function mostrarDesgloseTotal() {
+        var flexCount = 0;
+        var colectaCount = 0;
+        var pickitCount = 0;
+
+        for (var i = 0; i < enviosDelDia.length; i++) {
+          var e = enviosDelDia[i];
+          if (e.logisticType === 'self_service') {
+            flexCount++;
+          } else if (e.logisticType === 'cross_docking') {
+            colectaCount++;
+          } else {
+            pickitCount++;
+          }
+        }
+
+        cuentaDesgloseTitulo.textContent = 'TOTAL (' + enviosDelDia.length + ' envios)';
+        cuentaFlex.textContent = flexCount;
+        cuentaColecta.textContent = colectaCount;
+        cuentaColectaLabel.textContent = 'COLECTA';
+        cuentaColectaItem.classList.remove('hidden');
+        cuentaPickit.textContent = pickitCount;
+        cuentaPickitItem.classList.remove('hidden');
+        cuentaDesglose.classList.add('show');
+
+        mostrarListaPendientes(enviosDelDia);
+      }
+
       function mostrarDesgloseCuenta(cuenta) {
         var enviosCuenta = enviosDelDia.filter(function(e) { return e.cuenta === cuenta; });
         var flexCount = 0;
         var otrosCount = 0;
+
+        var usaColecta = cuentasColecta.indexOf(cuenta) !== -1;
 
         for (var i = 0; i < enviosCuenta.length; i++) {
           if (enviosCuenta[i].logisticType === 'self_service') {
@@ -888,37 +942,53 @@
 
         cuentaDesgloseTitulo.textContent = cuenta + ' (' + enviosCuenta.length + ' envios)';
         cuentaFlex.textContent = flexCount;
-        cuentaOtros.textContent = otrosCount;
+        cuentaColecta.textContent = otrosCount;
+        cuentaColectaLabel.textContent = usaColecta ? 'COLECTA' : 'PICKIT';
+        cuentaColectaItem.classList.remove('hidden');
+        cuentaPickitItem.classList.add('hidden');
         cuentaDesglose.classList.add('show');
 
         // Mostrar solo los pendientes de esta cuenta
         mostrarListaPendientes(enviosCuenta);
       }
 
-      // Manejar clicks en botones de cuentas
-      cuentasBtns.onclick = function(e) {
-        if (e.target.classList.contains('cuenta-btn')) {
-          var cuenta = e.target.getAttribute('data-cuenta');
+      // Deseleccionar todos los botones
+      function deseleccionarTodos() {
+        var allBtns = document.querySelectorAll('.cuenta-btn');
+        for (var i = 0; i < allBtns.length; i++) {
+          allBtns[i].classList.remove('active');
+        }
+      }
 
-          // Toggle: si ya está seleccionada, deseleccionar
-          if (cuentaSeleccionada === cuenta) {
-            cuentaSeleccionada = null;
-            e.target.classList.remove('active');
-            cuentaDesglose.classList.remove('show');
-            mostrarListaPendientes(enviosDelDia);
+      // Manejar click en botón TOTAL
+      function handleCuentaClick(e) {
+        if (!e.target.classList.contains('cuenta-btn')) return;
+
+        var cuenta = e.target.getAttribute('data-cuenta');
+
+        // Toggle: si ya está seleccionada, deseleccionar
+        if (cuentaSeleccionada === cuenta) {
+          cuentaSeleccionada = null;
+          e.target.classList.remove('active');
+          cuentaDesglose.classList.remove('show');
+          mostrarListaPendientes(enviosDelDia);
+        } else {
+          // Deseleccionar todos
+          deseleccionarTodos();
+          // Seleccionar nuevo
+          e.target.classList.add('active');
+          cuentaSeleccionada = cuenta;
+
+          if (cuenta === 'TOTAL') {
+            mostrarDesgloseTotal();
           } else {
-            // Deseleccionar anterior
-            var btns = cuentasBtns.querySelectorAll('.cuenta-btn');
-            for (var i = 0; i < btns.length; i++) {
-              btns[i].classList.remove('active');
-            }
-            // Seleccionar nuevo
-            e.target.classList.add('active');
-            cuentaSeleccionada = cuenta;
             mostrarDesgloseCuenta(cuenta);
           }
         }
-      };
+      }
+
+      cuentasBtns.onclick = handleCuentaClick;
+      cuentasBtnsIndividuales.onclick = handleCuentaClick;
 
       resumenRefresh.onclick = cargarResumenDia;
 
