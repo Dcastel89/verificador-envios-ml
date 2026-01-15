@@ -134,7 +134,6 @@
     .resumen-pendiente-item:hover { background: #fee2e2; }
     .resumen-pendiente-id { font-weight: 600; color: #dc2626; }
     .resumen-pendiente-cuenta { font-size: 11px; color: #6b7280; }
-    .resumen-refresh { background: none; border: none; color: #2563eb; font-size: 12px; cursor: pointer; text-decoration: underline; }
     .resumen-sync-btn { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .resumen-sync-btn:hover { background: #1d4ed8; }
     .resumen-sync-btn:disabled { background: #9ca3af; cursor: not-allowed; }
@@ -212,14 +211,11 @@
       <div style="text-align: center; margin-top: 12px;">
         <button type="button" class="resumen-sync-btn" id="resumenSync">
           <span class="spinner"></span>
-          <span class="btn-text">Sincronizar envios</span>
+          <span class="btn-text">Sincronizar</span>
         </button>
         <div class="sync-progress" id="syncProgress">
           <div class="sync-progress-bar"></div>
         </div>
-        <button type="button" class="resumen-refresh" id="actualizarEstados">Actualizar estados</button>
-        <button type="button" class="resumen-refresh" id="limpiarDuplicados">Limpiar duplicados</button>
-        <button type="button" class="resumen-refresh" id="resumenRefresh">Actualizar vista</button>
       </div>
     </div>
     </div>
@@ -999,8 +995,6 @@
       var resumenPendientes = document.getElementById('resumenPendientes');
       var resumenStatus = document.getElementById('resumenStatus');
       var resumenPendientesList = document.getElementById('resumenPendientesList');
-      var resumenRefresh = document.getElementById('resumenRefresh');
-      var actualizarEstadosBtn = document.getElementById('actualizarEstados');
       var cuentasBtns = document.getElementById('cuentasBtns');
       var cuentasBtnsIndividuales = document.getElementById('cuentasBtnsIndividuales');
       var cuentaDesglose = document.getElementById('cuentaDesglose');
@@ -1195,40 +1189,7 @@
       cuentasBtns.onclick = handleCuentaClick;
       cuentasBtnsIndividuales.onclick = handleCuentaClick;
 
-      resumenRefresh.onclick = cargarResumenDia;
-
-      // Actualizar estados desde ML
-      actualizarEstadosBtn.onclick = function() {
-        actualizarEstadosBtn.disabled = true;
-        actualizarEstadosBtn.textContent = 'Actualizando...';
-        resumenStatus.className = 'resumen-status vacio';
-        resumenStatus.textContent = 'Consultando estados en MercadoLibre...';
-
-        fetch(API_URL + '/api/actualizar-estados', { method: 'POST' })
-          .then(function(response) { return response.json(); })
-          .then(function(data) {
-            actualizarEstadosBtn.disabled = false;
-            actualizarEstadosBtn.textContent = 'Actualizar estados';
-
-            if (data.actualizados > 0) {
-              resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = data.actualizados + ' envio(s) marcados como despachados';
-            } else {
-              resumenStatus.className = 'resumen-status vacio';
-              resumenStatus.textContent = 'No hay cambios de estado';
-            }
-            cargarResumenDia();
-          })
-          .catch(function(err) {
-            actualizarEstadosBtn.disabled = false;
-            actualizarEstadosBtn.textContent = 'Actualizar estados';
-            resumenStatus.className = 'resumen-status vacio';
-            resumenStatus.textContent = 'Error actualizando estados';
-            console.error(err);
-          });
-      };
-
-      // Sincronizar envíos
+      // Sincronizar envíos (trae nuevos + actualiza estados)
       var resumenSync = document.getElementById('resumenSync');
       var syncProgress = document.getElementById('syncProgress');
 
@@ -1248,7 +1209,11 @@
 
             if (data.success) {
               resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = 'Sincronizacion completada - ' + (data.hoja || '');
+              var msg = 'Sincronizado';
+              if (data.estadosActualizados > 0) {
+                msg += ' (' + data.estadosActualizados + ' estado(s) actualizado(s))';
+              }
+              resumenStatus.textContent = msg;
               cargarResumenDia();
             } else {
               resumenStatus.className = 'resumen-status vacio';
@@ -1265,48 +1230,13 @@
           });
       };
 
-      // Limpiar duplicados
-      var limpiarDuplicadosBtn = document.getElementById('limpiarDuplicados');
-      limpiarDuplicadosBtn.onclick = function() {
-        limpiarDuplicadosBtn.disabled = true;
-        limpiarDuplicadosBtn.textContent = 'Limpiando...';
-        resumenStatus.className = 'resumen-status vacio';
-        resumenStatus.textContent = 'Limpiando duplicados...';
-
-        fetch(API_URL + '/api/limpiar-duplicados', { method: 'POST' })
-          .then(function(response) { return response.json(); })
-          .then(function(data) {
-            limpiarDuplicadosBtn.disabled = false;
-            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
-
-            if (data.error) {
-              resumenStatus.className = 'resumen-status vacio';
-              resumenStatus.textContent = 'Error: ' + data.error;
-            } else if (data.eliminados > 0) {
-              resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = 'Eliminados ' + data.eliminados + ' duplicados (' + data.totalAntes + ' -> ' + data.totalDespues + ')';
-              cargarResumenDia();
-            } else {
-              resumenStatus.className = 'resumen-status completo';
-              resumenStatus.textContent = data.mensaje || 'No hay duplicados';
-            }
-          })
-          .catch(function(err) {
-            limpiarDuplicadosBtn.disabled = false;
-            limpiarDuplicadosBtn.textContent = 'Limpiar duplicados';
-            resumenStatus.className = 'resumen-status vacio';
-            resumenStatus.textContent = 'Error de conexion';
-            console.error(err);
-          });
-      };
-
       // Cargar resumen al iniciar
       cargarResumenDia();
 
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v16 - Claude Vision cleanup + dead code removal');
+      console.log('App iniciada v17 - UI simplificada: boton Sincronizar unificado');
     })();
   </script>
 </body>
