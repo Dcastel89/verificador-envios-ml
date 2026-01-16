@@ -1059,15 +1059,18 @@ function shouldProcessOrder(estimatedHandlingLimit, cuenta, logisticType) {
     return false;
   }
 
-  var handlingDate = getArgentinaDate(new Date(estimatedHandlingLimit));
-  var today = getArgentinaTime();
+  // ML devuelve fechas ya en timezone de Argentina (ej: "2026-01-16T21:00:00.000-03:00")
+  // Extraer solo la parte de fecha (YYYY-MM-DD) del string ISO antes de parsear
+  var handlingDateStr = estimatedHandlingLimit.split('T')[0]; // "2026-01-16"
 
-  // Comparar solo las fechas (sin hora)
-  handlingDate.setHours(0, 0, 0, 0);
-  today.setHours(0, 0, 0, 0);
+  var today = getArgentinaTime();
+  var year = today.getFullYear();
+  var month = String(today.getMonth() + 1).padStart(2, '0');
+  var day = String(today.getDate()).padStart(2, '0');
+  var todayStr = year + '-' + month + '-' + day; // "2026-01-16"
 
   // Debe procesarse si la fecha límite es hoy o anterior
-  return handlingDate.getTime() <= today.getTime();
+  return handlingDateStr <= todayStr;
 }
 
 async function mlApiRequest(account, url, options = {}) {
@@ -3020,10 +3023,14 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
         return res.json(diagnostico);
       }
 
-      var handlingDate = getArgentinaDate(new Date(estimatedHandlingLimit));
+      // Extraer fecha (YYYY-MM-DD) directamente del string ISO
+      var handlingDateStr = estimatedHandlingLimit.split('T')[0];
+
       var today = getArgentinaTime();
-      var handlingDateStr = handlingDate.toLocaleDateString('es-AR');
-      var todayStr = today.toLocaleDateString('es-AR');
+      var year = today.getFullYear();
+      var month = String(today.getMonth() + 1).padStart(2, '0');
+      var day = String(today.getDate()).padStart(2, '0');
+      var todayStr = year + '-' + month + '-' + day;
 
       diagnostico.pasos.push({
         paso: 'Fecha límite de despacho: ' + handlingDateStr,
