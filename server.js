@@ -1593,6 +1593,74 @@ async function markAsDespachado(shipmentId, estadoML) {
   }
 }
 
+async function deleteShipmentRow(shipmentId) {
+  // Elimina una fila de envío de la hoja del día
+  if (!sheets || !SHEET_ID) return false;
+
+  var sheetName = getTodaySheetName();
+
+  try {
+    // Primero obtener el sheetId numérico
+    var spreadsheet = await sheets.spreadsheets.get({
+      spreadsheetId: SHEET_ID
+    });
+
+    var sheet = spreadsheet.data.sheets.find(function(s) {
+      return s.properties.title === sheetName;
+    });
+
+    if (!sheet) {
+      console.log('Hoja ' + sheetName + ' no encontrada para eliminar envio');
+      return false;
+    }
+
+    var sheetId = sheet.properties.sheetId;
+
+    // Obtener todas las filas para encontrar el índice
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:J'
+    });
+    var rows = response.data.values || [];
+    var rowIndex = -1;
+
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][2] && rows[i][2].toString() === shipmentId.toString()) {
+        rowIndex = i;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      console.log('Envio ' + shipmentId + ' no encontrado para eliminar');
+      return false;
+    }
+
+    // Eliminar la fila usando batchUpdate
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      resource: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1
+            }
+          }
+        }]
+      }
+    });
+
+    console.log('Envio cancelado ' + shipmentId + ' eliminado de ' + sheetName);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando envio cancelado:', error.message);
+    return false;
+  }
+}
+
 async function getShipmentStatus(account, shipmentId) {
   // Obtiene el estado actual de un envío desde ML
   if (!account.accessToken) return null;
@@ -2196,12 +2264,18 @@ async function actualizarEstadosEnvios() {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        var estadoTexto = 'Despachado';
-        if (estadoML === 'delivered') estadoTexto = 'Entregado';
-        else if (estadoML === 'cancelled') estadoTexto = 'Cancelado';
+        // Si está cancelado, eliminar la fila directamente
+        if (estadoML === 'cancelled') {
+          var eliminado = await deleteShipmentRow(envioId);
+          if (eliminado) actualizados++;
+        } else {
+          // Para otros estados (shipped, delivered, etc.), marcar el estado
+          var estadoTexto = 'Despachado';
+          if (estadoML === 'delivered') estadoTexto = 'Entregado';
 
-        var marcado = await markAsDespachado(envioId, estadoTexto);
-        if (marcado) actualizados++;
+          var marcado = await markAsDespachado(envioId, estadoTexto);
+          if (marcado) actualizados++;
+        }
       }
 
       await new Promise(function(resolve) { setTimeout(resolve, 50); });
@@ -2912,21 +2986,27 @@ app.post('/api/actualizar-estados', async function(req, res) {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        // Mapear estados de ML a texto legible
-        var estadoTexto = 'Despachado';
-        if (estadoML === 'shipped') {
-          estadoTexto = 'Despachado';
-        } else if (estadoML === 'delivered') {
-          estadoTexto = 'Entregado';
-        } else if (estadoML === 'not_delivered') {
-          estadoTexto = 'No entregado';
-        } else if (estadoML === 'cancelled') {
-          estadoTexto = 'Cancelado';
-        }
+        // Si está cancelado, eliminar la fila directamente
+        if (estadoML === 'cancelled') {
+          var eliminado = await deleteShipmentRow(envioId);
+          if (eliminado) {
+            actualizados++;
+          }
+        } else {
+          // Mapear estados de ML a texto legible
+          var estadoTexto = 'Despachado';
+          if (estadoML === 'shipped') {
+            estadoTexto = 'Despachado';
+          } else if (estadoML === 'delivered') {
+            estadoTexto = 'Entregado';
+          } else if (estadoML === 'not_delivered') {
+            estadoTexto = 'No entregado';
+          }
 
-        var marcado = await markAsDespachado(envioId, estadoTexto);
-        if (marcado) {
-          actualizados++;
+          var marcado = await markAsDespachado(envioId, estadoTexto);
+          if (marcado) {
+            actualizados++;
+          }
         }
       }
 

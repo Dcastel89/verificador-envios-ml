@@ -564,7 +564,13 @@
             cuenta: currentAccount,
             verificacionDetalle: verificacionDetalle
           })
-        }).catch(function(err) {
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          // Actualizar el panel para reflejar el cambio
+          cargarResumenDia();
+        })
+        .catch(function(err) {
           console.error('Error guardando verificacion:', err);
         });
       }
