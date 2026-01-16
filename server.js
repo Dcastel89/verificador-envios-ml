@@ -1053,36 +1053,26 @@ function shouldProcessOrder(estimatedHandlingLimit, cuenta, logisticType, dateCr
   // Este campo indica la fecha límite para despachar el envío
   // - Si la fecha límite es hoy o anterior → debe despacharse hoy
   // - Si la fecha límite es futura → no debe despacharse hoy
-  // - FALLBACK: Si no hay estimated_handling_limit, usar date_created (últimos 3 días)
-
-  var today = getArgentinaTime();
-  var year = today.getFullYear();
-  var month = String(today.getMonth() + 1).padStart(2, '0');
-  var day = String(today.getDate()).padStart(2, '0');
-  var todayStr = year + '-' + month + '-' + day; // "2026-01-16"
+  // - FALLBACK: Si no hay estimated_handling_limit → incluir (porque ya está en ready_to_ship)
 
   if (estimatedHandlingLimit) {
     // ML devuelve fechas ya en timezone de Argentina (ej: "2026-01-16T21:00:00.000-03:00")
     // Extraer solo la parte de fecha (YYYY-MM-DD) del string ISO antes de parsear
     var handlingDateStr = estimatedHandlingLimit.split('T')[0]; // "2026-01-16"
 
+    var today = getArgentinaTime();
+    var year = today.getFullYear();
+    var month = String(today.getMonth() + 1).padStart(2, '0');
+    var day = String(today.getDate()).padStart(2, '0');
+    var todayStr = year + '-' + month + '-' + day; // "2026-01-16"
+
     // Debe procesarse si la fecha límite es hoy o anterior
     return handlingDateStr <= todayStr;
   }
 
-  // FALLBACK: Si no hay estimated_handling_limit, incluir envíos de los últimos 3 días
-  if (dateCreated) {
-    var createdDateStr = dateCreated.split('T')[0];
-    var createdDate = new Date(createdDateStr);
-    var todayDate = new Date(todayStr);
-    var diffDays = Math.floor((todayDate - createdDate) / (1000 * 60 * 60 * 24));
-
-    // Incluir si fue creado en los últimos 3 días
-    return diffDays >= 0 && diffDays <= 3;
-  }
-
-  // Si no tiene ninguno de los dos campos, no procesar
-  return false;
+  // FALLBACK: Si no hay estimated_handling_limit, incluir el envío
+  // El razonamiento: si ML lo mantiene en ready_to_ship, es porque debe despacharse
+  return true;
 }
 
 async function mlApiRequest(account, url, options = {}) {
@@ -3065,13 +3055,16 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
 
       var pasaFiltro = shouldProcessOrder(estimatedHandlingLimit, account.name, shipmentData.logistic_type, orderData.date_created);
       if (!pasaFiltro) {
-        var motivo = estimatedHandlingLimit ?
-          'La fecha límite de despacho es futura (' + handlingDateStr + ' > ' + todayStr + ')' :
-          'Sin estimated_handling_limit y orden tiene más de 3 días';
+        var motivo = 'La fecha límite de despacho es futura (' + handlingDateStr + ' > ' + todayStr + ')';
         diagnostico.pasos.push({ paso: 'Filtro de fecha', ok: false, motivo: motivo });
         return res.json(diagnostico);
       }
-      diagnostico.pasos.push({ paso: 'Pasa filtro de fecha (debe despacharse hoy o ya pasó fecha límite)', ok: true });
+
+      if (estimatedHandlingLimit) {
+        diagnostico.pasos.push({ paso: 'Pasa filtro de fecha (debe despacharse hoy o ya pasó fecha límite)', ok: true });
+      } else {
+        diagnostico.pasos.push({ paso: 'Pasa filtro de fecha (incluido por estar en ready_to_ship sin estimated_handling_limit)', ok: true });
+      }
 
       // Verificar si ya existe en el sheet
       var sheetName = getTodaySheetName();
