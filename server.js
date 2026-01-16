@@ -1601,6 +1601,22 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
   var slaData = await getShipmentSLA(accountObj, shipmentId);
   var expectedDate = slaData ? slaData.expectedDate : null;
 
+  // Agregar ítem de verificación "Papelitos 1y2" si hay vidrio en el envío
+  var hasGlass = processedItems.some(function(item) {
+    return item.sku && item.sku.startsWith('VF');
+  });
+  if (hasGlass) {
+    processedItems.push({
+      id: 'verification-papelitos',
+      title: 'Verificación adicional',
+      sku: 'PAPELITOS',
+      description: 'Papelitos 1y2',
+      quantity: 1,
+      isKit: false,
+      isVerificationOnly: true  // Marcar como ítem solo de verificación (no afecta estadísticas)
+    });
+  }
+
   res.json({
     account: found.account,
     shipmentId: shipmentId,
