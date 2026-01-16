@@ -1299,18 +1299,16 @@ async function getReadyToShipOrders(account) {
       continue;
     }
 
-    // Obtener SLA (fecha límite de despacho) desde el endpoint recomendado por ML
-    var slaData = await getShipmentSLA(account, shippingId);
-    var expectedDate = slaData ? slaData.expectedDate : null;
-
+    // Solo agregar envíos en ready_to_ship (no necesitan SLA hasta el filtrado)
     pendingShipments.push({
       id: shippingId,
       orderId: shipmentInfo.orderIds.join(','), // Múltiples order_ids separados por coma
       orderIds: shipmentInfo.orderIds, // Array de order_ids para uso interno
       packId: shipmentInfo.packId,
       account: account.name,
+      accountObj: account, // Guardar referencia a la cuenta para llamar al SLA después
       dateCreated: shipmentInfo.dateCreated, // Para display en sheets
-      expectedDate: expectedDate, // Fecha límite de despacho del SLA (reemplaza estimated_handling_limit deprecado)
+      expectedDate: null, // Se llenará después con llamada al SLA
       receiverName: shipment.receiver_address ? shipment.receiver_address.receiver_name : 'N/A',
       logisticType: shipment.logistic_type || '',
       status: status,
@@ -1318,7 +1316,7 @@ async function getReadyToShipOrders(account) {
     });
   }
 
-  console.log(account.name + ' - Envíos pendientes: ' + pendingShipments.length);
+  console.log(account.name + ' - Envíos pendientes (pre-filtro SLA): ' + pendingShipments.length);
 
   return pendingShipments;
 }
@@ -1713,22 +1711,39 @@ async function syncMorningShipments() {
 
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
-
-    // Filtrar: solo los que deben despacharse hoy según expected_date del SLA
-    var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.expectedDate, s.account, s.logisticType, s.dateCreated);
-    });
-
-    allShipments = allShipments.concat(filtered);
+    allShipments = allShipments.concat(shipments);
   }
 
+  console.log('Total envíos pre-filtro: ' + allShipments.length + '. Obteniendo SLA en paralelo...');
+
+  // Obtener SLA en paralelo para todos los envíos (máximo 10 concurrentes para no saturar)
+  var BATCH_SIZE = 10;
+  for (var i = 0; i < allShipments.length; i += BATCH_SIZE) {
+    var batch = allShipments.slice(i, i + BATCH_SIZE);
+    var slaPromises = batch.map(function(s) {
+      return getShipmentSLA(s.accountObj, s.id).then(function(slaData) {
+        s.expectedDate = slaData ? slaData.expectedDate : null;
+      }).catch(function() {
+        s.expectedDate = null;
+      });
+    });
+    await Promise.all(slaPromises);
+  }
+
+  // Filtrar: solo los que deben despacharse hoy según expected_date del SLA
+  var filtered = allShipments.filter(function(s) {
+    return shouldProcessOrder(s.expectedDate, s.account, s.logisticType, s.dateCreated);
+  });
+
+  console.log('Envíos que deben despacharse hoy: ' + filtered.length);
+
   // Solo agregar envíos nuevos (addPendingShipments ya filtra duplicados)
-  if (allShipments.length > 0) {
-    await addPendingShipments(allShipments, sheetName);
+  if (filtered.length > 0) {
+    await addPendingShipments(filtered, sheetName);
   }
 
   lastMorningSyncDate = today;
-  console.log('Sync matutino completado. Total desde ML: ' + allShipments.length + ', existentes preservados: ' + existingIds.length);
+  console.log('Sync matutino completado. Total desde ML: ' + filtered.length + ', existentes preservados: ' + existingIds.length);
 }
 
 async function syncPendingShipments() {
@@ -1763,24 +1778,43 @@ async function syncPendingShipments() {
 
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
-
-    // Filtrar por expected_date del SLA
-    var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.expectedDate, s.account, s.logisticType, s.dateCreated);
-    });
-
-    allShipments = allShipments.concat(filtered);
+    allShipments = allShipments.concat(shipments);
   }
 
+  // Filtrar solo los nuevos ANTES de obtener SLA (optimización)
   var newShipments = allShipments.filter(function(s) {
     return existingIds.indexOf(s.id) === -1;
   });
 
-  if (newShipments.length > 0) {
-    await addPendingShipments(newShipments, sheetName);
+  if (newShipments.length === 0) {
+    console.log('Sync completado. No hay envíos nuevos.');
+    return;
   }
 
-  console.log('Sync completado. Nuevos: ' + newShipments.length);
+  // Obtener SLA en paralelo solo para envíos nuevos
+  var BATCH_SIZE = 10;
+  for (var i = 0; i < newShipments.length; i += BATCH_SIZE) {
+    var batch = newShipments.slice(i, i + BATCH_SIZE);
+    var slaPromises = batch.map(function(s) {
+      return getShipmentSLA(s.accountObj, s.id).then(function(slaData) {
+        s.expectedDate = slaData ? slaData.expectedDate : null;
+      }).catch(function() {
+        s.expectedDate = null;
+      });
+    });
+    await Promise.all(slaPromises);
+  }
+
+  // Filtrar por expected_date del SLA
+  var filtered = newShipments.filter(function(s) {
+    return shouldProcessOrder(s.expectedDate, s.account, s.logisticType, s.dateCreated);
+  });
+
+  if (filtered.length > 0) {
+    await addPendingShipments(filtered, sheetName);
+  }
+
+  console.log('Sync completado. Nuevos: ' + filtered.length);
 }
 
 // Sync automático desactivado - ahora se usa solo sync manual + webhooks
