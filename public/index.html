@@ -50,6 +50,8 @@
     .item-card.checked { background: #f0fdf4; }
     .item-card.highlight { background: #fef3c7; animation: pulse 0.5s ease-in-out; }
     .item-card.just-scanned { background: #dcfce7; border-left: 4px solid #22c55e; }
+    .item-card.verification-only { background: #fef3c7; border-left: 4px solid #f59e0b; }
+    .item-card.verification-only.checked { background: #fef9c3; }
     @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
     .item-main-checkbox { width: 28px; height: 28px; cursor: pointer; flex-shrink: 0; margin-top: 4px; pointer-events: none; }
     .item-info { flex: 1; }
@@ -537,9 +539,14 @@
         alreadySaved = true;
 
         // Construir resumen de métodos de verificación por item
+        // Excluir ítems de verificación especial (isVerificationOnly) del conteo
         var verificacionDetalle = [];
+        var itemsToSave = [];
         for (var i = 0; i < currentItems.length; i++) {
           var item = currentItems[i];
+          // Saltar ítems de verificación especial para el registro en Google Sheets
+          if (item.isVerificationOnly) continue;
+
           var checks = unitChecks[i] || [];
           var scannedCount = 0;
           var manualCount = 0;
@@ -554,13 +561,14 @@
             scanned: scannedCount,
             manual: manualCount
           });
+          itemsToSave.push(item);
         }
 
         authFetch(API_URL + '/api/shipment/' + currentShipmentId + '/verificado', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            items: currentItems,
+            items: itemsToSave,
             cuenta: currentAccount,
             verificacionDetalle: verificacionDetalle
           })
@@ -617,6 +625,10 @@
 
           var card = document.createElement('div');
           card.className = 'item-card';
+          if (item.isVerificationOnly) {
+            card.classList.add('verification-only');
+            card.setAttribute('data-verification-only', 'true');
+          }
           card.setAttribute('data-index', i);
           card.setAttribute('data-sku', item.sku);
 
@@ -640,7 +652,8 @@
 
           var skuDiv = document.createElement('div');
           skuDiv.className = 'item-sku';
-          skuDiv.textContent = 'SKU: ' + item.sku;
+          // No mostrar SKU para ítems de verificación especial
+          skuDiv.textContent = item.isVerificationOnly ? '⚠️ Verificación adicional' : 'SKU: ' + item.sku;
 
           var qtyDiv = document.createElement('div');
           qtyDiv.className = 'item-quantity';
@@ -658,25 +671,28 @@
             unitsDiv.appendChild(unitCb);
           }
 
-          // Botón para verificar con foto
-          var verifyBtn = document.createElement('button');
-          verifyBtn.className = 'verify-photo-btn';
-          verifyBtn.textContent = '📷';
-          verifyBtn.title = 'Verificar con foto';
-          verifyBtn.setAttribute('data-index', i);
-          verifyBtn.onclick = function(e) {
-            e.stopPropagation();
-            var idx = parseInt(this.getAttribute('data-index'));
-            iniciarVerificacionFoto(idx);
-          };
-
           info.appendChild(descDiv);
           info.appendChild(skuDiv);
           info.appendChild(qtyDiv);
           info.appendChild(unitsDiv);
           card.appendChild(mainCheckbox);
           card.appendChild(info);
-          card.appendChild(verifyBtn);
+
+          // Botón para verificar con foto (solo para ítems normales, no para verificación especial)
+          if (!item.isVerificationOnly) {
+            var verifyBtn = document.createElement('button');
+            verifyBtn.className = 'verify-photo-btn';
+            verifyBtn.textContent = '📷';
+            verifyBtn.title = 'Verificar con foto';
+            verifyBtn.setAttribute('data-index', i);
+            verifyBtn.onclick = function(e) {
+              e.stopPropagation();
+              var idx = parseInt(this.getAttribute('data-index'));
+              iniciarVerificacionFoto(idx);
+            };
+            card.appendChild(verifyBtn);
+          }
+
           itemsList.appendChild(card);
         }
         updateItemsCount();
