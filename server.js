@@ -1113,12 +1113,20 @@ async function mlApiRequest(account, url, options = {}) {
 // Obtener SLA (fecha límite de despacho) desde el endpoint recomendado por ML
 // Este endpoint reemplaza el campo deprecated estimated_handling_limit
 async function getShipmentSLA(account, shipmentId) {
-  var slaData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId + '/sla');
-  if (slaData && slaData.expected_date) {
-    return {
-      expectedDate: slaData.expected_date,
-      status: slaData.status || null
-    };
+  try {
+    var slaData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId + '/sla');
+    if (slaData && slaData.expected_date) {
+      return {
+        expectedDate: slaData.expected_date,
+        status: slaData.status || null
+      };
+    }
+    // Log si el SLA no tiene expected_date
+    if (slaData) {
+      console.log('SLA sin expected_date para envío ' + shipmentId + ':', JSON.stringify(slaData).substring(0, 200));
+    }
+  } catch (error) {
+    console.log('Error obteniendo SLA para envío ' + shipmentId + ':', error.message);
   }
   return null;
 }
@@ -1309,6 +1317,7 @@ async function getReadyToShipOrders(account) {
       accountObj: account, // Guardar referencia a la cuenta para llamar al SLA después
       dateCreated: shipmentInfo.dateCreated, // Para display en sheets
       expectedDate: null, // Se llenará después con llamada al SLA
+      estimatedHandlingLimitFallback: shipment.estimated_handling_limit, // Fallback si SLA falla
       receiverName: shipment.receiver_address ? shipment.receiver_address.receiver_name : 'N/A',
       logisticType: shipment.logistic_type || '',
       status: status,
@@ -1718,17 +1727,30 @@ async function syncMorningShipments() {
 
   // Obtener SLA en paralelo para todos los envíos (máximo 10 concurrentes para no saturar)
   var BATCH_SIZE = 10;
+  var slaSuccessCount = 0;
+  var slaFallbackCount = 0;
   for (var i = 0; i < allShipments.length; i += BATCH_SIZE) {
     var batch = allShipments.slice(i, i + BATCH_SIZE);
     var slaPromises = batch.map(function(s) {
       return getShipmentSLA(s.accountObj, s.id).then(function(slaData) {
-        s.expectedDate = slaData ? slaData.expectedDate : null;
+        if (slaData && slaData.expectedDate) {
+          s.expectedDate = slaData.expectedDate;
+          slaSuccessCount++;
+        } else {
+          // Fallback a estimated_handling_limit del shipment
+          s.expectedDate = s.estimatedHandlingLimitFallback || null;
+          if (s.expectedDate) slaFallbackCount++;
+        }
       }).catch(function() {
-        s.expectedDate = null;
+        // Fallback a estimated_handling_limit del shipment
+        s.expectedDate = s.estimatedHandlingLimitFallback || null;
+        if (s.expectedDate) slaFallbackCount++;
       });
     });
     await Promise.all(slaPromises);
   }
+
+  console.log('SLA obtenidos: ' + slaSuccessCount + ' del endpoint, ' + slaFallbackCount + ' del fallback');
 
   // Filtrar: solo los que deben despacharse hoy según expected_date del SLA
   var filtered = allShipments.filter(function(s) {
@@ -1797,9 +1819,15 @@ async function syncPendingShipments() {
     var batch = newShipments.slice(i, i + BATCH_SIZE);
     var slaPromises = batch.map(function(s) {
       return getShipmentSLA(s.accountObj, s.id).then(function(slaData) {
-        s.expectedDate = slaData ? slaData.expectedDate : null;
+        if (slaData && slaData.expectedDate) {
+          s.expectedDate = slaData.expectedDate;
+        } else {
+          // Fallback a estimated_handling_limit del shipment
+          s.expectedDate = s.estimatedHandlingLimitFallback || null;
+        }
       }).catch(function() {
-        s.expectedDate = null;
+        // Fallback a estimated_handling_limit del shipment
+        s.expectedDate = s.estimatedHandlingLimitFallback || null;
       });
     });
     await Promise.all(slaPromises);
