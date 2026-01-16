@@ -1683,6 +1683,13 @@ REGLAS DE COMPARACIÓN DE MODELOS:
    - Pedido "A15", foto dice "A16" → INCORRECTO (número diferente)
    - Pedido "G24", foto dice "G24 Power" → INCORRECTO (variante diferente)
 
+5. REGLA ESPECIAL PARA FUNDAS Y 4G/5G:
+   - Para fundas (silicona o transparente): IGNORAR si dice 4G o 5G
+   - EXCEPCIÓN: Si el modelo es A22, SÍ distinguir entre A22 4G y A22 5G (son diferentes)
+   - Ejemplo: Pedido "A25", foto dice "A25 5G" → CORRECTO (ignorar 5G)
+   - Ejemplo: Pedido "A22 4G", foto dice "A22 5G" → INCORRECTO (A22 es excepción)
+   - Ejemplo: Pedido "A22", foto dice "A22 4G" → INCORRECTO (debe especificar variante)
+
 INSTRUCCIONES:
 1. Extraé el CÓDIGO DE MODELO de la etiqueta (ignorá la marca)
 2. Compará el código con el pedido usando las reglas anteriores
@@ -1711,7 +1718,11 @@ Extraé:
 2. **Color**: Color real del producto (no del fondo de madera)
 3. **Tipo**: Qué tipo de producto es
 
-IGNORAR: "Fashion Case", "New", "Phone case", "4G", "5G", "Made in China"
+IGNORAR: "Fashion Case", "New", "Phone case", "Made in China"
+
+REGLA ESPECIAL 4G/5G:
+- Para fundas: IGNORAR si dice 4G o 5G en la etiqueta
+- EXCEPCIÓN: Si el modelo es A22, SÍ incluir 4G o 5G (reportar "A22 4G" o "A22 5G")
 
 Respondé SOLO con este JSON:
 {
