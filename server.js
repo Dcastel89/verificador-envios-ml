@@ -1048,11 +1048,11 @@ function isWorkingHours() {
   return false;
 }
 
-function shouldProcessOrder(expectedDate, slaStatus, logisticType) {
+function shouldProcessOrder(expectedDate, slaStatus, logisticType, shipmentStatus) {
   // Determina si un envío debe aparecer en el panel del día
   // Criterios:
   // 1. Promesa del día: expected_date es HOY
-  // 2. Demorados: slaStatus es "delayed"
+  // 2. Demorados pendientes: slaStatus es "delayed" Y shipmentStatus es "ready_to_ship"
   // Solo para: Flex (self_service), Colecta (xd_drop_off), Pickit (cross_docking)
 
   // Filtrar por tipo logístico permitido
@@ -1061,8 +1061,8 @@ function shouldProcessOrder(expectedDate, slaStatus, logisticType) {
     return false;
   }
 
-  // Si está demorado, siempre incluir
-  if (slaStatus === 'delayed') {
+  // Si está demorado Y todavía está en ready_to_ship, incluir
+  if (slaStatus === 'delayed' && shipmentStatus === 'ready_to_ship') {
     return true;
   }
 
@@ -1080,7 +1080,7 @@ function shouldProcessOrder(expectedDate, slaStatus, logisticType) {
     return expectedDateStr === todayStr;
   }
 
-  // Sin expected_date y sin status delayed → no incluir
+  // Sin expected_date y sin delayed+ready_to_ship → no incluir
   return false;
 }
 
@@ -1774,13 +1774,13 @@ async function syncMorningShipments() {
 
   // Filtrar: promesa HOY o demorados, solo Flex/Colecta/Pickit
   var filtered = allShipments.filter(function(s) {
-    return shouldProcessOrder(s.expectedDate, s.slaStatus, s.logisticType);
+    return shouldProcessOrder(s.expectedDate, s.slaStatus, s.logisticType, s.status);
   });
 
   // Log desglose
-  var delayedCount = filtered.filter(function(s) { return s.slaStatus === 'delayed'; }).length;
+  var delayedCount = filtered.filter(function(s) { return s.slaStatus === 'delayed' && s.status === 'ready_to_ship'; }).length;
   var todayCount = filtered.length - delayedCount;
-  console.log('Envíos filtrados: ' + filtered.length + ' total (' + todayCount + ' promesa HOY, ' + delayedCount + ' DELAYED)');
+  console.log('Envíos filtrados: ' + filtered.length + ' total (' + todayCount + ' promesa HOY, ' + delayedCount + ' DELAYED+ready_to_ship)');
 
   // Solo agregar envíos nuevos (addPendingShipments ya filtra duplicados)
   if (filtered.length > 0) {
@@ -1861,7 +1861,7 @@ async function syncPendingShipments() {
 
   // Filtrar: promesa HOY o demorados, solo Flex/Colecta/Pickit
   var filtered = newShipments.filter(function(s) {
-    return shouldProcessOrder(s.expectedDate, s.slaStatus, s.logisticType);
+    return shouldProcessOrder(s.expectedDate, s.slaStatus, s.logisticType, s.status);
   });
 
   if (filtered.length > 0) {
@@ -2665,10 +2665,10 @@ app.post('/webhooks/ml', async function(req, res) {
     var expectedDate = slaData ? slaData.expectedDate : null;
     var slaStatus = slaData ? slaData.status : null;
 
-    // Verificar: promesa HOY o demorado, solo Flex/Colecta/Pickit
-    if (!shouldProcessOrder(expectedDate, slaStatus, shipmentData.logistic_type)) {
+    // Verificar: promesa HOY o (demorado + ready_to_ship), solo Flex/Colecta/Pickit
+    if (!shouldProcessOrder(expectedDate, slaStatus, shipmentData.logistic_type, shipmentData.status)) {
       var tipoEnvio = getTipoEnvio(shipmentData.logistic_type);
-      console.log('Envío no cumple criterios (no es HOY ni demorado, o tipo no permitido) para ' + account.name + '/' + tipoEnvio + ', ignorando:', orderId);
+      console.log('Envío no cumple criterios para ' + account.name + '/' + tipoEnvio + ', ignorando:', orderId);
       return;
     }
 
@@ -3166,15 +3166,15 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
       }
       diagnostico.pasos.push({ paso: 'Tipo logístico permitido: ' + shipmentData.logistic_type, ok: true });
 
-      var pasaFiltro = shouldProcessOrder(expectedDate, slaStatus, shipmentData.logistic_type);
+      var pasaFiltro = shouldProcessOrder(expectedDate, slaStatus, shipmentData.logistic_type, shipmentData.status);
       if (!pasaFiltro) {
-        var motivo = 'No cumple criterios: fecha límite no es HOY (' + expectedDateStr + ' != ' + todayStr + ') y no está demorado (status: ' + slaStatus + ')';
+        var motivo = 'No cumple criterios: fecha límite no es HOY (' + expectedDateStr + ' != ' + todayStr + ') o está demorado pero no en ready_to_ship (slaStatus: ' + slaStatus + ', shipmentStatus: ' + shipmentData.status + ')';
         diagnostico.pasos.push({ paso: 'Filtro de promesa/demora', ok: false, motivo: motivo });
         return res.json(diagnostico);
       }
 
-      if (slaStatus === 'delayed') {
-        diagnostico.pasos.push({ paso: 'Pasa filtro: envío DEMORADO', ok: true });
+      if (slaStatus === 'delayed' && shipmentData.status === 'ready_to_ship') {
+        diagnostico.pasos.push({ paso: 'Pasa filtro: DEMORADO + ready_to_ship', ok: true });
       } else {
         diagnostico.pasos.push({ paso: 'Pasa filtro: promesa de envío es HOY', ok: true });
       }
