@@ -1079,7 +1079,7 @@ function shouldProcessOrder(dateCreated, cuenta, logisticType) {
   // Determina si un envío corresponde al día de trabajo actual según su corte específico:
   // - Usa el horario de corte de la cuenta y tipo de logística del envío
   // - Órdenes de AYER creadas DESPUÉS del corte → entran hoy
-  // - Órdenes de HOY creadas ANTES del corte → entran hoy
+  // - Órdenes de HOY creadas HASTA el corte (inclusive) → entran hoy
   // - Órdenes de HOY creadas DESPUÉS del corte → NO entran (corresponden a mañana)
 
   var orderDate = getArgentinaDate(new Date(dateCreated));
@@ -1087,7 +1087,7 @@ function shouldProcessOrder(dateCreated, cuenta, logisticType) {
   var corte = getHorarioCorte(cuenta, logisticType);
 
   if (isTodayOrder(dateCreated)) {
-    return orderTimeInMinutes < corte;
+    return orderTimeInMinutes <= corte;
   }
   if (isYesterday(dateCreated)) {
     return orderTimeInMinutes >= corte;
