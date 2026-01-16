@@ -2014,6 +2014,10 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     account: found.account,
     shipmentId: shipmentId,
     status: found.shipment.status,
+    logisticType: found.shipment.logistic_type,
+    estimatedHandlingLimit: found.shipment.estimated_handling_limit,
+    estimatedDeliveryTime: found.shipment.estimated_delivery_time,
+    dateCreated: found.shipment.date_created,
     items: processedItems
   });
 });
