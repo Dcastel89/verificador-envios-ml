@@ -2258,7 +2258,7 @@ async function actualizarEstadosEnvios() {
       var cuenta = row[3] || '';
       var estadoActual = row[6] || '';
 
-      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado' || estadoActual === 'Cancelado') {
+      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado') {
         continue;
       }
 
@@ -2271,16 +2271,18 @@ async function actualizarEstadosEnvios() {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        // Mapear estados de ML a texto legible (NO eliminar, solo marcar)
-        var estadoTexto = 'Despachado';
+        // Si está cancelado, eliminar de la hoja
         if (estadoML === 'cancelled') {
-          estadoTexto = 'Cancelado';
-        } else if (estadoML === 'delivered') {
-          estadoTexto = 'Entregado';
-        }
+          var eliminado = await deleteShipmentRow(envioId);
+          if (eliminado) actualizados++;
+        } else {
+          // Para otros estados (shipped, delivered, etc.), marcar el estado
+          var estadoTexto = 'Despachado';
+          if (estadoML === 'delivered') estadoTexto = 'Entregado';
 
-        var marcado = await markAsDespachado(envioId, estadoTexto);
-        if (marcado) actualizados++;
+          var marcado = await markAsDespachado(envioId, estadoTexto);
+          if (marcado) actualizados++;
+        }
       }
 
       await new Promise(function(resolve) { setTimeout(resolve, 50); });
@@ -3101,7 +3103,7 @@ app.post('/api/actualizar-estados', async function(req, res) {
       var estadoActual = row[6] || '';
 
       // Solo procesar si no está ya verificado o marcado
-      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado' || estadoActual === 'Cancelado') {
+      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado') {
         continue;
       }
 
@@ -3118,21 +3120,27 @@ app.post('/api/actualizar-estados', async function(req, res) {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        // Mapear estados de ML a texto legible (NO eliminar, solo marcar)
-        var estadoTexto = 'Despachado';
+        // Si está cancelado, eliminar de la hoja
         if (estadoML === 'cancelled') {
-          estadoTexto = 'Cancelado';
-        } else if (estadoML === 'shipped') {
-          estadoTexto = 'Despachado';
-        } else if (estadoML === 'delivered') {
-          estadoTexto = 'Entregado';
-        } else if (estadoML === 'not_delivered') {
-          estadoTexto = 'No entregado';
-        }
+          var eliminado = await deleteShipmentRow(envioId);
+          if (eliminado) {
+            actualizados++;
+          }
+        } else {
+          // Mapear estados de ML a texto legible
+          var estadoTexto = 'Despachado';
+          if (estadoML === 'shipped') {
+            estadoTexto = 'Despachado';
+          } else if (estadoML === 'delivered') {
+            estadoTexto = 'Entregado';
+          } else if (estadoML === 'not_delivered') {
+            estadoTexto = 'No entregado';
+          }
 
-        var marcado = await markAsDespachado(envioId, estadoTexto);
-        if (marcado) {
-          actualizados++;
+          var marcado = await markAsDespachado(envioId, estadoTexto);
+          if (marcado) {
+            actualizados++;
+          }
         }
       }
 
