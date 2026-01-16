@@ -1048,33 +1048,6 @@ function isWorkingHours() {
   return false;
 }
 
-function isBeforeCutoff(dateCreated, cuenta, logisticType) {
-  // Verifica si la venta fue creada antes del corte horario
-  var orderDate = getArgentinaDate(new Date(dateCreated));
-  var timeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
-
-  // Usar horario específico por cuenta y tipo, o el default
-  var corte = cuenta && logisticType ? getHorarioCorte(cuenta, logisticType) : HORARIO_DEFAULT;
-
-  return timeInMinutes < corte;
-}
-
-function isTodayOrder(dateCreated) {
-  // Verifica si la orden es de hoy (comparando solo la fecha)
-  var orderDate = getArgentinaDate(new Date(dateCreated));
-  var today = getArgentinaTime();
-  return orderDate.toLocaleDateString('es-AR') === today.toLocaleDateString('es-AR');
-}
-
-function isYesterday(dateCreated) {
-  // Verifica si la orden es de ayer
-  var orderDate = getArgentinaDate(new Date(dateCreated));
-  var today = getArgentinaTime();
-  var yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return orderDate.toLocaleDateString('es-AR') === yesterday.toLocaleDateString('es-AR');
-}
-
 function shouldProcessOrder(estimatedHandlingLimit, cuenta, logisticType) {
   // Determina si un envío debe despacharse hoy según el estimated_handling_limit de MercadoLibre
   // Este campo indica la fecha límite para despachar el envío
@@ -2285,7 +2258,7 @@ async function actualizarEstadosEnvios() {
       var cuenta = row[3] || '';
       var estadoActual = row[6] || '';
 
-      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado') {
+      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado' || estadoActual === 'Cancelado') {
         continue;
       }
 
@@ -2298,18 +2271,16 @@ async function actualizarEstadosEnvios() {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        // Si está cancelado, eliminar la fila directamente
+        // Mapear estados de ML a texto legible (NO eliminar, solo marcar)
+        var estadoTexto = 'Despachado';
         if (estadoML === 'cancelled') {
-          var eliminado = await deleteShipmentRow(envioId);
-          if (eliminado) actualizados++;
-        } else {
-          // Para otros estados (shipped, delivered, etc.), marcar el estado
-          var estadoTexto = 'Despachado';
-          if (estadoML === 'delivered') estadoTexto = 'Entregado';
-
-          var marcado = await markAsDespachado(envioId, estadoTexto);
-          if (marcado) actualizados++;
+          estadoTexto = 'Cancelado';
+        } else if (estadoML === 'delivered') {
+          estadoTexto = 'Entregado';
         }
+
+        var marcado = await markAsDespachado(envioId, estadoTexto);
+        if (marcado) actualizados++;
       }
 
       await new Promise(function(resolve) { setTimeout(resolve, 50); });
@@ -3130,7 +3101,7 @@ app.post('/api/actualizar-estados', async function(req, res) {
       var estadoActual = row[6] || '';
 
       // Solo procesar si no está ya verificado o marcado
-      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado') {
+      if (estadoActual === 'Verificado' || estadoActual === 'Despachado' || estadoActual === 'Entregado' || estadoActual === 'Cancelado') {
         continue;
       }
 
@@ -3147,27 +3118,21 @@ app.post('/api/actualizar-estados', async function(req, res) {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        // Si está cancelado, eliminar la fila directamente
+        // Mapear estados de ML a texto legible (NO eliminar, solo marcar)
+        var estadoTexto = 'Despachado';
         if (estadoML === 'cancelled') {
-          var eliminado = await deleteShipmentRow(envioId);
-          if (eliminado) {
-            actualizados++;
-          }
-        } else {
-          // Mapear estados de ML a texto legible
-          var estadoTexto = 'Despachado';
-          if (estadoML === 'shipped') {
-            estadoTexto = 'Despachado';
-          } else if (estadoML === 'delivered') {
-            estadoTexto = 'Entregado';
-          } else if (estadoML === 'not_delivered') {
-            estadoTexto = 'No entregado';
-          }
+          estadoTexto = 'Cancelado';
+        } else if (estadoML === 'shipped') {
+          estadoTexto = 'Despachado';
+        } else if (estadoML === 'delivered') {
+          estadoTexto = 'Entregado';
+        } else if (estadoML === 'not_delivered') {
+          estadoTexto = 'No entregado';
+        }
 
-          var marcado = await markAsDespachado(envioId, estadoTexto);
-          if (marcado) {
-            actualizados++;
-          }
+        var marcado = await markAsDespachado(envioId, estadoTexto);
+        if (marcado) {
+          actualizados++;
         }
       }
 
