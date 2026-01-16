@@ -1818,6 +1818,14 @@ function describeSKU(sku) {
     return 'Vidrio ' + resto;
   }
 
+  if (sku.startsWith('FAN')) {
+    var colors = { 'N': 'Negra', 'R': 'Roja', 'A': 'Azul' };
+    var colorCode = sku.charAt(3);
+    var color = colors[colorCode] || colorCode;
+    var modelo = sku.substring(4);
+    return 'Funda Anillo ' + color + ' ' + modelo;
+  }
+
   return sku;
 }
 
