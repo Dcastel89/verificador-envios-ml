@@ -1275,6 +1275,11 @@ async function getReadyToShipOrders(account) {
       continue;
     }
 
+    // Excluir buffered (envíos que aún no pueden despacharse)
+    if (shipment.substatus === 'buffered') {
+      continue;
+    }
+
     // Excluir fulfillment (FULL)
     if (shipment.logistic_type === 'fulfillment') {
       continue;
@@ -2997,6 +3002,15 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
         return res.json(diagnostico);
       }
       diagnostico.pasos.push({ paso: 'Envío no cancelado (status: ' + shipmentData.status + ')', ok: true });
+
+      // Verificar substatus buffered
+      if (shipmentData.substatus === 'buffered') {
+        diagnostico.pasos.push({ paso: 'Substatus', ok: false, motivo: 'Substatus es "buffered" - el envío aún no puede despacharse (verificar buffering.date)' });
+        return res.json(diagnostico);
+      }
+      if (shipmentData.substatus) {
+        diagnostico.pasos.push({ paso: 'Substatus: ' + shipmentData.substatus, ok: true });
+      }
 
       // Verificar fulfillment
       if (shipmentData.logistic_type === 'fulfillment') {
