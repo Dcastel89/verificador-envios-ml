@@ -1820,9 +1820,9 @@ function describeSKU(sku) {
 
   if (sku.startsWith('FAN')) {
     var colors = { 'N': 'Negra', 'R': 'Roja', 'A': 'Azul' };
-    var colorCode = sku.charAt(3);
+    var colorCode = sku.charAt(sku.length - 1);
     var color = colors[colorCode] || colorCode;
-    var modelo = sku.substring(4);
+    var modelo = sku.substring(3, sku.length - 1);
     return 'Funda Anillo ' + color + ' ' + modelo;
   }
 
