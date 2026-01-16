@@ -1830,9 +1830,29 @@ function parseSKU(sku) {
     var part = parts[i].trim();
     if (part.match(/^5[A-Z0-9]/)) continue;
     if (part === '') continue;
-    if (seen[part]) continue;
-    seen[part] = true;
-    components.push(part);
+
+    // Extraer cantidad entre paréntesis si existe, ej: "ABC (3)" -> sku: "ABC", quantity: 3
+    var quantityMatch = part.match(/\s*\((\d+)\)\s*$/);
+    var quantity = 1;
+    var cleanSku = part;
+    if (quantityMatch) {
+      quantity = parseInt(quantityMatch[1], 10);
+      cleanSku = part.replace(/\s*\(\d+\)\s*$/, '').trim();
+    }
+
+    if (cleanSku === '') continue;
+    if (seen[cleanSku]) {
+      // Si ya existe, sumar la cantidad
+      for (var j = 0; j < components.length; j++) {
+        if (components[j].sku === cleanSku) {
+          components[j].quantity += quantity;
+          break;
+        }
+      }
+      continue;
+    }
+    seen[cleanSku] = true;
+    components.push({ sku: cleanSku, quantity: quantity });
   }
   return components;
 }
@@ -1952,11 +1972,11 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
       for (var j = 0; j < components.length; j++) {
         var component = components[j];
         processedItems.push({
-          id: item.item_id + '-' + component,
+          id: item.item_id + '-' + component.sku,
           title: title,
-          sku: component,
-          description: describeSKU(component),
-          quantity: item.quantity,
+          sku: component.sku,
+          description: describeSKU(component.sku),
+          quantity: item.quantity * component.quantity,
           isKit: true,
           originalSku: sku
         });
@@ -1965,9 +1985,9 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
       processedItems.push({
         id: item.item_id,
         title: title,
-        sku: components[0],
-        description: describeSKU(components[0]),
-        quantity: item.quantity,
+        sku: components[0].sku,
+        description: describeSKU(components[0].sku),
+        quantity: item.quantity * components[0].quantity,
         isKit: false
       });
     } else {
