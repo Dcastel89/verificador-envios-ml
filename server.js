@@ -1048,52 +1048,26 @@ function isWorkingHours() {
   return false;
 }
 
-function isBeforeCutoff(dateCreated, cuenta, logisticType) {
-  // Verifica si la venta fue creada antes del corte horario
-  var orderDate = getArgentinaDate(new Date(dateCreated));
-  var timeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+function shouldProcessOrder(estimatedHandlingLimit, cuenta, logisticType) {
+  // Determina si un envío debe despacharse hoy según el estimated_handling_limit de MercadoLibre
+  // Este campo indica la fecha límite para despachar el envío
+  // - Si la fecha límite es hoy o anterior → debe despacharse hoy
+  // - Si la fecha límite es futura → no debe despacharse hoy
 
-  // Usar horario específico por cuenta y tipo, o el default
-  var corte = cuenta && logisticType ? getHorarioCorte(cuenta, logisticType) : HORARIO_DEFAULT;
-
-  return timeInMinutes < corte;
-}
-
-function isTodayOrder(dateCreated) {
-  // Verifica si la orden es de hoy (comparando solo la fecha)
-  var orderDate = getArgentinaDate(new Date(dateCreated));
-  var today = getArgentinaTime();
-  return orderDate.toLocaleDateString('es-AR') === today.toLocaleDateString('es-AR');
-}
-
-function isYesterday(dateCreated) {
-  // Verifica si la orden es de ayer
-  var orderDate = getArgentinaDate(new Date(dateCreated));
-  var today = getArgentinaTime();
-  var yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return orderDate.toLocaleDateString('es-AR') === yesterday.toLocaleDateString('es-AR');
-}
-
-function shouldProcessOrder(dateCreated, cuenta, logisticType) {
-  // Determina si un envío corresponde al día de trabajo actual según su corte específico:
-  // - Usa el horario de corte de la cuenta y tipo de logística del envío
-  // - Órdenes de AYER creadas DESPUÉS del corte → entran hoy
-  // - Órdenes de HOY creadas HASTA el corte (inclusive) → entran hoy
-  // - Órdenes de HOY creadas DESPUÉS del corte → NO entran (corresponden a mañana)
-
-  var orderDate = getArgentinaDate(new Date(dateCreated));
-  var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
-  var corte = getHorarioCorte(cuenta, logisticType);
-
-  if (isTodayOrder(dateCreated)) {
-    return orderTimeInMinutes <= corte;
-  }
-  if (isYesterday(dateCreated)) {
-    return orderTimeInMinutes >= corte;
+  if (!estimatedHandlingLimit) {
+    // Si no hay estimated_handling_limit, no procesar
+    return false;
   }
 
-  return false;
+  var handlingDate = getArgentinaDate(new Date(estimatedHandlingLimit));
+  var today = getArgentinaTime();
+
+  // Comparar solo las fechas (sin hora)
+  handlingDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+
+  // Debe procesarse si la fecha límite es hoy o anterior
+  return handlingDate.getTime() <= today.getTime();
 }
 
 async function mlApiRequest(account, url, options = {}) {
@@ -1312,7 +1286,8 @@ async function getReadyToShipOrders(account) {
       orderIds: shipmentInfo.orderIds, // Array de order_ids para uso interno
       packId: shipmentInfo.packId,
       account: account.name,
-      dateCreated: shipmentInfo.dateCreated,
+      dateCreated: shipmentInfo.dateCreated, // Para display en sheets
+      estimatedHandlingLimit: shipment.estimated_handling_limit, // Para filtrado
       receiverName: shipment.receiver_address ? shipment.receiver_address.receiver_name : 'N/A',
       logisticType: shipment.logistic_type || '',
       status: status,
@@ -1716,9 +1691,9 @@ async function syncMorningShipments() {
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
 
-    // Filtrar: solo los creados antes del corte horario de hoy o de días anteriores
+    // Filtrar: solo los que deben despacharse hoy según estimated_handling_limit
     var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.dateCreated, s.account, s.logisticType);
+      return shouldProcessOrder(s.estimatedHandlingLimit, s.account, s.logisticType);
     });
 
     allShipments = allShipments.concat(filtered);
@@ -1766,9 +1741,9 @@ async function syncPendingShipments() {
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
 
-    // Filtrar por corte horario específico por cuenta/tipo
+    // Filtrar por estimated_handling_limit
     var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.dateCreated, s.account, s.logisticType);
+      return shouldProcessOrder(s.estimatedHandlingLimit, s.account, s.logisticType);
     });
 
     allShipments = allShipments.concat(filtered);
@@ -2014,6 +1989,10 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     account: found.account,
     shipmentId: shipmentId,
     status: found.shipment.status,
+    logisticType: found.shipment.logistic_type,
+    estimatedHandlingLimit: found.shipment.estimated_handling_limit,
+    estimatedDeliveryTime: found.shipment.estimated_delivery_time,
+    dateCreated: found.shipment.date_created,
     items: processedItems
   });
 });
@@ -2292,7 +2271,7 @@ async function actualizarEstadosEnvios() {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        // Si está cancelado, eliminar la fila directamente
+        // Si está cancelado, eliminar de la hoja
         if (estadoML === 'cancelled') {
           var eliminado = await deleteShipmentRow(envioId);
           if (eliminado) actualizados++;
@@ -2548,10 +2527,10 @@ app.post('/webhooks/ml', async function(req, res) {
       return;
     }
 
-    // Verificar corte horario (ahora que tenemos logistic_type)
-    if (!shouldProcessOrder(dateCreated, account.name, shipmentData.logistic_type)) {
+    // Verificar estimated_handling_limit (fecha límite de despacho)
+    if (!shouldProcessOrder(shipmentData.estimated_handling_limit, account.name, shipmentData.logistic_type)) {
       var tipoEnvio = getTipoEnvio(shipmentData.logistic_type);
-      console.log('Orden fuera de corte horario para ' + account.name + '/' + tipoEnvio + ', ignorando:', orderId);
+      console.log('Envío fuera de fecha límite para ' + account.name + '/' + tipoEnvio + ', ignorando:', orderId);
       return;
     }
 
@@ -2579,7 +2558,8 @@ app.post('/webhooks/ml', async function(req, res) {
       orderIds: allOrderIds, // Array de order_ids
       packId: packId,
       account: account.name,
-      dateCreated: dateCreated,
+      dateCreated: dateCreated, // Para display en sheets
+      estimatedHandlingLimit: shipmentData.estimated_handling_limit, // Para filtrado
       receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
       logisticType: shipmentData.logistic_type
     };
@@ -2906,7 +2886,8 @@ app.post('/api/agregar-orden/:orderId', async function(req, res) {
     id: shipmentId,
     orderId: orderId,
     account: accountFound.name,
-    dateCreated: orderData.date_created,
+    dateCreated: orderData.date_created, // Para display en sheets
+    estimatedHandlingLimit: shipmentData.estimated_handling_limit, // Para filtrado
     receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
     logisticType: shipmentData.logistic_type || '',
     status: shipmentData.status,
@@ -3026,43 +3007,40 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
       }
       diagnostico.pasos.push({ paso: 'Modo: ' + shipmentData.mode, ok: true });
 
-      // Verificar horario de corte
+      // Verificar estimated_handling_limit (fecha límite de despacho según MercadoLibre)
       var tipoEnvio = getTipoEnvio(shipmentData.logistic_type);
-      var corte = getHorarioCorte(account.name, shipmentData.logistic_type);
-      var orderDate = getArgentinaDate(new Date(orderData.date_created));
-      var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
-      var horaOrden = String(Math.floor(orderTimeInMinutes / 60)).padStart(2, '0') + ':' + String(orderTimeInMinutes % 60).padStart(2, '0');
-      var horaCorte = String(Math.floor(corte / 60)).padStart(2, '0') + ':' + String(corte % 60).padStart(2, '0');
+      var estimatedHandlingLimit = shipmentData.estimated_handling_limit;
 
-      diagnostico.pasos.push({
-        paso: 'Hora de creación (Argentina): ' + horaOrden + ' (' + orderTimeInMinutes + ' min)',
-        ok: true
-      });
-      diagnostico.pasos.push({
-        paso: 'Horario de corte ' + account.name + '|' + tipoEnvio + ': ' + horaCorte + ' (' + corte + ' min)',
-        ok: true
-      });
-
-      var esHoy = isTodayOrder(orderData.date_created);
-      var esAyer = isYesterday(orderData.date_created);
-
-      diagnostico.pasos.push({ paso: '¿Es de hoy?: ' + (esHoy ? 'SÍ' : 'NO'), ok: true });
-      diagnostico.pasos.push({ paso: '¿Es de ayer?: ' + (esAyer ? 'SÍ' : 'NO'), ok: true });
-
-      var pasaFiltroHorario = shouldProcessOrder(orderData.date_created, account.name, shipmentData.logistic_type);
-      if (!pasaFiltroHorario) {
-        var motivo = '';
-        if (esHoy) {
-          motivo = 'Orden de HOY creada DESPUÉS del corte (' + horaOrden + ' > ' + horaCorte + ')';
-        } else if (esAyer) {
-          motivo = 'Orden de AYER creada ANTES del corte (' + horaOrden + ' < ' + horaCorte + ')';
-        } else {
-          motivo = 'Orden no es de hoy ni de ayer';
-        }
-        diagnostico.pasos.push({ paso: 'Filtro horario', ok: false, motivo: motivo });
+      if (!estimatedHandlingLimit) {
+        diagnostico.pasos.push({
+          paso: 'Fecha límite de despacho (estimated_handling_limit)',
+          ok: false,
+          motivo: 'El envío no tiene estimated_handling_limit'
+        });
         return res.json(diagnostico);
       }
-      diagnostico.pasos.push({ paso: 'Pasa filtro de horario de corte', ok: true });
+
+      var handlingDate = getArgentinaDate(new Date(estimatedHandlingLimit));
+      var today = getArgentinaTime();
+      var handlingDateStr = handlingDate.toLocaleDateString('es-AR');
+      var todayStr = today.toLocaleDateString('es-AR');
+
+      diagnostico.pasos.push({
+        paso: 'Fecha límite de despacho: ' + handlingDateStr,
+        ok: true
+      });
+      diagnostico.pasos.push({
+        paso: 'Fecha actual: ' + todayStr,
+        ok: true
+      });
+
+      var pasaFiltro = shouldProcessOrder(estimatedHandlingLimit, account.name, shipmentData.logistic_type);
+      if (!pasaFiltro) {
+        var motivo = 'La fecha límite de despacho es futura (' + handlingDateStr + ' > ' + todayStr + ')';
+        diagnostico.pasos.push({ paso: 'Filtro de fecha', ok: false, motivo: motivo });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Pasa filtro de fecha (debe despacharse hoy o ya pasó fecha límite)', ok: true });
 
       // Verificar si ya existe en el sheet
       var sheetName = getTodaySheetName();
@@ -3084,7 +3062,7 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
         diagnostico.pasos.push({ paso: 'Verificar sheet', ok: false, motivo: 'Error: ' + err.message });
       }
 
-      diagnostico.conclusion = pasaFiltroHorario ? 'La orden DEBERÍA aparecer' : 'La orden está correctamente filtrada';
+      diagnostico.conclusion = pasaFiltro ? 'La orden DEBERÍA aparecer' : 'La orden está correctamente filtrada';
       return res.json(diagnostico);
     }
   }
@@ -3142,7 +3120,7 @@ app.post('/api/actualizar-estados', async function(req, res) {
       var estadoML = await getShipmentStatus(account, envioId);
 
       if (estadoML && estadoML !== 'ready_to_ship') {
-        // Si está cancelado, eliminar la fila directamente
+        // Si está cancelado, eliminar de la hoja
         if (estadoML === 'cancelled') {
           var eliminado = await deleteShipmentRow(envioId);
           if (eliminado) {
