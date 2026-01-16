@@ -1691,11 +1691,13 @@ REGLAS DE COMPARACIÓN DE MODELOS:
    - Pedido "G24", foto dice "G24 Power" → INCORRECTO (variante diferente)
 
 6. REGLA ESPECIAL PARA FUNDAS Y 4G/5G:
-   - Para fundas (silicona o transparente): IGNORAR si dice 4G o 5G
-   - EXCEPCIÓN: Si el modelo es A22, SÍ distinguir entre A22 4G y A22 5G (son diferentes)
-   - Ejemplo: Pedido "A25", foto dice "A25 5G" → CORRECTO (ignorar 5G)
-   - Ejemplo: Pedido "A22 4G", foto dice "A22 5G" → INCORRECTO (A22 es excepción)
-   - Ejemplo: Pedido "A22", foto dice "A22 4G" → INCORRECTO (debe especificar variante)
+   - Para fundas: IGNORAR "4G" o "5G" esté separado O PEGADO al modelo
+   - "A265G", "A265g", "A26 5G", "A26 5g" → todos son "A26"
+   - "A154G", "A15 4G" → es "A15"
+   - EXCEPCIÓN ÚNICA: A22 (sí distinguir A22 4G vs A22 5G)
+   - Ejemplo: Pedido "A26", foto dice "A265G" → CORRECTO (ignorar 5G pegado)
+   - Ejemplo: Pedido "A26", foto dice "A26 5g" → CORRECTO (ignorar 5g)
+   - Ejemplo: Pedido "A22 4G", foto dice "A225G" → INCORRECTO (A22 es excepción)
 
 INSTRUCCIONES:
 1. Extraé el CÓDIGO DE MODELO de la etiqueta (ignorá la marca)
@@ -1732,9 +1734,13 @@ Plus (o +), Ultra, Pro, Pro Max, Air, Fusion, Neo
 - Si dice "A15+" reportar "A15 Plus"
 - Si dice "iPhone 15 Pro Max" reportar "15 Pro Max"
 
-REGLA 4G/5G:
-- IGNORAR 4G/5G en la etiqueta
-- EXCEPCIÓN: Si el modelo es A22, SÍ incluir (reportar "A22 4G" o "A22 5G")
+REGLA 4G/5G (MUY IMPORTANTE):
+- IGNORAR "4G" o "5G" esté separado O PEGADO al modelo
+- "A265G" → reportar "A26" (quitar el 5G pegado)
+- "A265g" → reportar "A26"
+- "A26 5G" → reportar "A26"
+- "A154G" → reportar "A15"
+- EXCEPCIÓN ÚNICA: A22 (reportar "A22 4G" o "A22 5G")
 
 Respondé SOLO con este JSON:
 {
