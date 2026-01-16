@@ -146,9 +146,47 @@
     .sync-progress-bar { height: 100%; background: #2563eb; border-radius: 2px; animation: progress 2s ease-in-out infinite; width: 30%; }
     @keyframes progress { 0% { margin-left: 0; } 50% { margin-left: 70%; } 100% { margin-left: 0; } }
 
+    /* Login screen */
+    .login-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .login-overlay.hidden { display: none; }
+    .login-box { background: white; border-radius: 16px; padding: 32px; max-width: 360px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    .login-logo { text-align: center; margin-bottom: 24px; }
+    .login-logo h1 { font-size: 24px; color: #2563eb; margin-bottom: 8px; }
+    .login-logo p { font-size: 14px; color: #6b7280; }
+    .login-form { display: flex; flex-direction: column; gap: 16px; }
+    .login-input { padding: 14px 16px; font-size: 16px; border: 2px solid #e5e7eb; border-radius: 8px; outline: none; transition: border-color 0.2s; }
+    .login-input:focus { border-color: #2563eb; }
+    .login-btn { padding: 14px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .login-btn:hover { background: #1d4ed8; }
+    .login-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .login-error { background: #fef2f2; color: #dc2626; padding: 12px; border-radius: 8px; font-size: 14px; text-align: center; display: none; }
+    .login-error.show { display: block; }
+    .logout-btn { position: fixed; top: 12px; right: 12px; background: rgba(255,255,255,0.2); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; z-index: 101; transition: background 0.2s; }
+    .logout-btn:hover { background: rgba(255,255,255,0.3); }
+    .logout-btn.hidden { display: none; }
+
   </style>
 </head>
 <body>
+  <!-- Login Overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <div class="login-logo">
+        <h1>Verificador de Envios</h1>
+        <p>Inicia sesion para continuar</p>
+      </div>
+      <form class="login-form" id="loginForm">
+        <input type="text" class="login-input" id="loginUser" placeholder="Usuario" autocomplete="username" required>
+        <input type="password" class="login-input" id="loginPassword" placeholder="Contrasena" autocomplete="current-password" required>
+        <div class="login-error" id="loginError">Usuario o contrasena incorrectos</div>
+        <button type="submit" class="login-btn" id="loginBtn">Iniciar Sesion</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Logout Button -->
+  <button type="button" class="logout-btn hidden" id="logoutBtn">Salir</button>
+
   <div class="header">
     <h1>Verificador de Envios</h1>
     <div class="nav-tabs">
@@ -269,8 +307,133 @@
 
   <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
   <script>
-    (function() {
+    // ============================================
+    // SISTEMA DE AUTENTICACIÓN
+    // ============================================
+    (function authInit() {
+      var loginOverlay = document.getElementById('loginOverlay');
+      var loginForm = document.getElementById('loginForm');
+      var loginUser = document.getElementById('loginUser');
+      var loginPassword = document.getElementById('loginPassword');
+      var loginError = document.getElementById('loginError');
+      var loginBtn = document.getElementById('loginBtn');
+      var logoutBtn = document.getElementById('logoutBtn');
+
+      // Verificar si ya está autenticado
+      function checkAuth() {
+        return fetch('/api/auth/check', { credentials: 'include' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.authenticated) {
+              showApp();
+              return true;
+            } else {
+              showLogin();
+              return false;
+            }
+          })
+          .catch(function() {
+            showLogin();
+            return false;
+          });
+      }
+
+      // Mostrar pantalla de login
+      function showLogin() {
+        loginOverlay.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
+        loginUser.focus();
+      }
+
+      // Mostrar app principal
+      function showApp() {
+        loginOverlay.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+        // Iniciar la app principal
+        if (typeof initMainApp === 'function') {
+          initMainApp();
+        }
+      }
+
+      // Manejar submit del formulario de login
+      loginForm.onsubmit = function(e) {
+        e.preventDefault();
+        loginError.classList.remove('show');
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Ingresando...';
+
+        fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            username: loginUser.value,
+            password: loginPassword.value
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Iniciar Sesion';
+
+          if (data.success) {
+            loginPassword.value = '';
+            showApp();
+          } else {
+            loginError.textContent = data.error || 'Error al iniciar sesion';
+            loginError.classList.add('show');
+          }
+        })
+        .catch(function(err) {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Iniciar Sesion';
+          loginError.textContent = 'Error de conexion';
+          loginError.classList.add('show');
+        });
+      };
+
+      // Manejar logout
+      logoutBtn.onclick = function() {
+        fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include'
+        })
+        .then(function() {
+          showLogin();
+        })
+        .catch(function() {
+          showLogin();
+        });
+      };
+
+      // Verificar autenticación al cargar
+      checkAuth();
+    })();
+
+    // ============================================
+    // APP PRINCIPAL
+    // ============================================
+    var mainAppInitialized = false;
+    function initMainApp() {
+      if (mainAppInitialized) return;
+      mainAppInitialized = true;
+
       var API_URL = '';
+
+      // Wrapper para fetch que incluye credenciales y maneja errores de auth
+      function authFetch(url, options) {
+        options = options || {};
+        options.credentials = 'include';
+        return fetch(url, options).then(function(response) {
+          if (response.status === 401) {
+            // Sesión expirada, recargar para mostrar login
+            window.location.reload();
+            return Promise.reject(new Error('Sesión expirada'));
+          }
+          return response;
+        });
+      }
+
       var currentItems = [];
       var unitChecks = {};
       var codeReader = null;
@@ -393,7 +556,7 @@
           });
         }
 
-        fetch(API_URL + '/api/shipment/' + currentShipmentId + '/verificado', {
+        authFetch(API_URL + '/api/shipment/' + currentShipmentId + '/verificado', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -532,7 +695,7 @@
         showStatus('Buscando envio...', 'loading');
         searchBtn.disabled = true;
         searchBtn.textContent = '...';
-        fetch(API_URL + '/api/shipment/' + shipmentId.trim())
+        authFetch(API_URL + '/api/shipment/' + shipmentId.trim())
           .then(function(response) {
             return response.json().then(function(data) {
               if (!response.ok) throw new Error(data.error || 'Error al buscar envio');
@@ -616,7 +779,7 @@
       }
 
       function markProductByBarcode(barcode) {
-        fetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
+        authFetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
           .then(function(response) { return response.json(); })
           .then(function(data) {
             if (data.found && data.sku) {
@@ -715,7 +878,7 @@
         var item = currentItems.find(function(i) { return i.sku === selectedSkuForModal; });
         var description = item ? (item.description || item.title || '') : '';
 
-        fetch(API_URL + '/api/barcode', {
+        authFetch(API_URL + '/api/barcode', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -868,7 +1031,7 @@
         }
 
         // Enviar al servidor
-        fetch(API_URL + '/api/vision/analyze', {
+        authFetch(API_URL + '/api/vision/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody)
@@ -1028,7 +1191,7 @@
       var cuentasPickit = ['SHOP', 'MUN1', 'MUN2'];
 
       function cargarResumenDia() {
-        fetch(API_URL + '/api/envios-del-dia')
+        authFetch(API_URL + '/api/envios-del-dia')
           .then(function(response) { return response.json(); })
           .then(function(data) {
             var now = new Date();
@@ -1214,7 +1377,7 @@
         resumenStatus.className = 'resumen-status vacio';
         resumenStatus.textContent = 'Sincronizando envios con MercadoLibre...';
 
-        fetch(API_URL + '/api/sync-morning')
+        authFetch(API_URL + '/api/sync-morning')
           .then(function(response) { return response.json(); })
           .then(function(data) {
             resumenSync.classList.remove('loading');
@@ -1250,8 +1413,8 @@
       // Inicializar vista (ocultar boton de camara en vista panel)
       cameraBtn.classList.add('hidden');
 
-      console.log('App iniciada v18 - Mejoras OCR: marca todas las unidades, scroll a camara, boton mas grande');
-    })();
+      console.log('App iniciada v19 - Login de usuario agregado');
+    }
   </script>
 </body>
 </html>
