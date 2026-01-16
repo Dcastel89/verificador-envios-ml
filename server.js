@@ -1048,17 +1048,17 @@ function isWorkingHours() {
   return false;
 }
 
-function shouldProcessOrder(estimatedHandlingLimit, cuenta, logisticType, dateCreated) {
-  // Determina si un envío debe despacharse hoy según el estimated_handling_limit de MercadoLibre
-  // Este campo indica la fecha límite para despachar el envío
+function shouldProcessOrder(expectedDate, cuenta, logisticType, dateCreated) {
+  // Determina si un envío debe despacharse hoy según el expected_date del SLA de MercadoLibre
+  // Este campo viene del endpoint /shipments/{id}/sla y indica la fecha límite para despachar
   // - Si la fecha límite es hoy o anterior → debe despacharse hoy
   // - Si la fecha límite es futura → no debe despacharse hoy
-  // - FALLBACK: Si no hay estimated_handling_limit → incluir (porque ya está en ready_to_ship)
+  // - FALLBACK: Si no hay expected_date → NO incluir (prudencia con envíos sin SLA)
 
-  if (estimatedHandlingLimit) {
-    // ML devuelve fechas ya en timezone de Argentina (ej: "2026-01-16T21:00:00.000-03:00")
-    // Extraer solo la parte de fecha (YYYY-MM-DD) del string ISO antes de parsear
-    var handlingDateStr = estimatedHandlingLimit.split('T')[0]; // "2026-01-16"
+  if (expectedDate) {
+    // ML devuelve fechas en timezone de Argentina (ej: "2026-01-16T23:59:59-03:00")
+    // Extraer solo la parte de fecha (YYYY-MM-DD) del string ISO
+    var expectedDateStr = expectedDate.split('T')[0]; // "2026-01-16"
 
     var today = getArgentinaTime();
     var year = today.getFullYear();
@@ -1067,12 +1067,12 @@ function shouldProcessOrder(estimatedHandlingLimit, cuenta, logisticType, dateCr
     var todayStr = year + '-' + month + '-' + day; // "2026-01-16"
 
     // Debe procesarse si la fecha límite es hoy o anterior
-    return handlingDateStr <= todayStr;
+    return expectedDateStr <= todayStr;
   }
 
-  // FALLBACK: Si no hay estimated_handling_limit, incluir el envío
-  // El razonamiento: si ML lo mantiene en ready_to_ship, es porque debe despacharse
-  return true;
+  // FALLBACK: Si no hay expected_date, NO incluir el envío por prudencia
+  // Esto evita incluir envíos que no deberían despacharse aún
+  return false;
 }
 
 async function mlApiRequest(account, url, options = {}) {
@@ -1144,6 +1144,19 @@ async function mlApiRequestPost(account, url, data, options = {}) {
     }
     var errorDetail = error.response && error.response.data ? JSON.stringify(error.response.data) : error.message;
     console.error('Error en POST API:', error.message, '- Detalle:', errorDetail);
+    return null;
+  }
+}
+
+async function getShipmentSLA(account, shipmentId) {
+  // Obtiene el SLA (Service Level Agreement) de un envío
+  // Devuelve la fecha límite esperada para despacho según ML
+  // Endpoint recomendado tras la deprecación de estimated_handling_limit (Mayo 2025)
+  try {
+    var slaData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + shipmentId + '/sla');
+    return slaData;
+  } catch (error) {
+    console.error('Error obteniendo SLA para shipment ' + shipmentId + ':', error.message);
     return null;
   }
 }
@@ -1290,6 +1303,10 @@ async function getReadyToShipOrders(account) {
       continue;
     }
 
+    // Obtener SLA del envío (fecha límite esperada para despacho)
+    var slaData = await getShipmentSLA(account, shippingId);
+    var expectedDate = slaData && slaData.expected_date ? slaData.expected_date : null;
+
     pendingShipments.push({
       id: shippingId,
       orderId: shipmentInfo.orderIds.join(','), // Múltiples order_ids separados por coma
@@ -1297,7 +1314,7 @@ async function getReadyToShipOrders(account) {
       packId: shipmentInfo.packId,
       account: account.name,
       dateCreated: shipmentInfo.dateCreated, // Para display en sheets
-      estimatedHandlingLimit: shipment.estimated_handling_limit, // Para filtrado
+      expectedDate: expectedDate, // Fecha límite de despacho desde SLA
       receiverName: shipment.receiver_address ? shipment.receiver_address.receiver_name : 'N/A',
       logisticType: shipment.logistic_type || '',
       status: status,
@@ -1701,9 +1718,9 @@ async function syncMorningShipments() {
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
 
-    // Filtrar: solo los que deben despacharse hoy según estimated_handling_limit (con fallback a dateCreated)
+    // Filtrar: solo los que deben despacharse hoy según expected_date del SLA
     var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.estimatedHandlingLimit, s.account, s.logisticType, s.dateCreated);
+      return shouldProcessOrder(s.expectedDate, s.account, s.logisticType, s.dateCreated);
     });
 
     allShipments = allShipments.concat(filtered);
@@ -1751,9 +1768,9 @@ async function syncPendingShipments() {
   for (var i = 0; i < accounts.length; i++) {
     var shipments = await getReadyToShipOrders(accounts[i]);
 
-    // Filtrar por estimated_handling_limit (con fallback a dateCreated)
+    // Filtrar por expected_date del SLA
     var filtered = shipments.filter(function(s) {
-      return shouldProcessOrder(s.estimatedHandlingLimit, s.account, s.logisticType, s.dateCreated);
+      return shouldProcessOrder(s.expectedDate, s.account, s.logisticType, s.dateCreated);
     });
 
     allShipments = allShipments.concat(filtered);
@@ -1942,6 +1959,11 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
   }
 
   var accountObj = found.accountObj;
+
+  // Obtener SLA del envío
+  var slaData = await getShipmentSLA(accountObj, shipmentId);
+  var expectedDate = slaData && slaData.expected_date ? slaData.expected_date : null;
+
   var items = await getShipmentItems(accountObj, shipmentId);
   var processedItems = [];
 
@@ -2000,7 +2022,7 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     shipmentId: shipmentId,
     status: found.shipment.status,
     logisticType: found.shipment.logistic_type,
-    estimatedHandlingLimit: found.shipment.estimated_handling_limit,
+    expectedDate: expectedDate,
     estimatedDeliveryTime: found.shipment.estimated_delivery_time,
     dateCreated: found.shipment.date_created,
     items: processedItems
@@ -2537,8 +2559,12 @@ app.post('/webhooks/ml', async function(req, res) {
       return;
     }
 
-    // Verificar estimated_handling_limit (fecha límite de despacho, con fallback a dateCreated)
-    if (!shouldProcessOrder(shipmentData.estimated_handling_limit, account.name, shipmentData.logistic_type, dateCreated)) {
+    // Obtener SLA del envío (fecha límite esperada para despacho)
+    var slaData = await getShipmentSLA(account, shipmentId);
+    var expectedDate = slaData && slaData.expected_date ? slaData.expected_date : null;
+
+    // Verificar expected_date del SLA (fecha límite de despacho)
+    if (!shouldProcessOrder(expectedDate, account.name, shipmentData.logistic_type, dateCreated)) {
       var tipoEnvio = getTipoEnvio(shipmentData.logistic_type);
       console.log('Envío fuera de fecha límite para ' + account.name + '/' + tipoEnvio + ', ignorando:', orderId);
       return;
@@ -2569,7 +2595,7 @@ app.post('/webhooks/ml', async function(req, res) {
       packId: packId,
       account: account.name,
       dateCreated: dateCreated, // Para display en sheets
-      estimatedHandlingLimit: shipmentData.estimated_handling_limit, // Para filtrado
+      expectedDate: expectedDate, // Fecha límite de despacho desde SLA
       receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
       logisticType: shipmentData.logistic_type
     };
@@ -2891,13 +2917,17 @@ app.post('/api/agregar-orden/:orderId', async function(req, res) {
     return res.status(400).json({ error: 'No se pudo obtener datos del envío', shipmentId: shipmentId });
   }
 
+  // Obtener SLA del envío (fecha límite esperada para despacho)
+  var slaData = await getShipmentSLA(accountFound, shipmentId);
+  var expectedDate = slaData && slaData.expected_date ? slaData.expected_date : null;
+
   // Crear el objeto de envío
   var shipment = {
     id: shipmentId,
     orderId: orderId,
     account: accountFound.name,
     dateCreated: orderData.date_created, // Para display en sheets
-    estimatedHandlingLimit: shipmentData.estimated_handling_limit, // Para filtrado
+    expectedDate: expectedDate, // Fecha límite de despacho desde SLA
     receiverName: shipmentData.receiver_address ? shipmentData.receiver_address.receiver_name : 'N/A',
     logisticType: shipmentData.logistic_type || '',
     status: shipmentData.status,
@@ -2996,6 +3026,14 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
       }
       diagnostico.pasos.push({ paso: 'Shipment obtenido', ok: true });
 
+      // Obtener SLA del envío
+      var slaData = await getShipmentSLA(account, orderData.shipping.id);
+      if (!slaData || !slaData.expected_date) {
+        diagnostico.pasos.push({ paso: 'Obtener SLA', ok: false, motivo: 'No se pudo obtener SLA del envío (expected_date no disponible)' });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'SLA obtenido (expected_date: ' + slaData.expected_date.split('T')[0] + ')', ok: true });
+
       // Verificar status del envío
       if (shipmentData.status === 'cancelled') {
         diagnostico.pasos.push({ paso: 'Status del envío', ok: false, motivo: 'Envío cancelado' });
@@ -3026,9 +3064,9 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
       }
       diagnostico.pasos.push({ paso: 'Modo: ' + shipmentData.mode, ok: true });
 
-      // Verificar estimated_handling_limit (fecha límite de despacho según MercadoLibre)
+      // Verificar expected_date del SLA (fecha límite de despacho según MercadoLibre)
       var tipoEnvio = getTipoEnvio(shipmentData.logistic_type);
-      var estimatedHandlingLimit = shipmentData.estimated_handling_limit;
+      var expectedDate = slaData.expected_date;
 
       var today = getArgentinaTime();
       var year = today.getFullYear();
@@ -3036,49 +3074,26 @@ app.get('/api/diagnostico/:orderId', async function(req, res) {
       var day = String(today.getDate()).padStart(2, '0');
       var todayStr = year + '-' + month + '-' + day;
 
-      if (!estimatedHandlingLimit) {
-        diagnostico.pasos.push({
-          paso: 'Fecha límite de despacho (estimated_handling_limit)',
-          ok: true,
-          nota: 'No tiene estimated_handling_limit, usando FALLBACK a date_created'
-        });
+      // Extraer fecha (YYYY-MM-DD) directamente del string ISO
+      var expectedDateStr = expectedDate.split('T')[0];
 
-        // Usar date_created como fallback
-        var createdDateStr = orderData.date_created.split('T')[0];
-        diagnostico.pasos.push({
-          paso: 'Fecha de creación (fallback): ' + createdDateStr,
-          ok: true
-        });
-        diagnostico.pasos.push({
-          paso: 'Fecha actual: ' + todayStr,
-          ok: true
-        });
-      } else {
-        // Extraer fecha (YYYY-MM-DD) directamente del string ISO
-        var handlingDateStr = estimatedHandlingLimit.split('T')[0];
+      diagnostico.pasos.push({
+        paso: 'Fecha límite de despacho (SLA): ' + expectedDateStr,
+        ok: true
+      });
+      diagnostico.pasos.push({
+        paso: 'Fecha actual: ' + todayStr,
+        ok: true
+      });
 
-        diagnostico.pasos.push({
-          paso: 'Fecha límite de despacho: ' + handlingDateStr,
-          ok: true
-        });
-        diagnostico.pasos.push({
-          paso: 'Fecha actual: ' + todayStr,
-          ok: true
-        });
-      }
-
-      var pasaFiltro = shouldProcessOrder(estimatedHandlingLimit, account.name, shipmentData.logistic_type, orderData.date_created);
+      var pasaFiltro = shouldProcessOrder(expectedDate, account.name, shipmentData.logistic_type, orderData.date_created);
       if (!pasaFiltro) {
-        var motivo = 'La fecha límite de despacho es futura (' + handlingDateStr + ' > ' + todayStr + ')';
+        var motivo = 'La fecha límite de despacho es futura (' + expectedDateStr + ' > ' + todayStr + ')';
         diagnostico.pasos.push({ paso: 'Filtro de fecha', ok: false, motivo: motivo });
         return res.json(diagnostico);
       }
 
-      if (estimatedHandlingLimit) {
-        diagnostico.pasos.push({ paso: 'Pasa filtro de fecha (debe despacharse hoy o ya pasó fecha límite)', ok: true });
-      } else {
-        diagnostico.pasos.push({ paso: 'Pasa filtro de fecha (incluido por estar en ready_to_ship sin estimated_handling_limit)', ok: true });
-      }
+      diagnostico.pasos.push({ paso: 'Pasa filtro de fecha (debe despacharse hoy o ya pasó fecha límite)', ok: true });
 
       // Verificar si ya existe en el sheet
       var sheetName = getTodaySheetName();
