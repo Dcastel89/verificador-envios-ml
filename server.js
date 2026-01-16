@@ -1369,10 +1369,10 @@ async function ensureDaySheetExists(sheetName) {
 
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: sheetName + '!A1:K1',
+          range: sheetName + '!A1:L1',
           valueInputOption: 'USER_ENTERED',
           resource: {
-            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo', 'TipoLogistica', 'Promesa']]
+            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo', 'TipoLogistica', 'Promesa', 'SLA']]
           }
         });
 
@@ -1473,12 +1473,15 @@ async function addPendingShipments(shipments, sheetName) {
         promesa = s.expectedDate.split('T')[0]; // "2026-01-16"
       }
 
-      return [fecha, hora, s.id, s.account, s.receiverName, '', 'Pendiente', '', '', s.logisticType || '', promesa];
+      // SLA status: on_time, delayed, early
+      var slaStatus = s.slaStatus || '';
+
+      return [fecha, hora, s.id, s.account, s.receiverName, '', 'Pendiente', '', '', s.logisticType || '', promesa, slaStatus];
     });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K',
+      range: sheetName + '!A:L',
       valueInputOption: 'USER_ENTERED',
       resource: { values: rows }
     });
@@ -1501,7 +1504,7 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -1540,7 +1543,7 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
       // Append nueva fila con todas las 10 columnas (A-J)
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: sheetName + '!A:K',
+        range: sheetName + '!A:L',
         valueInputOption: 'USER_ENTERED',
         resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr, '']] }
       });
@@ -1570,7 +1573,7 @@ async function markAsDespachado(shipmentId, estadoML) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -1638,7 +1641,7 @@ async function deleteShipmentRow(shipmentId) {
     // Obtener todas las filas para encontrar el índice
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
     var rows = response.data.values || [];
     var rowIndex = -1;
@@ -1774,7 +1777,10 @@ async function syncMorningShipments() {
     return shouldProcessOrder(s.expectedDate, s.slaStatus, s.logisticType);
   });
 
-  console.log('Envíos que deben despacharse hoy: ' + filtered.length);
+  // Log desglose
+  var delayedCount = filtered.filter(function(s) { return s.slaStatus === 'delayed'; }).length;
+  var todayCount = filtered.length - delayedCount;
+  console.log('Envíos filtrados: ' + filtered.length + ' total (' + todayCount + ' promesa HOY, ' + delayedCount + ' DELAYED)');
 
   // Solo agregar envíos nuevos (addPendingShipments ya filtra duplicados)
   if (filtered.length > 0) {
@@ -2354,7 +2360,7 @@ async function actualizarEstadosEnvios() {
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
 
     var rows = response.data.values || [];
@@ -2421,7 +2427,7 @@ app.get('/api/envios-del-dia', async function(req, res) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
 
     var rows = response.data.values || [];
@@ -2803,7 +2809,7 @@ app.get('/api/resumen-dia', async function(req, res) {
     // Leer datos de la hoja del día (todas las columnas A-J)
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
 
     var rows = response.data.values || [];
@@ -2877,7 +2883,7 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
 
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
 
     var rows = response.data.values || [];
@@ -2911,7 +2917,7 @@ app.post('/api/limpiar-duplicados', async function(req, res) {
     // Limpiar y reescribir la hoja sin duplicados (todas las columnas A-J)
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
 
     await sheets.spreadsheets.values.update({
@@ -3217,7 +3223,7 @@ app.post('/api/actualizar-estados', async function(req, res) {
     // Leer todos los envíos de la hoja (todas las columnas A-J)
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:K'
+      range: sheetName + '!A:L'
     });
 
     var rows = response.data.values || [];
