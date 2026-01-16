@@ -1661,29 +1661,36 @@ ${typeof productoEsperado === 'string' ? productoEsperado : JSON.stringify(produ
 
 REGLAS DE COMPARACIÓN DE MODELOS:
 
-1. IGNORAR LA MARCA - Solo importa el código de modelo:
-   - "MOTO G15" = "G15" ✓
-   - "Samsung A25" = "A25" ✓
-   - "Xiaomi Redmi 14" = "Redmi 14" ✓
-   - "iPhone 15" = "15" (para Apple) ✓
+1. IGNORAR TEXTO EXTRA EN ETIQUETAS - Solo importa el código de modelo:
+   - Ignorar marcas: "MOTO G15" = "G15", "Samsung A25" = "A25"
+   - Ignorar texto adicional: "SX", "For", "Galaxy", "Phone case", etc.
+   - Ejemplo: "For Samsung Galaxy A25 SX" = "A25" ✓
 
-2. LOS SUFIJOS DE MODELO SON DIFERENTES - Ser estricto:
+2. SUFIJOS IMPORTANTES QUE DEBEN COINCIDIR EXACTAMENTE:
+   Plus (o +), Ultra, Pro, Pro Max, Air, Fusion, Neo
+   - A15 ≠ A15 Plus (Plus es importante)
+   - iPhone 15 ≠ iPhone 15 Pro Max (Pro Max es importante)
+   - A55 ≠ A55 Ultra (Ultra es importante)
+   - Redmi Note 14 ≠ Redmi Note 14 Pro (Pro es importante)
+
+3. OTROS SUFIJOS TAMBIÉN SON DIFERENTES - Ser estricto:
    - A03 ≠ A03s ≠ A03 Core (son modelos distintos!)
    - A15 ≠ A16 (números diferentes = modelos diferentes)
    - G24 ≠ G24 Power (con sufijo = modelo diferente)
    - Redmi 14 ≠ Redmi Note 14 (Note es otro modelo)
 
-3. EJEMPLOS DE COINCIDENCIAS CORRECTAS:
-   - Pedido "G15", foto dice "MOTO G15" → CORRECTO
-   - Pedido "A25", foto dice "For Samsung Galaxy A25" → CORRECTO
-   - Pedido "Redmi 14", foto dice "Xiaomi Redmi 14" → CORRECTO
+4. EJEMPLOS DE COINCIDENCIAS CORRECTAS:
+   - Pedido "G15", foto dice "MOTO G15" → CORRECTO (ignorar MOTO)
+   - Pedido "A25", foto dice "For Samsung Galaxy A25 SX" → CORRECTO (ignorar texto extra)
+   - Pedido "A15 Plus", foto dice "A15+" → CORRECTO (+ equivale a Plus)
 
-4. EJEMPLOS DE COINCIDENCIAS INCORRECTAS:
-   - Pedido "A03", foto dice "A03s" → INCORRECTO (sufijo diferente)
-   - Pedido "A15", foto dice "A16" → INCORRECTO (número diferente)
+5. EJEMPLOS DE COINCIDENCIAS INCORRECTAS:
+   - Pedido "A03", foto dice "A03s" → INCORRECTO (sufijo s es diferente)
+   - Pedido "A15", foto dice "A15 Plus" → INCORRECTO (Plus es importante)
+   - Pedido "iPhone 15", foto dice "iPhone 15 Pro" → INCORRECTO (Pro es importante)
    - Pedido "G24", foto dice "G24 Power" → INCORRECTO (variante diferente)
 
-5. REGLA ESPECIAL PARA FUNDAS Y 4G/5G:
+6. REGLA ESPECIAL PARA FUNDAS Y 4G/5G:
    - Para fundas (silicona o transparente): IGNORAR si dice 4G o 5G
    - EXCEPCIÓN: Si el modelo es A22, SÍ distinguir entre A22 4G y A22 5G (son diferentes)
    - Ejemplo: Pedido "A25", foto dice "A25 5G" → CORRECTO (ignorar 5G)
@@ -1718,11 +1725,16 @@ Extraé:
 2. **Color**: Color real del producto (no del fondo de madera)
 3. **Tipo**: Qué tipo de producto es
 
-IGNORAR: "Fashion Case", "New", "Phone case", "Made in China"
+IGNORAR en el modelo: "Fashion Case", "New", "Phone case", "Made in China", "SX", "For", "Galaxy", marcas como "Samsung", "MOTO", "Xiaomi"
 
-REGLA ESPECIAL 4G/5G:
-- Para fundas: IGNORAR si dice 4G o 5G en la etiqueta
-- EXCEPCIÓN: Si el modelo es A22, SÍ incluir 4G o 5G (reportar "A22 4G" o "A22 5G")
+SUFIJOS IMPORTANTES QUE SÍ DEBEN INCLUIRSE EN EL MODELO:
+Plus (o +), Ultra, Pro, Pro Max, Air, Fusion, Neo
+- Si dice "A15+" reportar "A15 Plus"
+- Si dice "iPhone 15 Pro Max" reportar "15 Pro Max"
+
+REGLA 4G/5G:
+- IGNORAR 4G/5G en la etiqueta
+- EXCEPCIÓN: Si el modelo es A22, SÍ incluir (reportar "A22 4G" o "A22 5G")
 
 Respondé SOLO con este JSON:
 {
