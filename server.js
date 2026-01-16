@@ -2965,6 +2965,134 @@ app.get('/api/orden/:orderId', async function(req, res) {
   res.status(404).json({ error: 'Orden no encontrada', orderId: orderId });
 });
 
+// Endpoint de diagnóstico para investigar por qué una orden no aparece
+app.get('/api/diagnostico/:orderId', async function(req, res) {
+  var orderId = req.params.orderId;
+  var diagnostico = {
+    orderId: orderId,
+    pasos: []
+  };
+
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i];
+    if (!account.accessToken) continue;
+
+    var orderData = await mlApiRequest(account, 'https://api.mercadolibre.com/orders/' + orderId);
+
+    if (orderData && orderData.id) {
+      diagnostico.cuenta = account.name;
+      diagnostico.pasos.push({ paso: 'Orden encontrada en cuenta ' + account.name, ok: true });
+
+      // Verificar status
+      if (orderData.status !== 'paid') {
+        diagnostico.pasos.push({ paso: 'Status de orden', ok: false, motivo: 'Status es "' + orderData.status + '", se requiere "paid"' });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Status es "paid"', ok: true });
+
+      // Verificar shipping
+      if (!orderData.shipping || !orderData.shipping.id) {
+        diagnostico.pasos.push({ paso: 'Shipping ID', ok: false, motivo: 'La orden no tiene shipping.id' });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Tiene shipping.id: ' + orderData.shipping.id, ok: true });
+
+      // Obtener datos del envío
+      var shipmentData = await mlApiRequest(account, 'https://api.mercadolibre.com/shipments/' + orderData.shipping.id);
+      if (!shipmentData) {
+        diagnostico.pasos.push({ paso: 'Obtener shipment', ok: false, motivo: 'No se pudo obtener datos del envío' });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Shipment obtenido', ok: true });
+
+      // Verificar status del envío
+      if (shipmentData.status === 'cancelled') {
+        diagnostico.pasos.push({ paso: 'Status del envío', ok: false, motivo: 'Envío cancelado' });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Envío no cancelado (status: ' + shipmentData.status + ')', ok: true });
+
+      // Verificar fulfillment
+      if (shipmentData.logistic_type === 'fulfillment') {
+        diagnostico.pasos.push({ paso: 'Tipo logístico', ok: false, motivo: 'Es fulfillment (FULL), se excluye' });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Tipo logístico: ' + shipmentData.logistic_type, ok: true });
+
+      // Verificar mode
+      if (shipmentData.mode === 'not_specified' || shipmentData.mode === 'custom') {
+        diagnostico.pasos.push({ paso: 'Modo de envío', ok: false, motivo: 'Modo es "' + shipmentData.mode + '" (acordar con comprador)' });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Modo: ' + shipmentData.mode, ok: true });
+
+      // Verificar horario de corte
+      var tipoEnvio = getTipoEnvio(shipmentData.logistic_type);
+      var corte = getHorarioCorte(account.name, shipmentData.logistic_type);
+      var orderDate = getArgentinaDate(new Date(orderData.date_created));
+      var orderTimeInMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+      var horaOrden = String(Math.floor(orderTimeInMinutes / 60)).padStart(2, '0') + ':' + String(orderTimeInMinutes % 60).padStart(2, '0');
+      var horaCorte = String(Math.floor(corte / 60)).padStart(2, '0') + ':' + String(corte % 60).padStart(2, '0');
+
+      diagnostico.pasos.push({
+        paso: 'Hora de creación (Argentina): ' + horaOrden + ' (' + orderTimeInMinutes + ' min)',
+        ok: true
+      });
+      diagnostico.pasos.push({
+        paso: 'Horario de corte ' + account.name + '|' + tipoEnvio + ': ' + horaCorte + ' (' + corte + ' min)',
+        ok: true
+      });
+
+      var esHoy = isTodayOrder(orderData.date_created);
+      var esAyer = isYesterday(orderData.date_created);
+
+      diagnostico.pasos.push({ paso: '¿Es de hoy?: ' + (esHoy ? 'SÍ' : 'NO'), ok: true });
+      diagnostico.pasos.push({ paso: '¿Es de ayer?: ' + (esAyer ? 'SÍ' : 'NO'), ok: true });
+
+      var pasaFiltroHorario = shouldProcessOrder(orderData.date_created, account.name, shipmentData.logistic_type);
+      if (!pasaFiltroHorario) {
+        var motivo = '';
+        if (esHoy) {
+          motivo = 'Orden de HOY creada DESPUÉS del corte (' + horaOrden + ' > ' + horaCorte + ')';
+        } else if (esAyer) {
+          motivo = 'Orden de AYER creada ANTES del corte (' + horaOrden + ' < ' + horaCorte + ')';
+        } else {
+          motivo = 'Orden no es de hoy ni de ayer';
+        }
+        diagnostico.pasos.push({ paso: 'Filtro horario', ok: false, motivo: motivo });
+        return res.json(diagnostico);
+      }
+      diagnostico.pasos.push({ paso: 'Pasa filtro de horario de corte', ok: true });
+
+      // Verificar si ya existe en el sheet
+      var sheetName = getTodaySheetName();
+      var shipmentId = orderData.shipping.id.toString();
+      try {
+        var response = await sheets.spreadsheets.values.get({
+          spreadsheetId: SHEET_ID,
+          range: sheetName + '!C:C'
+        });
+        var existingIds = (response.data.values || []).map(function(row) { return row[0]; });
+        var yaExiste = existingIds.includes(shipmentId);
+
+        if (yaExiste) {
+          diagnostico.pasos.push({ paso: 'Ya existe en ' + sheetName, ok: true, nota: 'El envío YA está en la hoja de hoy' });
+        } else {
+          diagnostico.pasos.push({ paso: 'No existe en ' + sheetName, ok: false, motivo: 'El envío NO está en la hoja de hoy pero DEBERÍA estar' });
+        }
+      } catch (err) {
+        diagnostico.pasos.push({ paso: 'Verificar sheet', ok: false, motivo: 'Error: ' + err.message });
+      }
+
+      diagnostico.conclusion = pasaFiltroHorario ? 'La orden DEBERÍA aparecer' : 'La orden está correctamente filtrada';
+      return res.json(diagnostico);
+    }
+  }
+
+  diagnostico.pasos.push({ paso: 'Buscar orden', ok: false, motivo: 'Orden no encontrada en ninguna cuenta' });
+  res.json(diagnostico);
+});
+
 // Endpoint para actualizar estados de envíos desde ML
 // Consulta la API de ML y marca como despachados los que ya salieron
 app.post('/api/actualizar-estados', async function(req, res) {
