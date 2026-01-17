@@ -30,7 +30,7 @@
     .camera-container.active { display: block; }
     #video { width: 100%; border-radius: 8px; }
     .close-camera { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 20px; cursor: pointer; }
-    .capture-photo-btn { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #f59e0b; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .capture-photo-btn { position: fixed; bottom: 0; left: 0; right: 0; background: #f59e0b; color: white; border: none; padding: 18px; font-size: 18px; font-weight: 600; cursor: pointer; z-index: 100; }
     .capture-photo-btn:disabled { background: #9ca3af; }
     .vision-result { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 12px; margin-top: 12px; }
     .vision-result-text { font-family: monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; }
@@ -270,7 +270,7 @@
       <div class="camera-container" id="cameraContainer">
         <video id="video" playsinline></video>
         <button type="button" class="close-camera" id="closeCamera">X</button>
-        <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar</button>
+        <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar con IA</button>
       </div>
       <div class="vision-result hidden" id="visionResult">
         <div><strong>Resultado:</strong></div>
@@ -968,6 +968,7 @@
           codeReader = new ZXing.BrowserMultiFormatReader(hints, 500);
         }
         cameraContainer.classList.add('active');
+        cameraBtn.classList.add('hidden');
         isScanning = true;
 
         // Intentar usar la cámara trasera con mejor resolución
@@ -1000,6 +1001,7 @@
       function stopCamera() {
         isScanning = false;
         cameraContainer.classList.remove('active');
+        cameraBtn.classList.remove('hidden');
         if (codeReader) codeReader.reset();
         visionResult.classList.add('hidden');
       }
@@ -1061,7 +1063,7 @@
         .then(function(response) { return response.json(); })
         .then(function(data) {
           capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Analizar';
+          capturePhotoBtn.textContent = 'Analizar con IA';
 
           if (data.success) {
             // Si hay verificación con producto específico
@@ -1080,7 +1082,7 @@
         })
         .catch(function(err) {
           capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Analizar';
+          capturePhotoBtn.textContent = 'Analizar con IA';
           showStatus('Error de conexion', 'error');
           console.error(err);
         });
