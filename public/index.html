@@ -657,7 +657,9 @@
 
           var qtyDiv = document.createElement('div');
           qtyDiv.className = 'item-quantity';
-          qtyDiv.textContent = 'Cantidad: ' + item.quantity;
+          // Usar displayQuantity si existe (para ítems de verificación), sino quantity
+          var displayQty = item.displayQuantity !== undefined ? item.displayQuantity : item.quantity;
+          qtyDiv.textContent = 'Cantidad: ' + displayQty;
 
           var unitsDiv = document.createElement('div');
           unitsDiv.className = 'unit-checkboxes';
