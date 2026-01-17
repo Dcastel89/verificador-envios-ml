@@ -1601,11 +1601,16 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
   var slaData = await getShipmentSLA(accountObj, shipmentId);
   var expectedDate = slaData ? slaData.expectedDate : null;
 
-  // Agregar ítem de verificación "Papelitos 1y2" si hay vidrio en el envío
+  // Detectar si hay vidrio o hidrogel en el envío
   var hasGlass = processedItems.some(function(item) {
     return item.sku && item.sku.startsWith('VF');
   });
-  if (hasGlass) {
+  var hasHydrogel = processedItems.some(function(item) {
+    return item.sku && item.sku.toLowerCase().includes('hidrogel');
+  });
+
+  // Agregar ítem de verificación "Papelitos 1y2" si hay vidrio o hidrogel
+  if (hasGlass || hasHydrogel) {
     processedItems.push({
       id: 'verification-papelitos',
       title: 'Verificación adicional',
@@ -1613,7 +1618,20 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
       description: 'Papelitos 1y2',
       quantity: 1,
       isKit: false,
-      isVerificationOnly: true  // Marcar como ítem solo de verificación (no afecta estadísticas)
+      isVerificationOnly: true
+    });
+  }
+
+  // Agregar ítem de verificación "Cartoncito Colocador" si hay hidrogel
+  if (hasHydrogel) {
+    processedItems.push({
+      id: 'verification-cartoncito',
+      title: 'Verificación adicional',
+      sku: 'CARTONCITO',
+      description: 'Cartoncito Colocador',
+      quantity: 1,
+      isKit: false,
+      isVerificationOnly: true
     });
   }
 
