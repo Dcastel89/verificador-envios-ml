@@ -993,8 +993,9 @@ async function addPendingShipments(shipments, sheetName) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:L',
+      range: sheetName + '!A1',
       valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
       resource: { values: rows }
     });
 
@@ -1052,12 +1053,13 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
     }
 
     if (rowIndex === -1) {
-      // Append nueva fila con todas las 10 columnas (A-J)
+      // Append nueva fila con todas las 12 columnas (A-L)
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: sheetName + '!A:L',
+        range: sheetName + '!A1',
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr, '']] }
+        insertDataOption: 'INSERT_ROWS',
+        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr, '', '', '']] }
       });
     } else {
       await sheets.spreadsheets.values.update({
