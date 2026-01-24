@@ -141,6 +141,7 @@ if (process.env.ANTHROPIC_API_KEY) {
 // Google Sheets setup (solo para Sheets, ya no usamos Vision de Google)
 var sheets = null;
 var SHEET_ID = process.env.GOOGLE_SHEET_ID;
+var HISTORY_SHEET_ID = process.env.GOOGLE_HISTORY_SHEET_ID || '1aioIhNxTBUyILXsX2SpAvIa9Xs4M5NBu_rgMP4Wu3DY';
 
 if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
   var auth = new google.auth.JWT(
@@ -959,6 +960,140 @@ async function shouldClearOldRecords(sheetName) {
   }
 }
 
+// ============================================
+// HISTORIAL MENSUAL
+// ============================================
+
+function getMonthlySheetName(date) {
+  var argDate = date ? getArgentinaDate(new Date(date)) : getArgentinaTime();
+  var year = argDate.getFullYear();
+  var month = String(argDate.getMonth() + 1).padStart(2, '0');
+  return 'Historial_' + year + '_' + month;
+}
+
+async function ensureMonthlySheetExists(sheetName) {
+  if (!sheets || !HISTORY_SHEET_ID) return false;
+
+  try {
+    await sheets.spreadsheets.values.get({
+      spreadsheetId: HISTORY_SHEET_ID,
+      range: sheetName + '!A1'
+    });
+    return true;
+  } catch (error) {
+    if (error.message && error.message.includes('Unable to parse range')) {
+      try {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: HISTORY_SHEET_ID,
+          resource: {
+            requests: [{
+              addSheet: {
+                properties: { title: sheetName }
+              }
+            }]
+          }
+        });
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: HISTORY_SHEET_ID,
+          range: sheetName + '!A1:L1',
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo', 'TipoLogistica', 'Promesa', 'SLA']]
+          }
+        });
+
+        console.log('Hoja de historial ' + sheetName + ' creada exitosamente');
+        return true;
+      } catch (createError) {
+        console.error('Error creando hoja de historial ' + sheetName + ':', createError.message);
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
+var lastHistoryCopyDate = null;
+
+async function copyDailyToHistory() {
+  // Copia los registros de la hoja diaria al historial mensual
+  // Se ejecuta una vez al día al cierre (19:00)
+  var today = getArgentinaTime().toLocaleDateString('es-AR');
+
+  if (lastHistoryCopyDate === today) {
+    console.log('Copia al historial ya ejecutada hoy');
+    return;
+  }
+
+  if (!sheets || !SHEET_ID || !HISTORY_SHEET_ID) {
+    console.log('Sheets no configurado para historial');
+    return;
+  }
+
+  console.log('=== COPIANDO REGISTROS AL HISTORIAL MENSUAL ===');
+
+  var daySheetName = getTodaySheetName();
+  var monthSheetName = getMonthlySheetName();
+
+  try {
+    // Asegurar que existe la hoja mensual
+    await ensureMonthlySheetExists(monthSheetName);
+
+    // Leer todos los registros de la hoja diaria (excepto encabezado)
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: daySheetName + '!A2:L1000'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length === 0) {
+      console.log('No hay registros para copiar al historial');
+      lastHistoryCopyDate = today;
+      return;
+    }
+
+    // Obtener IDs ya existentes en el historial mensual para evitar duplicados
+    var historyResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId: HISTORY_SHEET_ID,
+      range: monthSheetName + '!C:C'
+    });
+    var historyRows = historyResponse.data.values || [];
+    var existingIds = [];
+    for (var i = 1; i < historyRows.length; i++) {
+      if (historyRows[i] && historyRows[i][0]) {
+        existingIds.push(historyRows[i][0].toString());
+      }
+    }
+
+    // Filtrar solo registros nuevos
+    var newRows = rows.filter(function(row) {
+      return row[2] && existingIds.indexOf(row[2].toString()) === -1;
+    });
+
+    if (newRows.length === 0) {
+      console.log('Todos los registros ya existen en el historial');
+      lastHistoryCopyDate = today;
+      return;
+    }
+
+    // Agregar al historial mensual
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: HISTORY_SHEET_ID,
+      range: monthSheetName + '!A1',
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      resource: { values: newRows }
+    });
+
+    console.log('Copiados ' + newRows.length + ' registros al historial ' + monthSheetName);
+    lastHistoryCopyDate = today;
+
+  } catch (error) {
+    console.error('Error copiando al historial:', error.message);
+  }
+}
+
 async function getExistingShipmentIds(sheetName) {
   if (!sheets || !SHEET_ID) return [];
   sheetName = sheetName || getTodaySheetName();
@@ -1347,6 +1482,12 @@ async function syncPendingShipments() {
   // Sync matutino a las 9:00 (540 minutos)
   if (timeInMinutes >= 540 && timeInMinutes < 545) {
     await syncMorningShipments();
+    return;
+  }
+
+  // Copia al historial mensual a las 19:00 (1140 minutos)
+  if (timeInMinutes >= 1140 && timeInMinutes < 1145) {
+    await copyDailyToHistory();
     return;
   }
 
@@ -2440,6 +2581,19 @@ app.get('/api/resumen-dia', async function(req, res) {
   } catch (error) {
     console.error('Error obteniendo resumen:', error.message);
     res.json({ error: error.message, total: 0, verificados: 0, pendientes: [] });
+  }
+});
+
+// Endpoint para copiar registros del día al historial mensual
+app.post('/api/copiar-historial', async function(req, res) {
+  try {
+    // Resetear la fecha para forzar la copia
+    lastHistoryCopyDate = null;
+    await copyDailyToHistory();
+    res.json({ success: true, message: 'Copia al historial ejecutada' });
+  } catch (error) {
+    console.error('Error copiando al historial:', error.message);
+    res.json({ error: error.message });
   }
 });
 
