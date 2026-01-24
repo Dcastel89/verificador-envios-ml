@@ -66,8 +66,6 @@
     .complete-banner.show { display: block; }
     .complete-banner.partial { background: #f59e0b; }
     .reset-btn { width: 100%; padding: 14px; margin-top: 16px; background: #ef4444; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
-    .partial-save-btn { width: 100%; padding: 14px; margin-top: 8px; background: #f59e0b; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
-    .partial-save-btn:disabled { background: #d1d5db; cursor: not-allowed; }
     .hidden { display: none; }
 
     /* Modal para guardar barcode */
@@ -296,7 +294,6 @@
       <div id="itemsList"></div>
     </div>
     <button type="button" class="reset-btn hidden" id="resetBtn">Nuevo envio</button>
-    <button type="button" class="partial-save-btn hidden" id="partialSaveBtn">Guardar parcial</button>
     </div>
   </div>
   <div class="complete-banner" id="completeBanner">Envio verificado correctamente</div>
@@ -471,7 +468,6 @@
       var completeBanner = document.getElementById('completeBanner');
       var partialBanner = document.getElementById('partialBanner');
       var resetBtn = document.getElementById('resetBtn');
-      var partialSaveBtn = document.getElementById('partialSaveBtn');
       var scanModeIndicator = document.getElementById('scanModeIndicator');
 
       // Vision API elements
@@ -608,19 +604,12 @@
         itemsCount.textContent = checked + '/' + total;
         if (checked === total && total > 0) {
           completeBanner.classList.add('show');
-          partialSaveBtn.classList.add('hidden');
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           saveVerification(false);
           // Volver al modo de escanear envío
           setScanMode('shipment');
         } else {
           completeBanner.classList.remove('show');
-          // Mostrar botón de guardar parcial si hay al menos un item verificado
-          if (checked > 0 && !alreadySaved) {
-            partialSaveBtn.classList.remove('hidden');
-          } else {
-            partialSaveBtn.classList.add('hidden');
-          }
         }
       }
 
@@ -738,6 +727,9 @@
       });
 
       function searchShipment(shipmentId) {
+        // Guardar parcial del envío anterior si corresponde
+        savePartialIfNeeded();
+
         if (!shipmentId || shipmentId.trim() === '') {
           showStatus('Ingresa un numero de envio', 'error');
           return;
@@ -1193,7 +1185,23 @@
 
       capturePhotoBtn.onclick = capturePhoto;
 
+      function savePartialIfNeeded() {
+        // Guardar verificación parcial automáticamente si hay items verificados pero no todos
+        if (alreadySaved || !currentShipmentId || currentItems.length === 0) return;
+
+        var checked = countCompletedItems();
+        var total = currentItems.length;
+
+        // Si hay al menos un item verificado pero no todos, guardar como parcial
+        if (checked > 0 && checked < total) {
+          saveVerification(true);
+        }
+      }
+
       function reset() {
+        // Guardar parcial automáticamente antes de resetear
+        savePartialIfNeeded();
+
         currentItems = [];
         unitChecks = {};
         currentShipmentId = '';
@@ -1202,7 +1210,6 @@
         shipmentInput.value = '';
         itemsSection.classList.add('hidden');
         resetBtn.classList.add('hidden');
-        partialSaveBtn.classList.add('hidden');
         completeBanner.classList.remove('show');
         partialBanner.classList.remove('show');
         visionResult.classList.add('hidden');
@@ -1216,12 +1223,6 @@
       cameraBtn.onclick = startCamera;
       closeCameraBtn.onclick = stopCamera;
       resetBtn.onclick = reset;
-      partialSaveBtn.onclick = function() {
-        if (!alreadySaved && currentShipmentId) {
-          saveVerification(true);
-          partialSaveBtn.classList.add('hidden');
-        }
-      };
 
       // ============================================
       // RESUMEN DEL DÍA
