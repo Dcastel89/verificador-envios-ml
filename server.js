@@ -914,15 +914,48 @@ async function clearDaySheet(sheetName) {
 
     if (!sheet) return;
 
-    // Limpiar contenido (excepto encabezados) - todas las columnas A-J
+    // Limpiar contenido (excepto encabezados) - todas las columnas A-L
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A2:J1000'
+      range: sheetName + '!A2:L1000'
     });
 
     console.log('Hoja ' + sheetName + ' limpiada');
   } catch (error) {
     console.error('Error limpiando hoja:', error.message);
+  }
+}
+
+async function shouldClearOldRecords(sheetName) {
+  // Verifica si los registros existentes son de una semana anterior
+  // Retorna true si hay que limpiar, false si no hay registros o son de hoy
+  if (!sheets || !SHEET_ID) return false;
+
+  try {
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A2:A2'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length === 0 || !rows[0][0]) {
+      // No hay registros, no hay que limpiar
+      return false;
+    }
+
+    var existingDate = rows[0][0]; // Formato: "dd/mm/yyyy" o "d/m/yyyy"
+    var today = getArgentinaTime().toLocaleDateString('es-AR');
+
+    // Si la fecha del primer registro no es hoy, son de semana anterior
+    if (existingDate !== today) {
+      console.log('Registros existentes son de ' + existingDate + ', hoy es ' + today + '. Limpiando hoja.');
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error verificando fecha de registros:', error.message);
+    return false;
   }
 }
 
@@ -1229,8 +1262,13 @@ async function syncMorningShipments() {
 
   var sheetName = getTodaySheetName();
 
-  // NO limpiar la hoja - preservar estados de verificación existentes
   await ensureDaySheetExists(sheetName);
+
+  // Verificar si los registros son de una semana anterior y limpiarlos
+  var needsClear = await shouldClearOldRecords(sheetName);
+  if (needsClear) {
+    await clearDaySheet(sheetName);
+  }
 
   // Obtener IDs existentes para no duplicar y preservar sus estados
   var existingIds = await getExistingShipmentIds(sheetName);
@@ -1321,6 +1359,15 @@ async function syncPendingShipments() {
   console.log('Sincronizando envios pendientes...');
 
   var sheetName = getTodaySheetName();
+
+  // Verificar si los registros son de una semana anterior y limpiarlos
+  // (por si el servidor se reinició y el sync matutino no se ejecutó)
+  await ensureDaySheetExists(sheetName);
+  var needsClear = await shouldClearOldRecords(sheetName);
+  if (needsClear) {
+    await clearDaySheet(sheetName);
+  }
+
   var existingIds = await getExistingShipmentIds(sheetName);
   var allShipments = [];
 
