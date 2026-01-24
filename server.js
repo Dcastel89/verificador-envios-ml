@@ -1175,7 +1175,7 @@ async function addPendingShipments(shipments, sheetName) {
   }
 }
 
-async function markAsVerified(shipmentId, items, verificacionDetalle) {
+async function markAsVerified(shipmentId, items, verificacionDetalle, isParcial) {
   if (!sheets || !SHEET_ID) return;
 
   var sheetName = getTodaySheetName();
@@ -1200,17 +1200,38 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
     var argentinaTime = getArgentinaTime();
     var fecha = argentinaTime.toLocaleDateString('es-AR');
     var hora = argentinaTime.toLocaleTimeString('es-AR');
-    var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
+
+    // Construir string de SKUs con estado de verificación
+    var itemsStr = '';
+    if (isParcial && verificacionDetalle && verificacionDetalle.length > 0) {
+      // Para verificación parcial, mostrar qué se verificó y qué no
+      itemsStr = verificacionDetalle.map(function(d) {
+        var verified = (d.scanned || 0) + (d.manual || 0);
+        if (verified >= d.quantity) {
+          return d.sku + ' OK';
+        } else if (verified > 0) {
+          return d.sku + ' (' + verified + '/' + d.quantity + ')';
+        } else {
+          return d.sku + ' FALTA';
+        }
+      }).join(', ');
+    } else {
+      itemsStr = items.map(function(i) { return i.sku; }).join(', ');
+    }
 
     // Construir string de método de verificación
     var metodoStr = '';
+    var totalVerified = 0;
+    var totalRequired = 0;
     if (verificacionDetalle && verificacionDetalle.length > 0) {
       var totalScanned = 0;
       var totalManual = 0;
       verificacionDetalle.forEach(function(d) {
         totalScanned += d.scanned || 0;
         totalManual += d.manual || 0;
+        totalRequired += d.quantity || 0;
       });
+      totalVerified = totalScanned + totalManual;
       if (totalScanned > 0 && totalManual > 0) {
         metodoStr = 'Mixto (Esc:' + totalScanned + ' Man:' + totalManual + ')';
       } else if (totalScanned > 0) {
@@ -1220,6 +1241,13 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
       }
     }
 
+    // Determinar estado: Verificado o Parcial (con porcentaje)
+    var estado = 'Verificado';
+    if (isParcial) {
+      var porcentaje = totalRequired > 0 ? Math.round((totalVerified / totalRequired) * 100) : 0;
+      estado = 'Parcial (' + porcentaje + '%)';
+    }
+
     if (rowIndex === -1) {
       // Append nueva fila con todas las 12 columnas (A-L)
       await sheets.spreadsheets.values.append({
@@ -1227,18 +1255,18 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
         range: sheetName + '!A1',
         valueInputOption: 'USER_ENTERED',
         insertDataOption: 'INSERT_ROWS',
-        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr, '', '', '']] }
+        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, estado, hora, metodoStr, '', '', '']] }
       });
     } else {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: sheetName + '!F' + rowIndex + ':I' + rowIndex,
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[itemsStr, 'Verificado', hora, metodoStr]] }
+        resource: { values: [[itemsStr, estado, hora, metodoStr]] }
       });
     }
 
-    console.log('Envio ' + shipmentId + ' marcado como verificado en ' + sheetName + ' - Metodo: ' + metodoStr);
+    console.log('Envio ' + shipmentId + ' marcado como ' + estado + ' en ' + sheetName + ' - Metodo: ' + metodoStr);
   } catch (error) {
     console.error('Error marcando verificado:', error.message);
   }
@@ -1848,10 +1876,12 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
   var shipmentId = req.params.shipmentId;
   var items = req.body.items || [];
   var verificacionDetalle = req.body.verificacionDetalle || [];
+  var isParcial = req.body.isParcial || false;
 
-  await markAsVerified(shipmentId, items, verificacionDetalle);
+  await markAsVerified(shipmentId, items, verificacionDetalle, isParcial);
 
-  res.json({ success: true, message: 'Registro guardado' });
+  var estado = isParcial ? 'parcial' : 'verificado';
+  res.json({ success: true, message: 'Registro guardado como ' + estado });
 });
 
 // ============================================
