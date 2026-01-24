@@ -141,6 +141,7 @@ if (process.env.ANTHROPIC_API_KEY) {
 // Google Sheets setup (solo para Sheets, ya no usamos Vision de Google)
 var sheets = null;
 var SHEET_ID = process.env.GOOGLE_SHEET_ID;
+var HISTORY_SHEET_ID = process.env.GOOGLE_HISTORY_SHEET_ID || '1aioIhNxTBUyILXsX2SpAvIa9Xs4M5NBu_rgMP4Wu3DY';
 
 if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
   var auth = new google.auth.JWT(
@@ -914,15 +915,182 @@ async function clearDaySheet(sheetName) {
 
     if (!sheet) return;
 
-    // Limpiar contenido (excepto encabezados) - todas las columnas A-J
+    // Limpiar contenido (excepto encabezados) - todas las columnas A-L
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A2:J1000'
+      range: sheetName + '!A2:L1000'
     });
 
     console.log('Hoja ' + sheetName + ' limpiada');
   } catch (error) {
     console.error('Error limpiando hoja:', error.message);
+  }
+}
+
+async function shouldClearOldRecords(sheetName) {
+  // Verifica si los registros existentes son de una semana anterior
+  // Retorna true si hay que limpiar, false si no hay registros o son de hoy
+  if (!sheets || !SHEET_ID) return false;
+
+  try {
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A2:A2'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length === 0 || !rows[0][0]) {
+      // No hay registros, no hay que limpiar
+      return false;
+    }
+
+    var existingDate = rows[0][0]; // Formato: "dd/mm/yyyy" o "d/m/yyyy"
+    var today = getArgentinaTime().toLocaleDateString('es-AR');
+
+    // Si la fecha del primer registro no es hoy, son de semana anterior
+    if (existingDate !== today) {
+      console.log('Registros existentes son de ' + existingDate + ', hoy es ' + today + '. Limpiando hoja.');
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error verificando fecha de registros:', error.message);
+    return false;
+  }
+}
+
+// ============================================
+// HISTORIAL MENSUAL
+// ============================================
+
+function getMonthlySheetName(date) {
+  var argDate = date ? getArgentinaDate(new Date(date)) : getArgentinaTime();
+  var year = argDate.getFullYear();
+  var month = String(argDate.getMonth() + 1).padStart(2, '0');
+  return 'Historial_' + year + '_' + month;
+}
+
+async function ensureMonthlySheetExists(sheetName) {
+  if (!sheets || !HISTORY_SHEET_ID) return false;
+
+  try {
+    await sheets.spreadsheets.values.get({
+      spreadsheetId: HISTORY_SHEET_ID,
+      range: sheetName + '!A1'
+    });
+    return true;
+  } catch (error) {
+    if (error.message && error.message.includes('Unable to parse range')) {
+      try {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: HISTORY_SHEET_ID,
+          resource: {
+            requests: [{
+              addSheet: {
+                properties: { title: sheetName }
+              }
+            }]
+          }
+        });
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: HISTORY_SHEET_ID,
+          range: sheetName + '!A1:L1',
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: [['Fecha', 'Hora', 'Envio', 'Cuenta', 'Receptor', 'SKUs', 'Estado', 'HoraVerif', 'Metodo', 'TipoLogistica', 'Promesa', 'SLA']]
+          }
+        });
+
+        console.log('Hoja de historial ' + sheetName + ' creada exitosamente');
+        return true;
+      } catch (createError) {
+        console.error('Error creando hoja de historial ' + sheetName + ':', createError.message);
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
+var lastHistoryCopyDate = null;
+
+async function copyDailyToHistory() {
+  // Copia los registros de la hoja diaria al historial mensual
+  // Se ejecuta una vez al día al cierre (19:00)
+  var today = getArgentinaTime().toLocaleDateString('es-AR');
+
+  if (lastHistoryCopyDate === today) {
+    console.log('Copia al historial ya ejecutada hoy');
+    return;
+  }
+
+  if (!sheets || !SHEET_ID || !HISTORY_SHEET_ID) {
+    console.log('Sheets no configurado para historial');
+    return;
+  }
+
+  console.log('=== COPIANDO REGISTROS AL HISTORIAL MENSUAL ===');
+
+  var daySheetName = getTodaySheetName();
+  var monthSheetName = getMonthlySheetName();
+
+  try {
+    // Asegurar que existe la hoja mensual
+    await ensureMonthlySheetExists(monthSheetName);
+
+    // Leer todos los registros de la hoja diaria (excepto encabezado)
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: daySheetName + '!A2:L1000'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length === 0) {
+      console.log('No hay registros para copiar al historial');
+      lastHistoryCopyDate = today;
+      return;
+    }
+
+    // Obtener IDs ya existentes en el historial mensual para evitar duplicados
+    var historyResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId: HISTORY_SHEET_ID,
+      range: monthSheetName + '!C:C'
+    });
+    var historyRows = historyResponse.data.values || [];
+    var existingIds = [];
+    for (var i = 1; i < historyRows.length; i++) {
+      if (historyRows[i] && historyRows[i][0]) {
+        existingIds.push(historyRows[i][0].toString());
+      }
+    }
+
+    // Filtrar solo registros nuevos
+    var newRows = rows.filter(function(row) {
+      return row[2] && existingIds.indexOf(row[2].toString()) === -1;
+    });
+
+    if (newRows.length === 0) {
+      console.log('Todos los registros ya existen en el historial');
+      lastHistoryCopyDate = today;
+      return;
+    }
+
+    // Agregar al historial mensual
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: HISTORY_SHEET_ID,
+      range: monthSheetName + '!A1',
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      resource: { values: newRows }
+    });
+
+    console.log('Copiados ' + newRows.length + ' registros al historial ' + monthSheetName);
+    lastHistoryCopyDate = today;
+
+  } catch (error) {
+    console.error('Error copiando al historial:', error.message);
   }
 }
 
@@ -1007,7 +1175,7 @@ async function addPendingShipments(shipments, sheetName) {
   }
 }
 
-async function markAsVerified(shipmentId, items, verificacionDetalle) {
+async function markAsVerified(shipmentId, items, verificacionDetalle, isParcial) {
   if (!sheets || !SHEET_ID) return;
 
   var sheetName = getTodaySheetName();
@@ -1032,17 +1200,38 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
     var argentinaTime = getArgentinaTime();
     var fecha = argentinaTime.toLocaleDateString('es-AR');
     var hora = argentinaTime.toLocaleTimeString('es-AR');
-    var itemsStr = items.map(function(i) { return i.sku; }).join(', ');
+
+    // Construir string de SKUs con estado de verificación
+    var itemsStr = '';
+    if (isParcial && verificacionDetalle && verificacionDetalle.length > 0) {
+      // Para verificación parcial, mostrar qué se verificó y qué no
+      itemsStr = verificacionDetalle.map(function(d) {
+        var verified = (d.scanned || 0) + (d.manual || 0);
+        if (verified >= d.quantity) {
+          return d.sku + ' OK';
+        } else if (verified > 0) {
+          return d.sku + ' (' + verified + '/' + d.quantity + ')';
+        } else {
+          return d.sku + ' FALTA';
+        }
+      }).join(', ');
+    } else {
+      itemsStr = items.map(function(i) { return i.sku; }).join(', ');
+    }
 
     // Construir string de método de verificación
     var metodoStr = '';
+    var totalVerified = 0;
+    var totalRequired = 0;
     if (verificacionDetalle && verificacionDetalle.length > 0) {
       var totalScanned = 0;
       var totalManual = 0;
       verificacionDetalle.forEach(function(d) {
         totalScanned += d.scanned || 0;
         totalManual += d.manual || 0;
+        totalRequired += d.quantity || 0;
       });
+      totalVerified = totalScanned + totalManual;
       if (totalScanned > 0 && totalManual > 0) {
         metodoStr = 'Mixto (Esc:' + totalScanned + ' Man:' + totalManual + ')';
       } else if (totalScanned > 0) {
@@ -1052,6 +1241,13 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
       }
     }
 
+    // Determinar estado: Verificado o Parcial (con porcentaje)
+    var estado = 'Verificado';
+    if (isParcial) {
+      var porcentaje = totalRequired > 0 ? Math.round((totalVerified / totalRequired) * 100) : 0;
+      estado = 'Parcial (' + porcentaje + '%)';
+    }
+
     if (rowIndex === -1) {
       // Append nueva fila con todas las 12 columnas (A-L)
       await sheets.spreadsheets.values.append({
@@ -1059,18 +1255,18 @@ async function markAsVerified(shipmentId, items, verificacionDetalle) {
         range: sheetName + '!A1',
         valueInputOption: 'USER_ENTERED',
         insertDataOption: 'INSERT_ROWS',
-        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, 'Verificado', hora, metodoStr, '', '', '']] }
+        resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, estado, hora, metodoStr, '', '', '']] }
       });
     } else {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: sheetName + '!F' + rowIndex + ':I' + rowIndex,
         valueInputOption: 'USER_ENTERED',
-        resource: { values: [[itemsStr, 'Verificado', hora, metodoStr]] }
+        resource: { values: [[itemsStr, estado, hora, metodoStr]] }
       });
     }
 
-    console.log('Envio ' + shipmentId + ' marcado como verificado en ' + sheetName + ' - Metodo: ' + metodoStr);
+    console.log('Envio ' + shipmentId + ' marcado como ' + estado + ' en ' + sheetName + ' - Metodo: ' + metodoStr);
   } catch (error) {
     console.error('Error marcando verificado:', error.message);
   }
@@ -1229,8 +1425,13 @@ async function syncMorningShipments() {
 
   var sheetName = getTodaySheetName();
 
-  // NO limpiar la hoja - preservar estados de verificación existentes
   await ensureDaySheetExists(sheetName);
+
+  // Verificar si los registros son de una semana anterior y limpiarlos
+  var needsClear = await shouldClearOldRecords(sheetName);
+  if (needsClear) {
+    await clearDaySheet(sheetName);
+  }
 
   // Obtener IDs existentes para no duplicar y preservar sus estados
   var existingIds = await getExistingShipmentIds(sheetName);
@@ -1312,6 +1513,12 @@ async function syncPendingShipments() {
     return;
   }
 
+  // Copia al historial mensual a las 19:00 (1140 minutos)
+  if (timeInMinutes >= 1140 && timeInMinutes < 1145) {
+    await copyDailyToHistory();
+    return;
+  }
+
   // No sincronizar fuera de horario laboral
   if (!isWorkingHours()) {
     return;
@@ -1321,6 +1528,15 @@ async function syncPendingShipments() {
   console.log('Sincronizando envios pendientes...');
 
   var sheetName = getTodaySheetName();
+
+  // Verificar si los registros son de una semana anterior y limpiarlos
+  // (por si el servidor se reinició y el sync matutino no se ejecutó)
+  await ensureDaySheetExists(sheetName);
+  var needsClear = await shouldClearOldRecords(sheetName);
+  if (needsClear) {
+    await clearDaySheet(sheetName);
+  }
+
   var existingIds = await getExistingShipmentIds(sheetName);
   var allShipments = [];
 
@@ -1660,10 +1876,12 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
   var shipmentId = req.params.shipmentId;
   var items = req.body.items || [];
   var verificacionDetalle = req.body.verificacionDetalle || [];
+  var isParcial = req.body.isParcial || false;
 
-  await markAsVerified(shipmentId, items, verificacionDetalle);
+  await markAsVerified(shipmentId, items, verificacionDetalle, isParcial);
 
-  res.json({ success: true, message: 'Registro guardado' });
+  var estado = isParcial ? 'parcial' : 'verificado';
+  res.json({ success: true, message: 'Registro guardado como ' + estado });
 });
 
 // ============================================
@@ -2393,6 +2611,19 @@ app.get('/api/resumen-dia', async function(req, res) {
   } catch (error) {
     console.error('Error obteniendo resumen:', error.message);
     res.json({ error: error.message, total: 0, verificados: 0, pendientes: [] });
+  }
+});
+
+// Endpoint para copiar registros del día al historial mensual
+app.post('/api/copiar-historial', async function(req, res) {
+  try {
+    // Resetear la fecha para forzar la copia
+    lastHistoryCopyDate = null;
+    await copyDailyToHistory();
+    res.json({ success: true, message: 'Copia al historial ejecutada' });
+  } catch (error) {
+    console.error('Error copiando al historial:', error.message);
+    res.json({ error: error.message });
   }
 });
 

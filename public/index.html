@@ -64,6 +64,7 @@
     .unit-checkbox.scanned { outline: 3px solid #7c3aed; outline-offset: 2px; }
     .complete-banner { display: none; position: fixed; bottom: 56px; left: 0; right: 0; background: #22c55e; color: white; padding: 20px; text-align: center; font-size: 18px; font-weight: 600; z-index: 100; }
     .complete-banner.show { display: block; }
+    .complete-banner.partial { background: #f59e0b; }
     .reset-btn { width: 100%; padding: 14px; margin-top: 16px; background: #ef4444; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
     .hidden { display: none; }
 
@@ -134,8 +135,13 @@
     .resumen-pendientes-list { margin-top: 12px; max-height: 150px; overflow-y: auto; }
     .resumen-pendiente-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #fef2f2; border-radius: 6px; margin-bottom: 6px; font-size: 13px; cursor: pointer; }
     .resumen-pendiente-item:hover { background: #fee2e2; }
+    .resumen-pendiente-item.parcial { background: #fef3c7; }
+    .resumen-pendiente-item.parcial:hover { background: #fde68a; }
     .resumen-pendiente-id { font-weight: 600; color: #dc2626; }
-    .resumen-pendiente-cuenta { font-size: 11px; color: #6b7280; }
+    .resumen-pendiente-item.parcial .resumen-pendiente-id { color: #b45309; }
+    .resumen-pendiente-cuenta { font-size: 11px; color: #6b7280; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .estado-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .estado-badge.parcial { background: #f59e0b; color: white; }
     .resumen-sync-btn { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .resumen-sync-btn:hover { background: #1d4ed8; }
     .resumen-sync-btn:disabled { background: #9ca3af; cursor: not-allowed; }
@@ -291,6 +297,7 @@
     </div>
   </div>
   <div class="complete-banner" id="completeBanner">Envio verificado correctamente</div>
+  <div class="complete-banner partial" id="partialBanner">Verificacion parcial guardada</div>
   <button type="button" id="cameraBtn" class="camera-btn">Escanear envio</button>
 
   <!-- Modal para guardar barcode -->
@@ -459,6 +466,7 @@
       var itemsList = document.getElementById('itemsList');
       var itemsCount = document.getElementById('itemsCount');
       var completeBanner = document.getElementById('completeBanner');
+      var partialBanner = document.getElementById('partialBanner');
       var resetBtn = document.getElementById('resetBtn');
       var scanModeIndicator = document.getElementById('scanModeIndicator');
 
@@ -534,7 +542,7 @@
         return count;
       }
 
-      function saveVerification() {
+      function saveVerification(isParcial) {
         if (alreadySaved) return;
         alreadySaved = true;
 
@@ -570,13 +578,20 @@
           body: JSON.stringify({
             items: itemsToSave,
             cuenta: currentAccount,
-            verificacionDetalle: verificacionDetalle
+            verificacionDetalle: verificacionDetalle,
+            isParcial: isParcial || false
           })
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
           // Actualizar el panel para reflejar el cambio
           cargarResumenDia();
+          if (isParcial) {
+            partialBanner.classList.add('show');
+            setTimeout(function() {
+              partialBanner.classList.remove('show');
+            }, 3000);
+          }
         })
         .catch(function(err) {
           console.error('Error guardando verificacion:', err);
@@ -590,7 +605,7 @@
         if (checked === total && total > 0) {
           completeBanner.classList.add('show');
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          saveVerification();
+          saveVerification(false);
           // Volver al modo de escanear envío
           setScanMode('shipment');
         } else {
@@ -712,6 +727,9 @@
       });
 
       function searchShipment(shipmentId) {
+        // Guardar parcial del envío anterior si corresponde
+        savePartialIfNeeded();
+
         if (!shipmentId || shipmentId.trim() === '') {
           showStatus('Ingresa un numero de envio', 'error');
           return;
@@ -1167,7 +1185,23 @@
 
       capturePhotoBtn.onclick = capturePhoto;
 
+      function savePartialIfNeeded() {
+        // Guardar verificación parcial automáticamente si hay items verificados pero no todos
+        if (alreadySaved || !currentShipmentId || currentItems.length === 0) return;
+
+        var checked = countCompletedItems();
+        var total = currentItems.length;
+
+        // Si hay al menos un item verificado pero no todos, guardar como parcial
+        if (checked > 0 && checked < total) {
+          saveVerification(true);
+        }
+      }
+
       function reset() {
+        // Guardar parcial automáticamente antes de resetear
+        savePartialIfNeeded();
+
         currentItems = [];
         unitChecks = {};
         currentShipmentId = '';
@@ -1177,6 +1211,7 @@
         itemsSection.classList.add('hidden');
         resetBtn.classList.add('hidden');
         completeBanner.classList.remove('show');
+        partialBanner.classList.remove('show');
         visionResult.classList.add('hidden');
         hideStatus();
         setScanMode('shipment');
@@ -1226,8 +1261,9 @@
 
             enviosDelDia = data.envios || [];
 
-            // Contar verificados y pendientes según el estado
+            // Contar verificados, parciales y pendientes según el estado
             var verificados = 0;
+            var parciales = 0;
             var pendientes = 0;
             var enviosPendientes = [];
 
@@ -1235,6 +1271,9 @@
               var estado = enviosDelDia[i].estado || 'Pendiente';
               if (estado === 'Verificado') {
                 verificados++;
+              } else if (estado.indexOf('Parcial') === 0) {
+                parciales++;
+                enviosPendientes.push(enviosDelDia[i]);
               } else if (estado === 'Pendiente') {
                 pendientes++;
                 enviosPendientes.push(enviosDelDia[i]);
@@ -1243,7 +1282,7 @@
             }
 
             resumenVerificados.textContent = verificados;
-            resumenPendientes.textContent = pendientes;
+            resumenPendientes.textContent = pendientes + parciales;
 
             resumenStatus.className = 'resumen-status';
             if (data.total === 0) {
@@ -1251,13 +1290,17 @@
               resumenStatus.textContent = 'No hay envios del dia';
               resumenPendientesList.classList.add('hidden');
               cuentaDesglose.classList.remove('show');
-            } else if (pendientes === 0) {
+            } else if (pendientes === 0 && parciales === 0) {
               resumenStatus.classList.add('completo');
               resumenStatus.textContent = 'Todos verificados (' + verificados + ')';
               resumenPendientesList.classList.add('hidden');
             } else {
               resumenStatus.classList.add('pendiente');
-              resumenStatus.textContent = pendientes + ' pendiente(s), ' + verificados + ' verificado(s)';
+              var statusText = pendientes + ' pendiente(s), ' + verificados + ' verificado(s)';
+              if (parciales > 0) {
+                statusText += ', ' + parciales + ' parcial(es)';
+              }
+              resumenStatus.textContent = statusText;
               mostrarListaPendientes(enviosPendientes);
             }
 
@@ -1285,8 +1328,13 @@
             var p = envios[i];
             var item = document.createElement('div');
             item.className = 'resumen-pendiente-item';
+            var estado = p.estado || 'Pendiente';
+            if (estado.indexOf('Parcial') === 0) {
+              item.classList.add('parcial');
+            }
             item.setAttribute('data-id', p.id);
-            item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + ' - ' + (p.receptor || '') + '</span>';
+            var estadoBadge = estado.indexOf('Parcial') === 0 ? '<span class="estado-badge parcial">' + estado + '</span>' : '';
+            item.innerHTML = '<span class="resumen-pendiente-id">' + p.id + '</span><span class="resumen-pendiente-cuenta">' + p.cuenta + ' - ' + (p.receptor || '') + estadoBadge + '</span>';
             item.onclick = function() {
               var id = this.getAttribute('data-id');
               shipmentInput.value = id;
