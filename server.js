@@ -1927,31 +1927,42 @@ REGLAS DE COMPARACIÓN DE MODELOS:
    - Ignorar texto adicional: "SX", "For", "Galaxy", "Phone case", etc.
    - Ejemplo: "For Samsung Galaxy A25 SX" = "A25" ✓
 
-2. SUFIJOS IMPORTANTES QUE DEBEN COINCIDIR EXACTAMENTE:
+2. ABREVIATURA "IP" = iPhone (MUY COMÚN EN FUNDAS):
+   - "IP17" = "iPhone 17" = "17"
+   - "IP16 Pro" = "iPhone 16 Pro" = "16 Pro"
+   - "IP15 Pro Max" = "iPhone 15 Pro Max" = "15 Pro Max"
+   - "IP14" = "iPhone 14" = "14"
+   - Ejemplo: Pedido "iPhone 16", foto dice "IP16" → CORRECTO
+   - Ejemplo: Pedido "16 Pro", foto dice "IP16 Pro" → CORRECTO
+
+3. SUFIJOS IMPORTANTES QUE DEBEN COINCIDIR EXACTAMENTE:
    Plus (o +), Ultra, Pro, Pro Max, Air, Fusion, Neo
    - A15 ≠ A15 Plus (Plus es importante)
    - iPhone 15 ≠ iPhone 15 Pro Max (Pro Max es importante)
    - A55 ≠ A55 Ultra (Ultra es importante)
    - Redmi Note 14 ≠ Redmi Note 14 Pro (Pro es importante)
 
-3. OTROS SUFIJOS TAMBIÉN SON DIFERENTES - Ser estricto:
+4. OTROS SUFIJOS TAMBIÉN SON DIFERENTES - Ser estricto:
    - A03 ≠ A03s ≠ A03 Core (son modelos distintos!)
    - A15 ≠ A16 (números diferentes = modelos diferentes)
    - G24 ≠ G24 Power (con sufijo = modelo diferente)
    - Redmi 14 ≠ Redmi Note 14 (Note es otro modelo)
 
-4. EJEMPLOS DE COINCIDENCIAS CORRECTAS:
+5. EJEMPLOS DE COINCIDENCIAS CORRECTAS:
    - Pedido "G15", foto dice "MOTO G15" → CORRECTO (ignorar MOTO)
    - Pedido "A25", foto dice "For Samsung Galaxy A25 SX" → CORRECTO (ignorar texto extra)
    - Pedido "A15 Plus", foto dice "A15+" → CORRECTO (+ equivale a Plus)
+   - Pedido "iPhone 16", foto dice "IP16" → CORRECTO (IP = iPhone)
+   - Pedido "16 Pro Max", foto dice "IP16 Pro Max" → CORRECTO
 
-5. EJEMPLOS DE COINCIDENCIAS INCORRECTAS:
+6. EJEMPLOS DE COINCIDENCIAS INCORRECTAS:
    - Pedido "A03", foto dice "A03s" → INCORRECTO (sufijo s es diferente)
    - Pedido "A15", foto dice "A15 Plus" → INCORRECTO (Plus es importante)
    - Pedido "iPhone 15", foto dice "iPhone 15 Pro" → INCORRECTO (Pro es importante)
    - Pedido "G24", foto dice "G24 Power" → INCORRECTO (variante diferente)
+   - Pedido "IP16", foto dice "IP16 Pro" → INCORRECTO (Pro es importante)
 
-6. REGLA ESPECIAL PARA FUNDAS Y 4G/5G:
+7. REGLA ESPECIAL PARA FUNDAS Y 4G/5G:
    - Para fundas: IGNORAR "4G" o "5G" esté separado O PEGADO al modelo
    - "A265G", "A265g", "A26 5G", "A26 5g" → todos son "A26"
    - "A154G", "A15 4G" → es "A15"
@@ -1989,6 +2000,11 @@ Extraé:
 3. **Tipo**: Qué tipo de producto es
 
 IGNORAR en el modelo: "Fashion Case", "New", "Phone case", "Made in China", "SX", "For", "Galaxy", marcas como "Samsung", "MOTO", "Xiaomi"
+
+ABREVIATURA "IP" = iPhone (MUY COMÚN EN FUNDAS):
+- "IP17" → reportar "iPhone 17" o "17"
+- "IP16 Pro" → reportar "iPhone 16 Pro" o "16 Pro"
+- "IP15 Pro Max" → reportar "iPhone 15 Pro Max" o "15 Pro Max"
 
 SUFIJOS IMPORTANTES QUE SÍ DEBEN INCLUIRSE EN EL MODELO:
 Plus (o +), Ultra, Pro, Pro Max, Air, Fusion, Neo
