@@ -95,6 +95,18 @@
     .verify-photo-btn:hover { background: #6d28d9; transform: translateY(-50%) scale(1.1); }
     .verify-photo-btn:active { background: #5b21b6; transform: translateY(-50%) scale(0.95); }
 
+    /* Botón reportar error SKU - muy discreto */
+    .report-error-btn { position: absolute; bottom: 8px; right: 8px; background: transparent; border: none; font-size: 14px; cursor: pointer; opacity: 0.3; padding: 4px 6px; border-radius: 4px; transition: all 0.2s; }
+    .report-error-btn:hover, .report-error-btn:focus { opacity: 1; background: #fef2f2; }
+    .report-error-btn:active { transform: scale(0.95); }
+
+    /* Modal error SKU */
+    .error-modal { background: white; border-radius: 12px; padding: 20px; max-width: 350px; width: 100%; }
+    .error-modal h3 { font-size: 16px; margin-bottom: 12px; color: #dc2626; }
+    .error-modal-sku { font-family: monospace; background: #fef2f2; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; color: #991b1b; }
+    .error-modal-note { width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; resize: none; margin-bottom: 12px; }
+    .error-modal-note:focus { outline: none; border-color: #dc2626; }
+
     /* Resumen del día */
     .resumen-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .resumen-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -314,6 +326,19 @@
     </div>
   </div>
 
+  <!-- Modal para reportar error de SKU -->
+  <div class="modal-overlay" id="errorModalOverlay">
+    <div class="error-modal">
+      <h3>⚠️ Reportar error de SKU</h3>
+      <div class="error-modal-sku" id="errorModalSku"></div>
+      <textarea class="error-modal-note" id="errorModalNote" rows="2" placeholder="Nota opcional (ej: foto no coincide, color incorrecto...)"></textarea>
+      <div class="modal-buttons">
+        <button type="button" class="modal-btn secondary" id="errorModalCancel">Cancelar</button>
+        <button type="button" class="modal-btn primary" style="background:#dc2626" id="errorModalSend">Reportar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
   <script>
     // ============================================
@@ -487,6 +512,15 @@
       var modalSkuList = document.getElementById('modalSkuList');
       var modalCancel = document.getElementById('modalCancel');
       var modalSave = document.getElementById('modalSave');
+
+      // Modal de error SKU
+      var errorModalOverlay = document.getElementById('errorModalOverlay');
+      var errorModalSku = document.getElementById('errorModalSku');
+      var errorModalNote = document.getElementById('errorModalNote');
+      var errorModalCancel = document.getElementById('errorModalCancel');
+      var errorModalSend = document.getElementById('errorModalSend');
+      var pendingErrorSku = null;
+      var pendingErrorDesc = null;
 
       function switchView(view) {
         currentView = view;
@@ -709,6 +743,21 @@
             };
             card.appendChild(verifyBtn);
           }
+
+          // Botón pequeño para reportar error de SKU (muy discreto)
+          var reportBtn = document.createElement('button');
+          reportBtn.className = 'report-error-btn';
+          reportBtn.textContent = '⚠️';
+          reportBtn.title = 'Reportar error de SKU';
+          reportBtn.setAttribute('data-sku', item.sku);
+          reportBtn.setAttribute('data-desc', item.description || item.title || '');
+          reportBtn.onclick = function(e) {
+            e.stopPropagation();
+            var sku = this.getAttribute('data-sku');
+            var desc = this.getAttribute('data-desc');
+            showErrorModal(sku, desc);
+          };
+          card.appendChild(reportBtn);
 
           itemsList.appendChild(card);
         }
@@ -948,6 +997,55 @@
 
       modalCancel.onclick = hideBarcodeModal;
       modalSave.onclick = saveBarcodeMapping;
+
+      // Funciones del modal de error SKU
+      function showErrorModal(sku, description) {
+        pendingErrorSku = sku;
+        pendingErrorDesc = description;
+        errorModalSku.textContent = sku + (description ? ' - ' + description : '');
+        errorModalNote.value = '';
+        errorModalOverlay.classList.add('show');
+      }
+
+      function hideErrorModal() {
+        errorModalOverlay.classList.remove('show');
+        pendingErrorSku = null;
+        pendingErrorDesc = null;
+      }
+
+      function sendErrorReport() {
+        if (!pendingErrorSku) return;
+
+        var nota = errorModalNote.value.trim();
+
+        authFetch(API_URL + '/api/error-sku', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sku: pendingErrorSku,
+            descripcion: pendingErrorDesc || '',
+            nota: nota,
+            envioId: currentShipmentId,
+            cuenta: currentAccount
+          })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            showStatus('Error reportado: ' + pendingErrorSku, 'success');
+          } else {
+            showStatus('Error al reportar', 'error');
+          }
+          hideErrorModal();
+        })
+        .catch(function(err) {
+          showStatus('Error al reportar', 'error');
+          hideErrorModal();
+        });
+      }
+
+      errorModalCancel.onclick = hideErrorModal;
+      errorModalSend.onclick = sendErrorReport;
 
       function handleScan(result) {
         var texto = result.getText();

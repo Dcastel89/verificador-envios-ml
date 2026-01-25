@@ -2538,6 +2538,89 @@ app.post('/api/barcodes/reload', async function(req, res) {
 });
 
 // ============================================
+// ERRORES DE SKU
+// ============================================
+
+async function saveSkuError(sku, descripcion, nota, envioId, cuenta) {
+  if (!sheets || !SHEET_ID) return false;
+
+  try {
+    // Verificar si existe la hoja Errores_SKU, si no crearla
+    try {
+      await sheets.spreadsheets.values.get({
+        spreadsheetId: SHEET_ID,
+        range: 'Errores_SKU!A1'
+      });
+    } catch (error) {
+      if (error.message && error.message.includes('Unable to parse range')) {
+        // Crear la hoja
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: SHEET_ID,
+          resource: {
+            requests: [{
+              addSheet: {
+                properties: { title: 'Errores_SKU' }
+              }
+            }]
+          }
+        });
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: 'Errores_SKU!A1:G1',
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: [['Fecha', 'Hora', 'SKU', 'Descripcion', 'Nota', 'Envio', 'Cuenta']]
+          }
+        });
+
+        console.log('Hoja Errores_SKU creada exitosamente');
+      }
+    }
+
+    // Agregar el error
+    var now = new Date();
+    var fecha = now.toLocaleDateString('es-AR');
+    var hora = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: 'Errores_SKU!A:G',
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [[fecha, hora, sku, descripcion || '', nota || '', envioId || '', cuenta || '']]
+      }
+    });
+
+    console.log('Error de SKU reportado: ' + sku);
+    return true;
+  } catch (error) {
+    console.error('Error guardando error de SKU:', error.message);
+    return false;
+  }
+}
+
+app.post('/api/error-sku', async function(req, res) {
+  var sku = req.body.sku;
+  var descripcion = req.body.descripcion || '';
+  var nota = req.body.nota || '';
+  var envioId = req.body.envioId || '';
+  var cuenta = req.body.cuenta || '';
+
+  if (!sku) {
+    return res.status(400).json({ error: 'SKU es requerido' });
+  }
+
+  var success = await saveSkuError(sku.trim(), descripcion, nota, envioId, cuenta);
+
+  if (success) {
+    res.json({ ok: true, message: 'Error reportado', sku: sku });
+  } else {
+    res.status(500).json({ error: 'Error guardando reporte' });
+  }
+});
+
+// ============================================
 // RESUMEN DEL DÍA
 // ============================================
 
