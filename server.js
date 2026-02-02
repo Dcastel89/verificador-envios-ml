@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
+const scheduler = require('./scheduler');
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -928,29 +929,34 @@ async function clearDaySheet(sheetName) {
 }
 
 async function shouldClearOldRecords(sheetName) {
-  // Verifica si los registros existentes son de una semana anterior
-  // Retorna true si hay que limpiar, false si no hay registros o son de hoy
+  // Verifica si hay registros con fecha promesa anterior a hoy
+  // Retorna true si hay que limpiar, false si no hay registros o todos son de hoy
   if (!sheets || !SHEET_ID) return false;
 
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A2:A2'
+      range: sheetName + '!K2:K1000'
     });
 
     var rows = response.data.values || [];
-    if (rows.length === 0 || !rows[0][0]) {
-      // No hay registros, no hay que limpiar
+    if (rows.length === 0) {
       return false;
     }
 
-    var existingDate = rows[0][0]; // Formato: "dd/mm/yyyy" o "d/m/yyyy"
-    var today = getArgentinaTime().toLocaleDateString('es-AR');
+    // Fecha de hoy en formato ISO (YYYY-MM-DD) para comparar con columna Promesa
+    var argNow = getArgentinaTime();
+    var todayISO = argNow.getFullYear() + '-' +
+      String(argNow.getMonth() + 1).padStart(2, '0') + '-' +
+      String(argNow.getDate()).padStart(2, '0');
 
-    // Si la fecha del primer registro no es hoy, son de semana anterior
-    if (existingDate !== today) {
-      console.log('Registros existentes son de ' + existingDate + ', hoy es ' + today + '. Limpiando hoja.');
-      return true;
+    // Revisar si hay algún registro con fecha promesa anterior a hoy
+    for (var i = 0; i < rows.length; i++) {
+      var promesa = rows[i][0];
+      if (promesa && promesa < todayISO) {
+        console.log('Encontrado registro con promesa ' + promesa + ' (hoy es ' + todayISO + '). Limpiando hoja.');
+        return true;
+      }
     }
 
     return false;
@@ -1410,10 +1416,55 @@ async function getShipmentStatus(account, shipmentId) {
 // SINCRONIZACIÓN DE ENVÍOS
 // ============================================
 
+async function removeCancelledShipments(sheetName) {
+  // Revisa los envíos pendientes en la hoja y elimina los que están cancelados en ML
+  if (!sheets || !SHEET_ID) return 0;
+
+  try {
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!C2:D1000'
+    });
+
+    var rows = response.data.values || [];
+    if (rows.length === 0) return 0;
+
+    var eliminados = 0;
+
+    for (var i = 0; i < rows.length; i++) {
+      var shipmentId = rows[i][0];
+      var accountName = rows[i][1];
+      if (!shipmentId || !accountName) continue;
+
+      var account = accounts.find(function(a) {
+        return a.name.toUpperCase() === accountName.toUpperCase();
+      });
+      if (!account) continue;
+
+      var status = await getShipmentStatus(account, shipmentId);
+      if (status === 'cancelled') {
+        var deleted = await deleteShipmentRow(shipmentId);
+        if (deleted) {
+          eliminados++;
+          i--; // Ajustar índice porque se eliminó una fila
+        }
+      }
+    }
+
+    if (eliminados > 0) {
+      console.log('Eliminados ' + eliminados + ' envíos cancelados de ' + sheetName);
+    }
+    return eliminados;
+  } catch (error) {
+    console.error('Error eliminando cancelados:', error.message);
+    return 0;
+  }
+}
+
 var lastMorningSyncDate = null;
 
 async function syncMorningShipments() {
-  // Sincronización completa de las 9:00 AM
+  // Sincronización completa de las 8:30 AM
   var today = getArgentinaTime().toLocaleDateString('es-AR');
 
   if (lastMorningSyncDate === today) {
@@ -1421,7 +1472,7 @@ async function syncMorningShipments() {
     return;
   }
 
-  console.log('=== SINCRONIZACIÓN MATUTINA 9:00 AM ===');
+  console.log('=== SINCRONIZACIÓN MATUTINA 8:30 AM ===');
 
   var sheetName = getTodaySheetName();
 
@@ -1496,46 +1547,15 @@ async function syncMorningShipments() {
 }
 
 async function syncPendingShipments() {
-  var argTime = getArgentinaTime();
-  var day = argTime.getDay();
-  var hour = argTime.getHours();
-  var minute = argTime.getMinutes();
-  var timeInMinutes = hour * 60 + minute;
-
-  // Solo de lunes a viernes
-  if (day < 1 || day > 5) {
-    return;
-  }
-
-  // Sync matutino a las 9:00 (540 minutos)
-  if (timeInMinutes >= 540 && timeInMinutes < 545) {
-    await syncMorningShipments();
-    return;
-  }
-
-  // Copia al historial mensual a las 19:00 (1140 minutos)
-  if (timeInMinutes >= 1140 && timeInMinutes < 1145) {
-    await copyDailyToHistory();
-    return;
-  }
-
-  // No sincronizar fuera de horario laboral
-  if (!isWorkingHours()) {
-    return;
-  }
-
-  // Sync incremental durante el día
+  // Sync incremental - se usa al iniciar el servidor y en llamadas manuales a /api/sync
+  // Las tareas programadas (8:30 y 19:00) las maneja el scheduler
   console.log('Sincronizando envios pendientes...');
 
   var sheetName = getTodaySheetName();
-
-  // Verificar si los registros son de una semana anterior y limpiarlos
-  // (por si el servidor se reinició y el sync matutino no se ejecutó)
   await ensureDaySheetExists(sheetName);
-  var needsClear = await shouldClearOldRecords(sheetName);
-  if (needsClear) {
-    await clearDaySheet(sheetName);
-  }
+
+  // Solo eliminar envíos cancelados (no borrar todo)
+  await removeCancelledShipments(sheetName);
 
   var existingIds = await getExistingShipmentIds(sheetName);
   var allShipments = [];
@@ -1589,9 +1609,6 @@ async function syncPendingShipments() {
 
   console.log('Sync completado. Nuevos: ' + filtered.length);
 }
-
-// Sync automático desactivado - ahora se usa solo sync manual + webhooks
-// setInterval(syncPendingShipments, 60000);
 
 function describeSKU(sku) {
   if (!sku) return '';
@@ -3176,6 +3193,12 @@ async function initializeServer() {
   } catch (error) {
     console.error('Error cargando datos:', error.message);
   }
+
+  // Iniciar tareas programadas (8:30 sync, 19:00 historial)
+  scheduler.initScheduler({
+    syncMorning: syncMorningShipments,
+    copyHistory: copyDailyToHistory
+  });
 
   app.listen(PORT, function() {
     console.log('Servidor corriendo en puerto ' + PORT);
