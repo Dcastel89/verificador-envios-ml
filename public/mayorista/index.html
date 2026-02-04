@@ -1275,31 +1275,39 @@
         var item = currentItems.find(function(i) { return i.sku === selectedSkuForModal; });
         var description = item ? item.name : '';
 
+        // Guardar valores antes de cerrar
+        var barcodeToSave = pendingBarcode;
+        var skuToSave = selectedSkuForModal;
+
         authFetch(API_URL + '/api/barcode', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            barcode: pendingBarcode,
-            sku: selectedSkuForModal,
+            barcode: barcodeToSave,
+            sku: skuToSave,
             description: description
           })
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data.success) {
-            showStatus('Codigo guardado', 'success');
-            markProductByBarcode(pendingBarcode);
+            showScanSuccess('Codigo guardado: ' + skuToSave, barcodeToSave, '', '');
+            // Marcar el producto con el barcode guardado
+            markProductByBarcode(barcodeToSave);
           } else {
-            showStatus('Error guardando codigo', 'error');
+            showScanError('Error guardando codigo');
           }
+          // Cerrar modal después de completar
+          modalOverlay.classList.remove('show');
+          pendingBarcode = null;
+          selectedSkuForModal = null;
         })
         .catch(function(err) {
-          showStatus('Error: ' + err.message, 'error');
+          showScanError('Error: ' + err.message);
+          modalOverlay.classList.remove('show');
+          pendingBarcode = null;
+          selectedSkuForModal = null;
         });
-
-        modalOverlay.classList.remove('show');
-        pendingBarcode = null;
-        selectedSkuForModal = null;
       };
 
       // ============================================
