@@ -1189,11 +1189,13 @@
           capturePhotoBtn.disabled = false;
           capturePhotoBtn.textContent = 'Analizar con IA';
 
+          console.log('Respuesta IA:', data);
+
           if (data.success) {
             // PRIORIDAD 1: Si hay código de rotuladora con SKU vinculado, usarlo
             if (data.codigoRotuladora && data.skuVinculado) {
-              showVisionResult(data);
-              showStatus('Código rotuladora: ' + data.codigoRotuladora + ' → SKU: ' + data.skuVinculado, 'success');
+              console.log('PRIORIDAD 1: Código rotuladora detectado', data.codigoRotuladora, data.skuVinculado);
+              showVisionResultWithRotuladora(data);
               if (scanMode === 'product') {
                 tryMatchBySku(data.skuVinculado, data.codigoRotuladora);
               }
@@ -1316,6 +1318,14 @@
 
         visionResult.classList.remove('hidden');
         hideStatus();
+      }
+
+      function showVisionResultWithRotuladora(data) {
+        // Mostrar código de rotuladora y SKU vinculado
+        visionText.innerHTML = '<strong>Código:</strong> ' + data.codigoRotuladora + '<br><strong>SKU:</strong> ' + data.skuVinculado;
+        visionColors.innerHTML = '<strong>Confianza:</strong> ' + (data.confianza || 'alta');
+        visionResult.classList.remove('hidden');
+        showStatus('✅ Código rotuladora detectado: ' + data.codigoRotuladora, 'success');
       }
 
       capturePhotoBtn.onclick = capturePhoto;

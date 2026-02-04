@@ -725,6 +725,16 @@
         return count;
       }
 
+      function getCheckedCount(index) {
+        var checks = unitChecks[index] || [];
+        var count = 0;
+        for (var i = 0; i < checks.length; i++) {
+          var check = checks[i];
+          if (check && (check === true || check.checked === true)) count++;
+        }
+        return count;
+      }
+
       function saveVerification() {
         if (alreadySaved) return;
         alreadySaved = true;
@@ -1488,7 +1498,10 @@
 
           var itemSku = (item.sku || '').toUpperCase();
 
-          // Buscar coincidencia exacta o parcial del SKU
+          // Ignorar items sin SKU
+          if (!itemSku || itemSku.length < 3) continue;
+
+          // Buscar coincidencia exacta o parcial del SKU (ambos deben tener contenido)
           if (itemSku === skuUpper || itemSku.indexOf(skuUpper) !== -1 || skuUpper.indexOf(itemSku) !== -1) {
             showScanSuccess(item.name, item.sku, getCheckedCount(i) + 1, item.quantity);
             marcarProductoVerificado(i, 'rotuladora');
