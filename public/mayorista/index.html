@@ -61,6 +61,22 @@
     .reset-btn { width: 100%; padding: 14px; margin-top: 16px; background: #ef4444; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
     .hidden { display: none; }
 
+    /* Banner grande de escaneo exitoso */
+    .scan-success-banner { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(34, 197, 94, 0.95); color: white; z-index: 500; align-items: center; justify-content: center; flex-direction: column; animation: scanSuccessFade 0.5s ease-out forwards; }
+    .scan-success-banner.show { display: flex; }
+    .scan-success-banner .scan-icon { font-size: 80px; margin-bottom: 16px; animation: scanBounce 0.5s ease-out; }
+    .scan-success-banner .scan-text { font-size: 28px; font-weight: 700; text-align: center; padding: 0 20px; }
+    .scan-success-banner .scan-sku { font-size: 18px; font-weight: 400; margin-top: 8px; opacity: 0.9; }
+    .scan-success-banner .scan-count { font-size: 48px; font-weight: 800; margin-top: 16px; }
+    @keyframes scanSuccessFade { 0% { opacity: 1; } 50% { opacity: 1; } 100% { opacity: 0; pointer-events: none; } }
+    @keyframes scanBounce { 0% { transform: scale(0.5); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+    /* Banner de error de escaneo */
+    .scan-error-banner { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(220, 38, 38, 0.95); color: white; z-index: 500; align-items: center; justify-content: center; flex-direction: column; animation: scanSuccessFade 2s ease-out forwards; }
+    .scan-error-banner.show { display: flex; }
+    .scan-error-banner .scan-icon { font-size: 80px; margin-bottom: 16px; }
+    .scan-error-banner .scan-text { font-size: 24px; font-weight: 700; text-align: center; padding: 0 20px; }
+
     /* Vision/IA - Análisis con Claude */
     .capture-photo-btn { position: fixed; bottom: 0; left: 0; right: 0; background: #f59e0b; color: white; border: none; padding: 18px; font-size: 18px; font-weight: 600; cursor: pointer; z-index: 100; }
     .capture-photo-btn:disabled { background: #9ca3af; }
@@ -290,6 +306,20 @@
     </div>
   </div>
   <div class="complete-banner" id="completeBanner">Orden verificada correctamente</div>
+
+  <!-- Banner de escaneo exitoso -->
+  <div class="scan-success-banner" id="scanSuccessBanner">
+    <div class="scan-icon">✓</div>
+    <div class="scan-text" id="scanSuccessText">Escaneado</div>
+    <div class="scan-sku" id="scanSuccessSku"></div>
+    <div class="scan-count" id="scanSuccessCount"></div>
+  </div>
+
+  <!-- Banner de error de escaneo -->
+  <div class="scan-error-banner" id="scanErrorBanner">
+    <div class="scan-icon">✗</div>
+    <div class="scan-text" id="scanErrorText">Error</div>
+  </div>
   <button type="button" id="cameraBtn" class="camera-btn">Escanear orden</button>
 
   <!-- Modal para guardar barcode -->
@@ -1098,7 +1128,62 @@
         return -1;
       }
 
+      // ============================================
+      // FEEDBACK DE ESCANEO
+      // ============================================
+      var scanSuccessBanner = document.getElementById('scanSuccessBanner');
+      var scanSuccessText = document.getElementById('scanSuccessText');
+      var scanSuccessSku = document.getElementById('scanSuccessSku');
+      var scanSuccessCount = document.getElementById('scanSuccessCount');
+      var scanErrorBanner = document.getElementById('scanErrorBanner');
+      var scanErrorText = document.getElementById('scanErrorText');
+
+      var lastScannedBarcode = null;
+      var lastScanTime = 0;
+      var SCAN_DEBOUNCE_MS = 2000; // 2 segundos entre escaneos del mismo código
+
+      function showScanSuccess(productName, sku, checkedCount, totalCount) {
+        scanSuccessText.textContent = productName || 'Escaneado';
+        scanSuccessSku.textContent = sku || '';
+        scanSuccessCount.textContent = checkedCount + ' / ' + totalCount;
+
+        // Remover y re-agregar clase para reiniciar animación
+        scanSuccessBanner.classList.remove('show');
+        void scanSuccessBanner.offsetWidth; // Forzar reflow
+        scanSuccessBanner.classList.add('show');
+
+        // Sin vibración en éxito (solo visual)
+
+        setTimeout(function() {
+          scanSuccessBanner.classList.remove('show');
+        }, 500);
+      }
+
+      function showScanError(message) {
+        scanErrorText.textContent = message || 'Error';
+
+        scanErrorBanner.classList.remove('show');
+        void scanErrorBanner.offsetWidth;
+        scanErrorBanner.classList.add('show');
+
+        // Vibración de error
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+
+        setTimeout(function() {
+          scanErrorBanner.classList.remove('show');
+        }, 2000);
+      }
+
       function markProductByBarcode(barcode) {
+        // Debounce: evitar escaneos múltiples del mismo código
+        var now = Date.now();
+        if (barcode === lastScannedBarcode && (now - lastScanTime) < SCAN_DEBOUNCE_MS) {
+          console.log('Debounce: ignorando escaneo repetido de', barcode);
+          return;
+        }
+        lastScannedBarcode = barcode;
+        lastScanTime = now;
+
         // Buscar en la base de barcodes
         authFetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
           .then(function(response) { return response.json(); })
@@ -1106,6 +1191,7 @@
             if (data.found && data.sku) {
               var itemIndex = findItemBySku(data.sku);
               if (itemIndex >= 0) {
+                var item = currentItems[itemIndex];
                 var unitIndex = findNextUncheckedUnit(itemIndex);
                 if (unitIndex >= 0) {
                   if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
@@ -1120,17 +1206,24 @@
 
                   updateCard(itemIndex);
                   highlightCard(itemIndex);
-                  if (navigator.vibrate) navigator.vibrate(50);
+
+                  // Contar verificados para mostrar progreso
+                  var checkedCount = 0;
+                  var checks = unitChecks[itemIndex] || [];
+                  for (var c = 0; c < item.quantity; c++) {
+                    if (checks[c] && (checks[c] === true || checks[c].checked === true)) checkedCount++;
+                  }
+
+                  // Mostrar banner de éxito grande
+                  showScanSuccess(item.name || item.sku, data.sku, checkedCount, item.quantity);
 
                   // Guardar verificación parcial en servidor
                   saveItemVerification(itemIndex, 'scanned');
                 } else {
-                  showStatus('Producto ya escaneado completo', 'error');
-                  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                  showScanError('YA COMPLETO: ' + (item.name || data.sku));
                 }
               } else {
-                showStatus('Producto no en esta orden', 'error');
-                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                showScanError('NO EN ESTA ORDEN: ' + data.sku);
               }
             } else {
               // Barcode no registrado, mostrar modal
