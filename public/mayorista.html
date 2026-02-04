@@ -157,6 +157,14 @@
     .app-switch { text-align: center; margin-top: 12px; }
     .app-switch a { color: #7c3aed; font-size: 13px; text-decoration: none; }
     .app-switch a:hover { text-decoration: underline; }
+
+    /* Botón de pack para FT y VF */
+    .pack-btn { display: inline-flex; align-items: center; gap: 6px; background: #059669; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: all 0.2s; }
+    .pack-btn:hover { background: #047857; }
+    .pack-btn:active { transform: scale(0.95); }
+    .pack-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .pack-btn .pack-icon { font-size: 16px; }
+    .pack-info { font-size: 11px; color: #6b7280; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -654,6 +662,75 @@
       }
 
       // ============================================
+      // PACKS - FT (10 unidades) y VF (25 unidades)
+      // ============================================
+      function getPackSize(sku) {
+        if (!sku) return 0;
+        var skuUpper = sku.toUpperCase();
+        if (skuUpper.indexOf('FT') === 0) return 10; // Fundas transparentes: pack de 10
+        if (skuUpper.indexOf('VF') === 0) return 25; // Vidrios: pack de 25
+        return 0;
+      }
+
+      function marcarPack(itemIndex) {
+        var item = currentItems[itemIndex];
+        if (!item) return;
+
+        var packSize = getPackSize(item.sku);
+        if (packSize === 0) return;
+
+        if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
+
+        // Contar cuántas unidades faltan por verificar
+        var unitsToMark = 0;
+        var startUnit = -1;
+        for (var j = 0; j < item.quantity && unitsToMark < packSize; j++) {
+          var check = unitChecks[itemIndex][j];
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) {
+            if (startUnit === -1) startUnit = j;
+            unitsToMark++;
+          }
+        }
+
+        if (unitsToMark === 0) {
+          showStatus('Ya están todas las unidades verificadas', 'error');
+          return;
+        }
+
+        // Marcar las unidades del pack
+        var marked = 0;
+        for (var j = 0; j < item.quantity && marked < packSize; j++) {
+          var check = unitChecks[itemIndex][j];
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) {
+            unitChecks[itemIndex][j] = { checked: true, method: 'pack' };
+            // Actualizar checkbox en UI
+            var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
+            if (checkbox) {
+              checkbox.checked = true;
+              checkbox.classList.add('scanned');
+            }
+            marked++;
+          }
+        }
+
+        // Limpiar efecto visual después de un momento
+        setTimeout(function() {
+          var checkboxes = document.querySelectorAll('.unit-checkbox[data-item="' + itemIndex + '"].scanned');
+          checkboxes.forEach(function(cb) { cb.classList.remove('scanned'); });
+        }, 2000);
+
+        updateCard(itemIndex);
+        highlightCard(itemIndex);
+        showStatus('Pack de ' + marked + ' unidades verificado', 'success');
+        if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
+
+        // Guardar verificación
+        saveItemVerification(itemIndex, 'pack');
+      }
+
+      // ============================================
       // RENDER ITEMS
       // ============================================
       function renderItems() {
@@ -718,6 +795,36 @@
           info.appendChild(skuDiv);
           info.appendChild(qtyDiv);
           info.appendChild(unitsDiv);
+
+          // Botón de pack para SKUs FT (fundas) y VF (vidrios)
+          var packSize = getPackSize(item.sku);
+          if (packSize > 0 && item.quantity >= packSize) {
+            var packContainer = document.createElement('div');
+
+            var packBtn = document.createElement('button');
+            packBtn.type = 'button';
+            packBtn.className = 'pack-btn';
+            packBtn.setAttribute('data-index', i);
+            packBtn.innerHTML = '<span class="pack-icon">📦</span> Marcar pack (' + packSize + ')';
+            packBtn.onclick = function(e) {
+              e.stopPropagation();
+              var idx = parseInt(this.getAttribute('data-index'));
+              marcarPack(idx);
+            };
+            packContainer.appendChild(packBtn);
+
+            var packInfo = document.createElement('div');
+            packInfo.className = 'pack-info';
+            var packsTotal = Math.floor(item.quantity / packSize);
+            var sueltas = item.quantity % packSize;
+            var infoText = packsTotal + ' pack(s)';
+            if (sueltas > 0) infoText += ' + ' + sueltas + ' sueltas';
+            packInfo.textContent = infoText;
+            packContainer.appendChild(packInfo);
+
+            info.appendChild(packContainer);
+          }
+
           card.appendChild(mainCheckbox);
           card.appendChild(info);
 
