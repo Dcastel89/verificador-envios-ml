@@ -492,11 +492,33 @@ async function saveTokenToSheets(accountName, accessToken, refreshToken) {
   }
 }
 
+// Lock para evitar renovaciones simultáneas del mismo token
+var tokenRefreshLocks = {};
+
 async function refreshAccessToken(account) {
   if (!account.refreshToken || !account.clientId || !account.clientSecret) {
     console.log('No se puede renovar token de ' + account.name + ': faltan credenciales');
     return false;
   }
+
+  // Si ya hay una renovación en curso para esta cuenta, esperar
+  if (tokenRefreshLocks[account.name]) {
+    console.log('Esperando renovación en curso para ' + account.name + '...');
+    try {
+      await tokenRefreshLocks[account.name];
+      console.log('Renovación completada por otro proceso para ' + account.name);
+      return true; // El otro proceso ya renovó el token
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Crear promesa de lock
+  var resolveLock, rejectLock;
+  tokenRefreshLocks[account.name] = new Promise(function(resolve, reject) {
+    resolveLock = resolve;
+    rejectLock = reject;
+  });
 
   try {
     console.log('Renovando token para ' + account.name + '...');
@@ -520,10 +542,17 @@ async function refreshAccessToken(account) {
     await saveTokenToSheets(account.name, account.accessToken, account.refreshToken);
 
     console.log('Token renovado exitosamente para ' + account.name);
+    resolveLock();
     return true;
   } catch (error) {
     console.error('Error renovando token de ' + account.name + ':', error.response?.data || error.message);
+    rejectLock(error);
     return false;
+  } finally {
+    // Liberar el lock después de un pequeño delay para evitar race conditions
+    setTimeout(function() {
+      delete tokenRefreshLocks[account.name];
+    }, 1000);
   }
 }
 
