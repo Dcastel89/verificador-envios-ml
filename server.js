@@ -2052,9 +2052,11 @@ INSTRUCCIONES:
 2. Compará el código con el pedido usando las reglas anteriores
 3. Verificá que el COLOR coincida
 
-IMPORTANTE:
-- El fondo suele ser madera, ignoralo
-- Las fundas vienen en bolsas transparentes con etiquetas
+IMPORTANTE - DÓNDE BUSCAR EL CÓDIGO:
+- ETIQUETAS PEQUEÑAS BLANCAS: Las fundas de silicona suelen tener una etiquetita blanca pequeña pegada o colgando con el código de modelo impreso. SIEMPRE leé el texto de estas etiquetas, ahí está el código.
+- ETIQUETAS EN BOLSAS: Las fundas en bolsas transparentes tienen etiquetas impresas con el modelo.
+- CÓDIGOS DE 7 DÍGITOS: Si ves un número de 7 dígitos (ej: 0001234), es un código de rotuladora - extráelo también.
+- El fondo suele ser madera, ignoralo.
 - Colores comunes: Negro, Blanco, Transparente, Rojo, Azul, Rosa, Lila, Verde, Celeste, Amarillo
 
 Respondé SOLO con este JSON:
@@ -2070,9 +2072,14 @@ Respondé SOLO con este JSON:
       // MODO EXTRACCIÓN: Solo extraer info de la imagen (sin comparar)
       prompt = `Analizá esta imagen de un producto (funda de celular o vidrio templado).
 
+DÓNDE BUSCAR CÓDIGOS (MUY IMPORTANTE):
+- ETIQUETAS PEQUEÑAS BLANCAS: Las fundas de silicona tienen etiquetitas blancas pequeñas (pegadas o colgando) con texto impreso. LEÉ ESE TEXTO, ahí está el código de modelo.
+- ETIQUETAS EN BOLSAS: Fundas en bolsas transparentes tienen etiquetas impresas.
+- Si ves cualquier papel, etiqueta o sticker con texto/números, SIEMPRE leé su contenido.
+
 Extraé:
 1. **Código de rotuladora**: Si ves un código numérico de 7 dígitos (ej: 0000001, 0001234), extrae EXACTAMENTE como aparece
-2. **Modelo/SKU**: Buscá códigos en etiquetas (A25, A36, B12, "For A06", etc.)
+2. **Modelo/SKU**: Buscá códigos en etiquetas pequeñas, stickers, papeles (A25, A36, B12, "For A06", etc.)
 3. **Color**: Color real del producto (no del fondo de madera)
 4. **Tipo**: Qué tipo de producto es (funda silicona, funda transparente, vidrio templado, etc.)
 
