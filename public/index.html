@@ -1190,17 +1190,23 @@
           capturePhotoBtn.textContent = 'Analizar con IA';
 
           if (data.success) {
-            // Si hay verificación con producto específico
-            if (productoAVerificar && data.correcto !== undefined) {
+            // PRIORIDAD 1: Si hay código de rotuladora con SKU vinculado, usarlo
+            if (data.codigoRotuladora && data.skuVinculado) {
+              showVisionResult(data);
+              showStatus('Código rotuladora: ' + data.codigoRotuladora + ' → SKU: ' + data.skuVinculado, 'success');
+              if (scanMode === 'product') {
+                tryMatchBySku(data.skuVinculado, data.codigoRotuladora);
+              }
+            }
+            // PRIORIDAD 2: Verificación con producto específico
+            else if (productoAVerificar && data.correcto !== undefined) {
               mostrarResultadoVerificacion(data);
-            } else {
-              // Modo extracción simple (sin producto específico)
+            }
+            // PRIORIDAD 3: Modo extracción simple
+            else {
               showVisionResult(data);
               if (scanMode === 'product') {
-                // Si hay SKU vinculado por código de rotuladora, usarlo directamente
-                if (data.skuVinculado) {
-                  tryMatchBySku(data.skuVinculado, data.codigoRotuladora);
-                } else if (data.modeloDetectado) {
+                if (data.modeloDetectado) {
                   tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
                 }
               }
