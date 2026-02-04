@@ -2070,20 +2070,25 @@ Respondé SOLO con este JSON:
 }`;
     } else {
       // MODO EXTRACCIÓN: Solo extraer info de la imagen (sin comparar)
-      prompt = `Analizá esta imagen de un producto (funda de celular o vidrio templado).
+      prompt = `TU TAREA PRINCIPAL ES LEER TEXTO. Buscá cualquier texto, número o código visible en la imagen y transcribilo.
 
-DÓNDE BUSCAR CÓDIGOS (MUY IMPORTANTE):
-- ETIQUETAS PEQUEÑAS BLANCAS: Las fundas de silicona tienen etiquetitas blancas pequeñas (pegadas o colgando) con texto impreso. LEÉ ESE TEXTO, ahí está el código de modelo.
-- ETIQUETAS EN BOLSAS: Fundas en bolsas transparentes tienen etiquetas impresas.
-- Si ves cualquier papel, etiqueta o sticker con texto/números, SIEMPRE leé su contenido.
+PASO 1 - BUSCAR Y LEER TEXTO (LO MÁS IMPORTANTE):
+Buscá texto en CUALQUIER parte de la imagen:
+- Papeles, papelitos, notas (aunque estén arrugados o pequeños)
+- Etiquetas blancas pequeñas (muy comunes en fundas de silicona)
+- Stickers, calcomanías
+- Etiquetas impresas en bolsas
+- Cualquier cosa con texto impreso o escrito
 
-Extraé:
-1. **Código de rotuladora**: Si ves un código numérico de 7 dígitos (ej: 0000001, 0001234), extrae EXACTAMENTE como aparece
-2. **Modelo/SKU**: Buscá códigos en etiquetas pequeñas, stickers, papeles (A25, A36, B12, "For A06", etc.)
-3. **Color**: Color real del producto (no del fondo de madera)
-4. **Tipo**: Qué tipo de producto es (funda silicona, funda transparente, vidrio templado, etc.)
+SI VES TEXTO → LÉELO Y TRANSCRIBILO EXACTAMENTE
 
-PRIORIDAD: Si hay código de rotuladora (7 dígitos numéricos), ese es el identificador principal.
+PASO 2 - Identificar el producto:
+- Color real del producto
+- Tipo: funda silicona, funda transparente, vidrio templado, etc.
+
+CÓDIGOS IMPORTANTES A BUSCAR:
+- Código de rotuladora: 7 dígitos numéricos (ej: 0000001, 0001234)
+- Modelo: códigos como A25, G51, B12, "For A06", "IP16", etc.
 
 IGNORAR en el modelo: "Fashion Case", "New", "Phone case", "Made in China", "SX", "For", "Galaxy", marcas como "Samsung", "MOTO", "Xiaomi"
 
@@ -2107,8 +2112,9 @@ REGLA 4G/5G (MUY IMPORTANTE):
 
 Respondé SOLO con este JSON:
 {
+  "textoEncontrado": "TODO el texto que puedas leer en la imagen, transcrito exactamente",
   "codigoRotuladora": "código de 7 dígitos si lo ves, o null",
-  "modeloDetectado": "código de modelo encontrado o null",
+  "modeloDetectado": "código de modelo extraído del texto, o null",
   "colorDetectado": "color del producto",
   "tipoProducto": "funda silicona/funda transparente/vidrio/etc",
   "confianza": "alta/media/baja"
