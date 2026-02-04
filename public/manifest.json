@@ -4,6 +4,7 @@
   "short_name": "Verificador",
   "description": "Verificador de envios para MercadoLibre",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f3f4f6",
   "theme_color": "#2563eb",
