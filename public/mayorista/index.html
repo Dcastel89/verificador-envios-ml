@@ -1532,6 +1532,7 @@
           .then(function(cfg) {
             if (productoAVerificar) {
               productoAVerificar.fotosMinimas = cfg.fotosMinimas || 1;
+              if (cfg.fotosMaximas) productoAVerificar.fotosMaximas = cfg.fotosMaximas;
             }
           })
           .catch(function() {}); // Si falla, queda en 1
@@ -1564,6 +1565,14 @@
         // Guardar imagen en el array
         capturedImages.push(imageBase64);
         addThumbnail(imageBase64);
+
+        // Si el producto tiene fotosMaximas y ya se alcanzó, enviar directo
+        var maxFotos = productoAVerificar && productoAVerificar.fotosMaximas;
+        if (maxFotos && capturedImages.length >= maxFotos) {
+          showStatus('Foto capturada, enviando a analizar...', 'success');
+          sendImagesToAnalyze(capturedImages);
+          return;
+        }
 
         // Mostrar botones multi-foto
         showMultiPhotoBar();

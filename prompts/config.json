@@ -3,6 +3,7 @@
     "funda-silicona": {
       "prefijos": ["SC"],
       "palabrasClave": ["funda silicona", "silicone case"],
+      "fotosMaximas": 1,
       "dondeVerificar": "Buscar ETIQUETA BLANCA PEQUEÑA pegada o colgando con el código de modelo impreso. También revisar etiquetas en bolsas transparentes.",
       "reglaColor": "El color DEBE coincidir con el pedido. No asumir ningún color.",
       "formatoModelo": "Código corto: A25, G15, IP16. Ignorar marca y texto extra (SX, For, Galaxy, etc).",
@@ -11,6 +12,7 @@
     "funda-transparente": {
       "prefijos": ["FT"],
       "palabrasClave": ["funda transparente", "transparent case", "clear case"],
+      "fotosMaximas": 1,
       "dondeVerificar": "Buscar etiqueta en la bolsa o packaging con el código de modelo.",
       "reglaColor": "El producto siempre es transparente. No verificar color.",
       "formatoModelo": "Código corto: A25, G15, IP16.",

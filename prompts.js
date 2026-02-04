@@ -76,10 +76,14 @@ function detectProductType(sku, descripcion) {
  */
 function getProductConfig(sku, descripcion) {
   var tipo = detectProductType(sku, descripcion);
-  return {
+  var result = {
     tipo: tipo.nombre,
     fotosMinimas: tipo.config.fotosMinimas || 1
   };
+  if (tipo.config.fotosMaximas) {
+    result.fotosMaximas = tipo.config.fotosMaximas;
+  }
+  return result;
 }
 
 function buildVerificationPrompt(productoEsperado, imageCount) {

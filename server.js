@@ -3,136 +3,23 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
-const crypto = require('crypto');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const scheduler = require('./scheduler');
 const { buildVerificationPrompt, buildExtractionPrompt, getProductConfig } = require('./prompts');
 const jumpsellerRouter = require('./jumpseller');
+const auth = require('./auth');
+const barcodesRouter = require('./barcodes');
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
-// ============================================
-// SISTEMA DE AUTENTICACIÓN
-// ============================================
-
-// Credenciales de usuario desde variables de entorno
-const AUTH_USER = process.env.AUTH_USER || 'admin';
-const AUTH_PASSWORD = process.env.AUTH_PASSWORD || 'admin123';
-
-// Almacén de sesiones en memoria
-var sessions = {};
-
-// Generar token de sesión
-function generateSessionToken() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-// Middleware para parsear cookies
-app.use(function(req, res, next) {
-  var cookies = {};
-  var cookieHeader = req.headers.cookie;
-  if (cookieHeader) {
-    cookieHeader.split(';').forEach(function(cookie) {
-      var parts = cookie.split('=');
-      var key = parts[0].trim();
-      var value = parts.slice(1).join('=').trim();
-      cookies[key] = value;
-    });
-  }
-  req.cookies = cookies;
-  next();
-});
-
-// Middleware de autenticación
-function requireAuth(req, res, next) {
-  var token = req.cookies.session_token || req.headers['x-session-token'];
-
-  if (!token || !sessions[token]) {
-    return res.status(401).json({ error: 'No autorizado', requireLogin: true });
-  }
-
-  // Verificar que la sesión no haya expirado (24 horas)
-  var session = sessions[token];
-  if (Date.now() - session.createdAt > 24 * 60 * 60 * 1000) {
-    delete sessions[token];
-    return res.status(401).json({ error: 'Sesión expirada', requireLogin: true });
-  }
-
-  req.user = session.user;
-  next();
-}
-
-// Endpoint de login
-app.post('/api/auth/login', function(req, res) {
-  var username = req.body.username;
-  var password = req.body.password;
-
-  if (username === AUTH_USER && password === AUTH_PASSWORD) {
-    var token = generateSessionToken();
-    sessions[token] = {
-      user: username,
-      createdAt: Date.now()
-    };
-
-    res.cookie('session_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000 // 24 horas
-    });
-
-    console.log('Login exitoso para usuario: ' + username);
-    res.json({ success: true, user: username });
-  } else {
-    console.log('Intento de login fallido para usuario: ' + username);
-    res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
-  }
-});
-
-// Endpoint de logout
-app.post('/api/auth/logout', function(req, res) {
-  var token = req.cookies.session_token || req.headers['x-session-token'];
-
-  if (token && sessions[token]) {
-    delete sessions[token];
-  }
-
-  res.clearCookie('session_token');
-  res.json({ success: true });
-});
-
-// Endpoint para verificar sesión
-app.get('/api/auth/check', function(req, res) {
-  var token = req.cookies.session_token || req.headers['x-session-token'];
-
-  if (!token || !sessions[token]) {
-    return res.json({ authenticated: false });
-  }
-
-  var session = sessions[token];
-  if (Date.now() - session.createdAt > 24 * 60 * 60 * 1000) {
-    delete sessions[token];
-    return res.json({ authenticated: false });
-  }
-
-  res.json({ authenticated: true, user: session.user });
-});
+// Configurar autenticación (cookies, login, logout, check, middleware global)
+auth.configure(app);
 
 // Archivos estáticos (sin autenticación para login.html y recursos)
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Middleware global de autenticación para todas las rutas /api/ (excepto auth)
-app.use('/api', function(req, res, next) {
-  // Rutas de autenticación no requieren estar logueado
-  if (req.path.startsWith('/auth/')) {
-    return next();
-  }
-  // Todas las demás rutas requieren autenticación
-  requireAuth(req, res, next);
-});
 
 // Anthropic (Claude) setup
 var anthropic = null;
@@ -147,18 +34,22 @@ var SHEET_ID = process.env.GOOGLE_SHEET_ID;
 var HISTORY_SHEET_ID = process.env.GOOGLE_HISTORY_SHEET_ID || '1aioIhNxTBUyILXsX2SpAvIa9Xs4M5NBu_rgMP4Wu3DY';
 
 if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-  var auth = new google.auth.JWT(
+  var googleAuth = new google.auth.JWT(
     process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     null,
     process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     ['https://www.googleapis.com/auth/spreadsheets']
   );
-  sheets = google.sheets({ version: 'v4', auth: auth });
+  sheets = google.sheets({ version: 'v4', auth: googleAuth });
 }
 
 // Configurar y montar el módulo Jumpseller (Mayoristas)
 jumpsellerRouter.configure(sheets, SHEET_ID);
 app.use(jumpsellerRouter);
+
+// Configurar y montar el módulo de Barcodes
+barcodesRouter.configure(sheets, SHEET_ID, auth.requireAuth);
+app.use(barcodesRouter);
 
 // Cuentas de MercadoLibre - los tokens se actualizan desde Google Sheets
 const accounts = [
@@ -304,159 +195,6 @@ async function createTokensSheet() {
   } catch (error) {
     console.error('Error creando hoja Tokens:', error.message);
   }
-}
-
-// ============================================
-// SISTEMA DE MAPEO SKU-BARCODE
-// ============================================
-
-var barcodeCache = {}; // Cache en memoria para mapeo barcode -> SKU
-
-async function loadBarcodesFromSheets() {
-  if (!sheets || !SHEET_ID) {
-    console.log('Sheets no configurado, no se pueden cargar barcodes');
-    return;
-  }
-
-  barcodeCache = {};
-
-  // Cargar desde pestaña Barcodes
-  try {
-    var response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: 'Barcodes!A:C'
-    });
-
-    var rows = response.data.values || [];
-    for (var i = 1; i < rows.length; i++) {
-      var row = rows[i];
-      if (!row[0] || !row[1]) continue;
-      var barcode = row[0].toString().trim();
-      var sku = row[1].toString().trim();
-      barcodeCache[barcode] = sku;
-    }
-    console.log('Cargados ' + (rows.length - 1) + ' códigos de Barcodes');
-  } catch (error) {
-    if (error.message && error.message.includes('Unable to parse range')) {
-      console.log('Hoja Barcodes no existe, creándola...');
-      await createBarcodesSheet();
-    } else {
-      console.error('Error cargando Barcodes:', error.message);
-    }
-  }
-
-  // Cargar desde pestaña Rotuladora
-  try {
-    var response2 = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: 'Rotuladora!A:B'
-    });
-
-    var rows2 = response2.data.values || [];
-    for (var i = 1; i < rows2.length; i++) {
-      var row = rows2[i];
-      if (!row[0] || !row[1]) continue;
-      var codigo = row[0].toString().trim();
-      var sku = row[1].toString().trim();
-      barcodeCache[codigo] = sku;
-    }
-    console.log('Cargados ' + (rows2.length - 1) + ' códigos de Rotuladora');
-  } catch (error) {
-    if (error.message && error.message.includes('Unable to parse range')) {
-      console.log('Hoja Rotuladora no existe (se creará cuando agregues datos)');
-    } else {
-      console.error('Error cargando Rotuladora:', error.message);
-    }
-  }
-
-  console.log('Total códigos en cache: ' + Object.keys(barcodeCache).length);
-}
-
-async function createBarcodesSheet() {
-  if (!sheets || !SHEET_ID) return;
-
-  try {
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId: SHEET_ID,
-      resource: {
-        requests: [{
-          addSheet: {
-            properties: { title: 'Barcodes' }
-          }
-        }]
-      }
-    });
-
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID,
-      range: 'Barcodes!A1:C1',
-      valueInputOption: 'USER_ENTERED',
-      resource: {
-        values: [['Barcode', 'SKU', 'Descripcion']]
-      }
-    });
-
-    console.log('Hoja Barcodes creada exitosamente');
-  } catch (error) {
-    console.error('Error creando hoja Barcodes:', error.message);
-  }
-}
-
-async function saveBarcodeMapping(barcode, sku, description) {
-  if (!sheets || !SHEET_ID) return false;
-
-  try {
-    // Actualizar cache local
-    barcodeCache[barcode] = sku;
-
-    // Buscar si ya existe este barcode
-    var response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: 'Barcodes!A:C'
-    });
-
-    var rows = response.data.values || [];
-    var rowIndex = -1;
-
-    for (var i = 1; i < rows.length; i++) {
-      if (rows[i][0] && rows[i][0].toString().trim() === barcode) {
-        rowIndex = i + 1;
-        break;
-      }
-    }
-
-    if (rowIndex === -1) {
-      // Agregar nuevo
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: 'Barcodes!A:C',
-        valueInputOption: 'USER_ENTERED',
-        resource: {
-          values: [[barcode, sku, description || '']]
-        }
-      });
-    } else {
-      // Actualizar existente
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
-        range: 'Barcodes!A' + rowIndex + ':C' + rowIndex,
-        valueInputOption: 'USER_ENTERED',
-        resource: {
-          values: [[barcode, sku, description || '']]
-        }
-      });
-    }
-
-    console.log('Mapeo guardado: ' + barcode + ' -> ' + sku);
-    return true;
-  } catch (error) {
-    console.error('Error guardando mapeo barcode:', error.message);
-    return false;
-  }
-}
-
-function getSkuByBarcode(barcode) {
-  return barcodeCache[barcode] || null;
 }
 
 // Mapeo de logistic_type a nombre amigable
@@ -2048,8 +1786,8 @@ app.post('/api/vision/analyze', async function(req, res) {
     var result = JSON.parse(jsonMatch[0]);
 
     // Si hay código de rotuladora, buscar SKU en el cache de barcodes
-    if (result.codigoRotuladora && barcodeCache[result.codigoRotuladora]) {
-      result.skuVinculado = barcodeCache[result.codigoRotuladora];
+    if (result.codigoRotuladora && barcodesRouter.getSkuByBarcode(result.codigoRotuladora)) {
+      result.skuVinculado = barcodesRouter.getSkuByBarcode(result.codigoRotuladora);
       console.log('Código rotuladora ' + result.codigoRotuladora + ' -> SKU: ' + result.skuVinculado);
     }
 
@@ -2492,92 +2230,6 @@ app.post('/webhooks/ml', async function(req, res) {
 // Endpoint para verificar que el webhook funciona
 app.get('/webhooks/ml', function(req, res) {
   res.json({ status: 'Webhook endpoint activo', url: 'https://verificador-envios-ml.onrender.com/webhooks/ml' });
-});
-
-// ============================================
-// ENDPOINTS DE BARCODE-SKU
-// ============================================
-
-// Obtener SKU por código de barras
-app.get('/api/barcode/:barcode', function(req, res) {
-  var barcode = req.params.barcode.trim();
-  var sku = getSkuByBarcode(barcode);
-
-  if (sku) {
-    res.json({ barcode: barcode, sku: sku, found: true });
-  } else {
-    res.json({ barcode: barcode, sku: null, found: false });
-  }
-});
-
-// Guardar mapeo barcode-SKU
-app.post('/api/barcode', async function(req, res) {
-  var barcode = req.body.barcode;
-  var sku = req.body.sku;
-  var description = req.body.description || '';
-
-  if (!barcode || !sku) {
-    return res.status(400).json({ error: 'Barcode y SKU son requeridos' });
-  }
-
-  var success = await saveBarcodeMapping(barcode.trim(), sku.trim(), description);
-
-  if (success) {
-    res.json({ success: true, message: 'Mapeo guardado', barcode: barcode, sku: sku });
-  } else {
-    res.status(500).json({ error: 'Error guardando mapeo' });
-  }
-});
-
-// Obtener todos los mapeos
-app.get('/api/barcodes', function(req, res) {
-  var mappings = [];
-  for (var barcode in barcodeCache) {
-    mappings.push({ barcode: barcode, sku: barcodeCache[barcode] });
-  }
-  res.json({ mappings: mappings, count: mappings.length });
-});
-
-// Recargar mapeos desde Sheets
-app.post('/api/barcodes/reload', async function(req, res) {
-  await loadBarcodesFromSheets();
-  res.json({ success: true, count: Object.keys(barcodeCache).length });
-});
-
-// Importar códigos de rotuladora en lote
-app.post('/api/barcodes/import', requireAuth, async function(req, res) {
-  var codigos = req.body.codigos; // Array de { codigo, sku }
-  if (!codigos || !Array.isArray(codigos)) {
-    return res.status(400).json({ error: 'Se requiere array de codigos' });
-  }
-
-  if (!sheets || !SHEET_ID) {
-    return res.status(500).json({ error: 'Sheets no configurado' });
-  }
-
-  try {
-    // Preparar filas para agregar
-    var rows = codigos.map(function(c) {
-      return [c.codigo, c.sku, 'Rotuladora'];
-    });
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: 'Barcodes!A:C',
-      valueInputOption: 'RAW',
-      resource: { values: rows }
-    });
-
-    // Actualizar cache local
-    codigos.forEach(function(c) {
-      barcodeCache[c.codigo] = c.sku;
-    });
-
-    res.json({ success: true, imported: codigos.length });
-  } catch (error) {
-    console.error('Error importando códigos:', error.message);
-    res.status(500).json({ error: 'Error importando: ' + error.message });
-  }
 });
 
 // ============================================
@@ -3212,7 +2864,7 @@ var PORT = process.env.PORT || 3000;
 async function initializeServer() {
   try {
     await loadTokensFromSheets();
-    await loadBarcodesFromSheets();
+    await barcodesRouter.loadBarcodesFromSheets();
     // Cargar tokens de Jumpseller (Mayoristas)
     await jumpsellerRouter.loadJumpsellerTokens();
     console.log('Datos cargados exitosamente');
