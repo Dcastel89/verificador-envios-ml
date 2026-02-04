@@ -71,6 +71,17 @@ function detectProductType(sku, descripcion) {
   return { nombre: 'generico', config: config.generico || {} };
 }
 
+/**
+ * Devuelve config del producto para el frontend (tipo y fotos mínimas).
+ */
+function getProductConfig(sku, descripcion) {
+  var tipo = detectProductType(sku, descripcion);
+  return {
+    tipo: tipo.nombre,
+    fotosMinimas: tipo.config.fotosMinimas || 1
+  };
+}
+
 function buildVerificationPrompt(productoEsperado, imageCount) {
   // Extraer sku y descripción del producto
   var sku = '';
@@ -249,5 +260,6 @@ module.exports = {
   buildVerificationPrompt: buildVerificationPrompt,
   buildExtractionPrompt: buildExtractionPrompt,
   detectProductType: detectProductType,
+  getProductConfig: getProductConfig,
   loadConfig: loadConfig
 };

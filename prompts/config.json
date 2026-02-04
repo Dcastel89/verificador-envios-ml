@@ -35,6 +35,7 @@
     "smartband": {
       "prefijos": ["SMT"],
       "palabrasClave": ["smart band", "smartband", "mi band", "pulsera inteligente", "M7", "M8"],
+      "fotosMinimas": 2,
       "dondeVerificar": "Leer el texto de la parte SUPERIOR de la CAJA. Ahí dice el modelo (ej: Smart Band 7).",
       "reglaColor": "Buscar un PUNTITO DE COLOR en el costado de la caja. Si hay un punto de color, ese es el color del producto. Si NO se ve ningún puntito de color, asumir NEGRO.",
       "formatoModelo": "Nombre completo: Smart Band 7, Mi Band 8. El número es clave.",

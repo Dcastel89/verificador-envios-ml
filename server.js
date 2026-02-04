@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const scheduler = require('./scheduler');
-const { buildVerificationPrompt, buildExtractionPrompt } = require('./prompts');
+const { buildVerificationPrompt, buildExtractionPrompt, getProductConfig } = require('./prompts');
 const jumpsellerRouter = require('./jumpseller');
 
 const app = express();
@@ -1959,6 +1959,16 @@ app.post('/api/shipment/:shipmentId/verificado', async function(req, res) {
 
   var estado = isParcial ? 'parcial' : 'verificado';
   res.json({ success: true, message: 'Registro guardado como ' + estado });
+});
+
+// ============================================
+// PRODUCT CONFIG - Fotos mínimas por tipo
+// ============================================
+
+app.get('/api/product-config', function(req, res) {
+  var sku = req.query.sku || '';
+  var descripcion = req.query.descripcion || '';
+  res.json(getProductConfig(sku, descripcion));
 });
 
 // ============================================

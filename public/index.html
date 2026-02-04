@@ -42,6 +42,7 @@
     .multi-photo-bar button { flex: 1; padding: 18px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; color: white; }
     .multi-photo-bar .btn-otra-foto { background: #3b82f6; }
     .multi-photo-bar .btn-enviar-analisis { background: #059669; }
+    .multi-photo-bar .btn-enviar-analisis:disabled { background: #9ca3af; cursor: not-allowed; }
     .photo-thumbnails { display: flex; gap: 6px; padding: 8px; background: rgba(0,0,0,0.5); position: absolute; bottom: 8px; left: 8px; right: 8px; border-radius: 8px; overflow-x: auto; }
     .photo-thumbnails:empty { display: none; }
     .photo-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; border: 2px solid white; flex-shrink: 0; }
@@ -1186,11 +1187,25 @@
       function showMultiPhotoBar() {
         capturePhotoBtn.style.display = 'none';
         multiPhotoBar.classList.add('active');
+
+        // Evaluar fotos mínimas
+        var minFotos = (productoAVerificar && productoAVerificar.fotosMinimas) || 1;
+        var faltan = minFotos - capturedImages.length;
+        if (faltan > 0) {
+          btnEnviarAnalisis.disabled = true;
+          btnEnviarAnalisis.textContent = 'Falta' + (faltan > 1 ? 'n ' : ' ') + faltan + ' foto' + (faltan > 1 ? 's' : '');
+        } else {
+          btnEnviarAnalisis.disabled = false;
+          btnEnviarAnalisis.textContent = 'Enviar analisis';
+        }
       }
 
       function hideMultiPhotoBar() {
         multiPhotoBar.classList.remove('active');
         capturePhotoBtn.style.display = '';
+        // Restaurar estado del botón
+        btnEnviarAnalisis.disabled = false;
+        btnEnviarAnalisis.textContent = 'Enviar analisis';
       }
 
       btnOtraFoto.onclick = function() {
@@ -1271,9 +1286,22 @@
         productoAVerificar = {
           index: itemIndex,
           item: currentItems[itemIndex],
-          descripcion: currentItems[itemIndex].description || currentItems[itemIndex].title || currentItems[itemIndex].sku
+          descripcion: currentItems[itemIndex].description || currentItems[itemIndex].title || currentItems[itemIndex].sku,
+          fotosMinimas: 1
         };
         showStatus('Verificando: ' + productoAVerificar.descripcion, 'loading');
+
+        // Consultar fotos mínimas para este tipo de producto
+        var sku = productoAVerificar.item ? productoAVerificar.item.sku : '';
+        var desc = productoAVerificar.descripcion;
+        authFetch(API_URL + '/api/product-config?sku=' + encodeURIComponent(sku) + '&descripcion=' + encodeURIComponent(desc))
+          .then(function(r) { return r.json(); })
+          .then(function(cfg) {
+            if (productoAVerificar) {
+              productoAVerificar.fotosMinimas = cfg.fotosMinimas || 1;
+            }
+          })
+          .catch(function() {}); // Si falla, queda en 1
 
         // Abrir cámara en modo producto
         scanMode = 'product';
