@@ -1418,8 +1418,8 @@
               mostrarResultadoVerificacion(data);
             } else {
               showVisionResult(data);
-              if (data.modeloDetectado && scanMode === 'product') {
-                tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
+              if ((data.modeloDetectado || data.tipoProducto) && scanMode === 'product') {
+                tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado, data.tipoProducto);
               }
             }
           } else {
@@ -1474,19 +1474,81 @@
         saveItemVerification(itemIndex, method);
       }
 
-      function tryMatchModelWithItems(modelo, color) {
-        if (!modelo) return;
-        var modeloUpper = modelo.toUpperCase();
+      function tryMatchModelWithItems(modelo, color, tipoProducto) {
+        if (!modelo && !tipoProducto) {
+          showScanError('No se pudo detectar el producto');
+          return;
+        }
+
+        var modeloUpper = (modelo || '').toUpperCase();
+        var colorUpper = (color || '').toUpperCase();
+        var tipoUpper = (tipoProducto || '').toUpperCase();
+        var mejorMatch = null;
+        var mejorScore = 0;
 
         for (var i = 0; i < currentItems.length; i++) {
-          var desc = (currentItems[i].name || '').toUpperCase();
-          if (desc.indexOf(modeloUpper) !== -1 || modeloUpper.indexOf(desc.split(' ').pop()) !== -1) {
-            showStatus('Match encontrado: ' + currentItems[i].name, 'success');
-            marcarProductoVerificado(i, 'claude-auto');
-            return;
+          var item = currentItems[i];
+          // Saltar items ya completados
+          if (isItemComplete(i)) continue;
+
+          var nombre = (item.name || '').toUpperCase();
+          var sku = (item.sku || '').toUpperCase();
+          var score = 0;
+
+          // Buscar modelo en nombre o SKU
+          if (modeloUpper) {
+            // Match exacto del modelo en el nombre o SKU
+            if (nombre.indexOf(modeloUpper) !== -1) score += 50;
+            if (sku.indexOf(modeloUpper) !== -1) score += 50;
+
+            // Match parcial - palabras del modelo
+            var palabrasModelo = modeloUpper.split(/[\s\-\_]+/);
+            for (var p = 0; p < palabrasModelo.length; p++) {
+              if (palabrasModelo[p].length > 2) {
+                if (nombre.indexOf(palabrasModelo[p]) !== -1) score += 10;
+                if (sku.indexOf(palabrasModelo[p]) !== -1) score += 10;
+              }
+            }
+          }
+
+          // Buscar color
+          if (colorUpper && colorUpper !== 'TRANSPARENTE') {
+            if (nombre.indexOf(colorUpper) !== -1) score += 20;
+            if (sku.indexOf(colorUpper) !== -1) score += 15;
+          }
+
+          // Buscar tipo de producto (funda, vidrio, etc.)
+          if (tipoUpper) {
+            if (tipoUpper.indexOf('FUNDA') !== -1 || tipoUpper.indexOf('CASE') !== -1) {
+              if (sku.indexOf('FT') === 0 || sku.indexOf('FD') === 0 || sku.indexOf('FA') === 0) score += 30;
+            }
+            if (tipoUpper.indexOf('VIDRIO') !== -1 || tipoUpper.indexOf('GLASS') !== -1) {
+              if (sku.indexOf('VF') === 0 || sku.indexOf('VT') === 0) score += 30;
+            }
+          }
+
+          if (score > mejorScore) {
+            mejorScore = score;
+            mejorMatch = { index: i, item: item, score: score };
           }
         }
-        showStatus('Modelo detectado: ' + modelo + ' (sin match automatico)', 'loading');
+
+        // Requiere score mínimo de 30 para considerar un match
+        if (mejorMatch && mejorMatch.score >= 30) {
+          stopCamera();
+          var item = mejorMatch.item;
+          var checkedCount = 0;
+          var checks = unitChecks[mejorMatch.index] || [];
+          for (var c = 0; c < item.quantity; c++) {
+            if (checks[c] && (checks[c] === true || checks[c].checked === true)) checkedCount++;
+          }
+
+          showScanSuccess(item.name || item.sku, item.sku, checkedCount + 1, item.quantity);
+          marcarProductoVerificado(mejorMatch.index, 'claude-auto');
+        } else {
+          var detectado = modelo || tipoProducto || 'producto';
+          showScanError('No encontrado: ' + detectado);
+        }
       }
 
       function showVisionResult(data) {
