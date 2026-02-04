@@ -32,6 +32,19 @@
     .close-camera { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 20px; cursor: pointer; }
     .capture-photo-btn { position: fixed; bottom: 0; left: 0; right: 0; background: #f59e0b; color: white; border: none; padding: 18px; font-size: 18px; font-weight: 600; cursor: pointer; z-index: 100; }
     .capture-photo-btn:disabled { background: #9ca3af; }
+    /* Freeze overlay */
+    #capturedOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px; display: none; object-fit: cover; }
+    .camera-container.frozen #capturedOverlay { display: block; }
+    .camera-container.frozen .capture-photo-btn { display: none; }
+    /* Multi-foto UI */
+    .multi-photo-bar { position: fixed; bottom: 0; left: 0; right: 0; display: none; z-index: 100; }
+    .multi-photo-bar.active { display: flex; }
+    .multi-photo-bar button { flex: 1; padding: 18px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; color: white; }
+    .multi-photo-bar .btn-otra-foto { background: #3b82f6; }
+    .multi-photo-bar .btn-enviar-analisis { background: #059669; }
+    .photo-thumbnails { display: flex; gap: 6px; padding: 8px; background: rgba(0,0,0,0.5); position: absolute; bottom: 8px; left: 8px; right: 8px; border-radius: 8px; overflow-x: auto; }
+    .photo-thumbnails:empty { display: none; }
+    .photo-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; border: 2px solid white; flex-shrink: 0; }
     .vision-result { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 12px; margin-top: 12px; }
     .vision-result-text { font-family: monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; }
     .vision-result-colors { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
@@ -287,8 +300,14 @@
       </div>
       <div class="camera-container" id="cameraContainer">
         <video id="video" playsinline></video>
+        <canvas id="capturedOverlay"></canvas>
+        <div class="photo-thumbnails" id="photoThumbnails"></div>
         <button type="button" class="close-camera" id="closeCamera">X</button>
         <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar con IA</button>
+      </div>
+      <div class="multi-photo-bar" id="multiPhotoBar">
+        <button type="button" class="btn-otra-foto" id="btnOtraFoto">+ Otra foto</button>
+        <button type="button" class="btn-enviar-analisis" id="btnEnviarAnalisis">Enviar analisis</button>
       </div>
       <div class="vision-result hidden" id="visionResult">
         <div><strong>Resultado:</strong></div>
@@ -1128,6 +1147,120 @@
         cameraBtn.classList.remove('hidden');
         if (codeReader) codeReader.reset();
         visionResult.classList.add('hidden');
+        unfreezeCamera();
+      }
+
+      // ============================================
+      // FREEZE & MULTI-FOTO
+      // ============================================
+
+      var capturedImages = [];
+      var capturedOverlay = document.getElementById('capturedOverlay');
+      var multiPhotoBar = document.getElementById('multiPhotoBar');
+      var photoThumbnails = document.getElementById('photoThumbnails');
+      var btnOtraFoto = document.getElementById('btnOtraFoto');
+      var btnEnviarAnalisis = document.getElementById('btnEnviarAnalisis');
+
+      function freezeCamera(canvas) {
+        capturedOverlay.width = canvas.width;
+        capturedOverlay.height = canvas.height;
+        var overlayCtx = capturedOverlay.getContext('2d');
+        overlayCtx.drawImage(canvas, 0, 0);
+        cameraContainer.classList.add('frozen');
+      }
+
+      function unfreezeCamera() {
+        cameraContainer.classList.remove('frozen');
+        multiPhotoBar.classList.remove('active');
+        capturedImages = [];
+        photoThumbnails.innerHTML = '';
+      }
+
+      function addThumbnail(imageBase64) {
+        var img = document.createElement('img');
+        img.src = imageBase64;
+        img.className = 'photo-thumb';
+        photoThumbnails.appendChild(img);
+      }
+
+      function showMultiPhotoBar() {
+        capturePhotoBtn.style.display = 'none';
+        multiPhotoBar.classList.add('active');
+      }
+
+      function hideMultiPhotoBar() {
+        multiPhotoBar.classList.remove('active');
+        capturePhotoBtn.style.display = '';
+      }
+
+      btnOtraFoto.onclick = function() {
+        // Descongelar para tomar otra foto
+        cameraContainer.classList.remove('frozen');
+        hideMultiPhotoBar();
+        capturePhotoBtn.disabled = false;
+        capturePhotoBtn.textContent = 'Tomar otra foto';
+      };
+
+      btnEnviarAnalisis.onclick = function() {
+        sendImagesToAnalyze(capturedImages);
+      };
+
+      function sendImagesToAnalyze(images) {
+        hideMultiPhotoBar();
+        capturePhotoBtn.disabled = true;
+        capturePhotoBtn.style.display = '';
+        capturePhotoBtn.textContent = 'Analizando...';
+        showStatus('Claude esta analizando ' + images.length + ' foto(s)...', 'loading');
+
+        var requestBody = { images: images };
+        if (productoAVerificar) {
+          requestBody.producto = {
+            descripcion: productoAVerificar.descripcion,
+            sku: productoAVerificar.item ? productoAVerificar.item.sku : ''
+          };
+        }
+
+        authFetch(API_URL + '/api/vision/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          capturePhotoBtn.disabled = false;
+          capturePhotoBtn.textContent = 'Analizar con IA';
+          unfreezeCamera();
+
+          console.log('Respuesta IA:', data);
+
+          if (data.success) {
+            if (data.codigoRotuladora && data.skuVinculado) {
+              console.log('PRIORIDAD 1: Código rotuladora detectado', data.codigoRotuladora, data.skuVinculado);
+              showVisionResultWithRotuladora(data);
+              if (scanMode === 'product') {
+                tryMatchBySku(data.skuVinculado, data.codigoRotuladora);
+              }
+            } else if (productoAVerificar && data.correcto !== undefined) {
+              mostrarResultadoVerificacion(data);
+            } else {
+              showVisionResult(data);
+              if (scanMode === 'product') {
+                if (data.modeloDetectado) {
+                  tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
+                }
+              }
+            }
+          } else {
+            showStatus('Error: ' + (data.error || 'Error desconocido'), 'error');
+          }
+        })
+        .catch(function(err) {
+          capturePhotoBtn.disabled = false;
+          capturePhotoBtn.textContent = 'Analizar con IA';
+          unfreezeCamera();
+          showStatus('Error de conexion', 'error');
+          console.error(err);
+        });
       }
 
       // ============================================
@@ -1158,10 +1291,6 @@
           return;
         }
 
-        capturePhotoBtn.disabled = true;
-        capturePhotoBtn.textContent = 'Analizando...';
-        showStatus('Claude está analizando...', 'loading');
-
         // Crear canvas para capturar el frame
         var canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
@@ -1172,57 +1301,16 @@
         // Convertir a base64
         var imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
 
-        // Preparar body con producto a verificar si existe
-        var requestBody = { image: imageBase64 };
-        if (productoAVerificar) {
-          requestBody.producto = productoAVerificar.descripcion;
-        }
+        // Congelar cámara con la foto capturada
+        freezeCamera(canvas);
 
-        // Enviar al servidor
-        authFetch(API_URL + '/api/vision/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        })
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-          capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Analizar con IA';
+        // Guardar imagen en el array
+        capturedImages.push(imageBase64);
+        addThumbnail(imageBase64);
 
-          console.log('Respuesta IA:', data);
-
-          if (data.success) {
-            // PRIORIDAD 1: Si hay código de rotuladora con SKU vinculado, usarlo
-            if (data.codigoRotuladora && data.skuVinculado) {
-              console.log('PRIORIDAD 1: Código rotuladora detectado', data.codigoRotuladora, data.skuVinculado);
-              showVisionResultWithRotuladora(data);
-              if (scanMode === 'product') {
-                tryMatchBySku(data.skuVinculado, data.codigoRotuladora);
-              }
-            }
-            // PRIORIDAD 2: Verificación con producto específico
-            else if (productoAVerificar && data.correcto !== undefined) {
-              mostrarResultadoVerificacion(data);
-            }
-            // PRIORIDAD 3: Modo extracción simple
-            else {
-              showVisionResult(data);
-              if (scanMode === 'product') {
-                if (data.modeloDetectado) {
-                  tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
-                }
-              }
-            }
-          } else {
-            showStatus('Error: ' + (data.error || 'Error desconocido'), 'error');
-          }
-        })
-        .catch(function(err) {
-          capturePhotoBtn.disabled = false;
-          capturePhotoBtn.textContent = 'Analizar con IA';
-          showStatus('Error de conexion', 'error');
-          console.error(err);
-        });
+        // Mostrar botones multi-foto
+        showMultiPhotoBar();
+        showStatus('Foto ' + capturedImages.length + ' capturada', 'success');
       }
 
       function mostrarResultadoVerificacion(data) {

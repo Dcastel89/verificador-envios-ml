@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const scheduler = require('./scheduler');
+const { buildVerificationPrompt, buildExtractionPrompt } = require('./prompts');
 const jumpsellerRouter = require('./jumpseller');
 
 const app = express();
@@ -1969,185 +1970,55 @@ app.post('/api/vision/analyze', async function(req, res) {
     return res.status(500).json({ error: 'Claude API no configurada. Agregá ANTHROPIC_API_KEY en las variables de entorno.' });
   }
 
-  var imageBase64 = req.body.image;
-  var productoEsperado = req.body.producto; // Info del pedido: título, descripción, SKU esperado, etc.
+  var productoEsperado = req.body.producto;
 
-  if (!imageBase64) {
+  // Soportar imagen única (image) o múltiples (images)
+  var rawImages = req.body.images || (req.body.image ? [req.body.image] : []);
+
+  if (rawImages.length === 0) {
     return res.status(400).json({ error: 'No se recibió imagen' });
   }
 
-  // Remover prefijo data:image si existe y detectar tipo
-  var mediaType = 'image/jpeg';
-  if (imageBase64.includes('data:image/')) {
-    var matches = imageBase64.match(/data:(image\/[a-z]+);base64,/);
-    if (matches) {
-      mediaType = matches[1];
+  // Procesar todas las imágenes: remover prefijo data:image y detectar tipo
+  var imageBlocks = [];
+  for (var idx = 0; idx < rawImages.length; idx++) {
+    var img = rawImages[idx];
+    var mediaType = 'image/jpeg';
+    if (img.includes('data:image/')) {
+      var matches = img.match(/data:(image\/[a-z]+);base64,/);
+      if (matches) {
+        mediaType = matches[1];
+      }
+      img = img.split('base64,')[1];
     }
-    imageBase64 = imageBase64.split('base64,')[1];
+    imageBlocks.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: mediaType,
+        data: img
+      }
+    });
   }
 
+  var imageCount = imageBlocks.length;
+
   try {
-    var prompt = '';
+    // Usar prompts del módulo separado
+    var prompt = productoEsperado
+      ? buildVerificationPrompt(productoEsperado, imageCount)
+      : buildExtractionPrompt(imageCount);
 
-    if (productoEsperado) {
-      // MODO VERIFICACIÓN: Comparar imagen con producto esperado
-      prompt = `TAREA: Leer códigos y verificar productos.
-
-PASO 1 - BUSCAR CÓDIGO DE ROTULADORA (PRIORIDAD MÁXIMA):
-Buscá en la imagen una ETIQUETA BLANCA PEQUEÑA con un número de 7 dígitos (ejemplo: 0000001, 0001234).
-- Puede estar pegada en una funda, en un papel, o en cualquier superficie
-- Si encontrás este código, TRANSCRIBILO EXACTAMENTE en el campo "codigoRotuladora"
-- Este código es MÁS IMPORTANTE que cualquier otra cosa
-
-PASO 2 - Si no hay código de rotuladora, buscar código de modelo:
-- En etiquetas de fundas: A25, G51, IP16, etc.
-- LEÉ el texto de cualquier etiqueta o papel visible
-
-PRODUCTO ESPERADO DEL PEDIDO:
-${typeof productoEsperado === 'string' ? productoEsperado : JSON.stringify(productoEsperado, null, 2)}
-
-REGLAS DE COMPARACIÓN DE MODELOS:
-
-1. IGNORAR TEXTO EXTRA EN ETIQUETAS - Solo importa el código de modelo:
-   - Ignorar marcas: "MOTO G15" = "G15", "Samsung A25" = "A25"
-   - Ignorar texto adicional: "SX", "For", "Galaxy", "Phone case", etc.
-   - Ejemplo: "For Samsung Galaxy A25 SX" = "A25" ✓
-
-2. ABREVIATURA "IP" = iPhone (MUY COMÚN EN FUNDAS):
-   - "IP17" = "iPhone 17" = "17"
-   - "IP16 Pro" = "iPhone 16 Pro" = "16 Pro"
-   - "IP15 Pro Max" = "iPhone 15 Pro Max" = "15 Pro Max"
-   - "IP14" = "iPhone 14" = "14"
-   - Ejemplo: Pedido "iPhone 16", foto dice "IP16" → CORRECTO
-   - Ejemplo: Pedido "16 Pro", foto dice "IP16 Pro" → CORRECTO
-
-3. SUFIJOS IMPORTANTES QUE DEBEN COINCIDIR EXACTAMENTE:
-   Plus (o +), Ultra, Pro, Pro Max, Air, Fusion, Neo
-   - A15 ≠ A15 Plus (Plus es importante)
-   - iPhone 15 ≠ iPhone 15 Pro Max (Pro Max es importante)
-   - A55 ≠ A55 Ultra (Ultra es importante)
-   - Redmi Note 14 ≠ Redmi Note 14 Pro (Pro es importante)
-
-4. OTROS SUFIJOS TAMBIÉN SON DIFERENTES - Ser estricto:
-   - A03 ≠ A03s ≠ A03 Core (son modelos distintos!)
-   - A15 ≠ A16 (números diferentes = modelos diferentes)
-   - G24 ≠ G24 Power (con sufijo = modelo diferente)
-   - Redmi 14 ≠ Redmi Note 14 (Note es otro modelo)
-
-5. EJEMPLOS DE COINCIDENCIAS CORRECTAS:
-   - Pedido "G15", foto dice "MOTO G15" → CORRECTO (ignorar MOTO)
-   - Pedido "A25", foto dice "For Samsung Galaxy A25 SX" → CORRECTO (ignorar texto extra)
-   - Pedido "A15 Plus", foto dice "A15+" → CORRECTO (+ equivale a Plus)
-   - Pedido "iPhone 16", foto dice "IP16" → CORRECTO (IP = iPhone)
-   - Pedido "16 Pro Max", foto dice "IP16 Pro Max" → CORRECTO
-
-6. EJEMPLOS DE COINCIDENCIAS INCORRECTAS:
-   - Pedido "A03", foto dice "A03s" → INCORRECTO (sufijo s es diferente)
-   - Pedido "A15", foto dice "A15 Plus" → INCORRECTO (Plus es importante)
-   - Pedido "iPhone 15", foto dice "iPhone 15 Pro" → INCORRECTO (Pro es importante)
-   - Pedido "G24", foto dice "G24 Power" → INCORRECTO (variante diferente)
-   - Pedido "IP16", foto dice "IP16 Pro" → INCORRECTO (Pro es importante)
-
-7. REGLA ESPECIAL PARA FUNDAS Y 4G/5G:
-   - Para fundas: IGNORAR "4G" o "5G" esté separado O PEGADO al modelo
-   - "A265G", "A265g", "A26 5G", "A26 5g" → todos son "A26"
-   - "A154G", "A15 4G" → es "A15"
-   - EXCEPCIÓN ÚNICA: A22 (sí distinguir A22 4G vs A22 5G)
-   - Ejemplo: Pedido "A26", foto dice "A265G" → CORRECTO (ignorar 5G pegado)
-   - Ejemplo: Pedido "A26", foto dice "A26 5g" → CORRECTO (ignorar 5g)
-   - Ejemplo: Pedido "A22 4G", foto dice "A225G" → INCORRECTO (A22 es excepción)
-
-INSTRUCCIONES:
-1. Extraé el CÓDIGO DE MODELO de la etiqueta (ignorá la marca)
-2. Compará el código con el pedido usando las reglas anteriores
-3. Verificá que el COLOR coincida
-
-IMPORTANTE - DÓNDE BUSCAR EL CÓDIGO:
-- ETIQUETAS PEQUEÑAS BLANCAS: Las fundas de silicona suelen tener una etiquetita blanca pequeña pegada o colgando con el código de modelo impreso. SIEMPRE leé el texto de estas etiquetas, ahí está el código.
-- ETIQUETAS EN BOLSAS: Las fundas en bolsas transparentes tienen etiquetas impresas con el modelo.
-- CÓDIGOS DE 7 DÍGITOS: Si ves un número de 7 dígitos (ej: 0001234), es un código de rotuladora - extráelo también.
-- El fondo suele ser madera, ignoralo.
-- Colores comunes: Negro, Blanco, Transparente, Rojo, Azul, Rosa, Lila, Verde, Celeste, Amarillo
-
-Respondé SOLO con este JSON:
-{
-  "codigoRotuladora": "código de 7 dígitos si lo ves (ej: 0000001), o null si no hay",
-  "correcto": true/false,
-  "productoDetectado": "descripción breve de lo que ves en la foto",
-  "modeloDetectado": "código del modelo sin marca (ej: A25, G15, no Samsung A25)",
-  "colorDetectado": "color del producto",
-  "motivo": "si es incorrecto, explicá por qué usando las reglas",
-  "confianza": "alta/media/baja"
-}`;
-    } else {
-      // MODO EXTRACCIÓN: Solo extraer info de la imagen (sin comparar)
-      prompt = `TU TAREA PRINCIPAL ES LEER TEXTO. Buscá cualquier texto, número o código visible en la imagen y transcribilo.
-
-PASO 1 - BUSCAR Y LEER TEXTO (LO MÁS IMPORTANTE):
-Buscá texto en CUALQUIER parte de la imagen:
-- Papeles, papelitos, notas (aunque estén arrugados o pequeños)
-- Etiquetas blancas pequeñas (muy comunes en fundas de silicona)
-- Stickers, calcomanías
-- Etiquetas impresas en bolsas
-- Cualquier cosa con texto impreso o escrito
-
-SI VES TEXTO → LÉELO Y TRANSCRIBILO EXACTAMENTE
-
-PASO 2 - Identificar el producto:
-- Color real del producto
-- Tipo: funda silicona, funda transparente, vidrio templado, etc.
-
-CÓDIGOS IMPORTANTES A BUSCAR:
-- Código de rotuladora: 7 dígitos numéricos (ej: 0000001, 0001234)
-- Modelo: códigos como A25, G51, B12, "For A06", "IP16", etc.
-
-IGNORAR en el modelo: "Fashion Case", "New", "Phone case", "Made in China", "SX", "For", "Galaxy", marcas como "Samsung", "MOTO", "Xiaomi"
-
-ABREVIATURA "IP" = iPhone (MUY COMÚN EN FUNDAS):
-- "IP17" → reportar "iPhone 17" o "17"
-- "IP16 Pro" → reportar "iPhone 16 Pro" o "16 Pro"
-- "IP15 Pro Max" → reportar "iPhone 15 Pro Max" o "15 Pro Max"
-
-SUFIJOS IMPORTANTES QUE SÍ DEBEN INCLUIRSE EN EL MODELO:
-Plus (o +), Ultra, Pro, Pro Max, Air, Fusion, Neo
-- Si dice "A15+" reportar "A15 Plus"
-- Si dice "iPhone 15 Pro Max" reportar "15 Pro Max"
-
-REGLA 4G/5G (MUY IMPORTANTE):
-- IGNORAR "4G" o "5G" esté separado O PEGADO al modelo
-- "A265G" → reportar "A26" (quitar el 5G pegado)
-- "A265g" → reportar "A26"
-- "A26 5G" → reportar "A26"
-- "A154G" → reportar "A15"
-- EXCEPCIÓN ÚNICA: A22 (reportar "A22 4G" o "A22 5G")
-
-Respondé SOLO con este JSON:
-{
-  "textoEncontrado": "TODO el texto que puedas leer en la imagen, transcrito exactamente",
-  "codigoRotuladora": "código de 7 dígitos si lo ves, o null",
-  "modeloDetectado": "código de modelo extraído del texto, o null",
-  "colorDetectado": "color del producto",
-  "tipoProducto": "funda silicona/funda transparente/vidrio/etc",
-  "confianza": "alta/media/baja"
-}`;
-    }
+    // Construir contenido: todas las imágenes + el prompt de texto
+    var contentBlocks = imageBlocks.slice();
+    contentBlocks.push({ type: 'text', text: prompt });
 
     var response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 400,
+      max_tokens: imageCount > 1 ? 500 : 400,
       messages: [{
         role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType,
-              data: imageBase64
-            }
-          },
-          { type: 'text', text: prompt }
-        ]
+        content: contentBlocks
       }]
     });
 

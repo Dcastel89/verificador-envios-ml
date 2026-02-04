@@ -1,0 +1,82 @@
+{
+  "tipos": {
+    "funda-silicona": {
+      "prefijos": ["SC"],
+      "palabrasClave": ["funda silicona", "silicone case"],
+      "dondeVerificar": "Buscar ETIQUETA BLANCA PEQUEÑA pegada o colgando con el código de modelo impreso. También revisar etiquetas en bolsas transparentes.",
+      "reglaColor": "El color DEBE coincidir con el pedido. No asumir ningún color.",
+      "formatoModelo": "Código corto: A25, G15, IP16. Ignorar marca y texto extra (SX, For, Galaxy, etc).",
+      "notasExtra": "Las fundas en bolsas transparentes tienen etiquetas impresas con el modelo."
+    },
+    "funda-transparente": {
+      "prefijos": ["FT"],
+      "palabrasClave": ["funda transparente", "transparent case", "clear case"],
+      "dondeVerificar": "Buscar etiqueta en la bolsa o packaging con el código de modelo.",
+      "reglaColor": "El producto siempre es transparente. No verificar color.",
+      "formatoModelo": "Código corto: A25, G15, IP16.",
+      "notasExtra": ""
+    },
+    "vidrio": {
+      "prefijos": ["VF", "VT"],
+      "palabrasClave": ["vidrio templado", "vidrio", "tempered glass", "protector pantalla"],
+      "dondeVerificar": "Buscar en el packaging/caja el modelo de celular.",
+      "reglaColor": "No aplica color. Verificar solo modelo.",
+      "formatoModelo": "Código corto: A25, G15, IP16.",
+      "notasExtra": "Verificar que sea vidrio templado y no otro tipo de protector."
+    },
+    "funda-anillo": {
+      "prefijos": ["FAN"],
+      "palabrasClave": ["funda anillo", "ring case"],
+      "dondeVerificar": "Buscar etiqueta con código de modelo.",
+      "reglaColor": "El color DEBE coincidir con el pedido. No asumir ningún color.",
+      "formatoModelo": "Código corto: A25, G15, IP16.",
+      "notasExtra": ""
+    },
+    "smartband": {
+      "prefijos": [],
+      "palabrasClave": ["smart band", "smartband", "mi band", "pulsera inteligente", "M7", "M8"],
+      "dondeVerificar": "Leer el texto de la parte SUPERIOR de la CAJA. Ahí dice el modelo (ej: Smart Band 7).",
+      "reglaColor": "Buscar un PUNTITO DE COLOR en el costado de la caja. Si hay un punto de color, ese es el color del producto. Si NO se ve ningún puntito de color, asumir NEGRO.",
+      "formatoModelo": "Nombre completo: Smart Band 7, Mi Band 8. El número es clave.",
+      "notasExtra": "Smart Band 7 ≠ Smart Band 8. El número del modelo es lo más importante. El puntito de color puede verse mejor en una segunda foto del costado de la caja."
+    },
+    "auriculares": {
+      "prefijos": [],
+      "palabrasClave": ["auricular", "earbuds", "buds", "headphone"],
+      "dondeVerificar": "Leer el texto de la CAJA del producto.",
+      "reglaColor": "Si no hay indicador de color en la caja, asumir NEGRO.",
+      "formatoModelo": "Nombre completo del producto: Redmi Buds 4, Haylou GT1, etc.",
+      "notasExtra": ""
+    },
+    "cargador": {
+      "prefijos": [],
+      "palabrasClave": ["cargador", "fuente", "charger", "adapter"],
+      "dondeVerificar": "Leer el texto del cargador o su caja. Buscar los watts.",
+      "reglaColor": "No verificar color.",
+      "formatoModelo": "Identificar watts (10W, 20W, 33W, 67W) y tipo de conector.",
+      "notasExtra": "Los watts y el tipo de conector son lo más importante."
+    },
+    "cable": {
+      "prefijos": [],
+      "palabrasClave": ["cable", "usb"],
+      "dondeVerificar": "Leer texto en el packaging o etiqueta del cable.",
+      "reglaColor": "No verificar color.",
+      "formatoModelo": "Tipo de conector: USB-C, Lightning, Micro USB. Largo si visible.",
+      "notasExtra": ""
+    },
+    "reloj": {
+      "prefijos": [],
+      "palabrasClave": ["reloj", "smartwatch", "watch"],
+      "dondeVerificar": "Leer el texto de la CAJA del producto.",
+      "reglaColor": "Verificar color si está indicado en la caja.",
+      "formatoModelo": "Nombre completo del producto.",
+      "notasExtra": ""
+    }
+  },
+  "generico": {
+    "dondeVerificar": "Buscar cualquier texto, etiqueta, número o código visible en el producto o packaging.",
+    "reglaColor": "Reportar el color visible. Si no se ve color, indicar 'no visible'.",
+    "formatoModelo": "Cualquier código o nombre de modelo visible.",
+    "notasExtra": ""
+  }
+}
