@@ -1196,8 +1196,13 @@
             } else {
               // Modo extracción simple (sin producto específico)
               showVisionResult(data);
-              if (data.modeloDetectado && scanMode === 'product') {
-                tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
+              if (scanMode === 'product') {
+                // Si hay SKU vinculado por código de rotuladora, usarlo directamente
+                if (data.skuVinculado) {
+                  tryMatchBySku(data.skuVinculado, data.codigoRotuladora);
+                } else if (data.modeloDetectado) {
+                  tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
+                }
               }
             }
           } else {
@@ -1255,6 +1260,26 @@
         updateCard(itemIndex);
         highlightCard(itemIndex);
         updateItemsCount();
+      }
+
+      function tryMatchBySku(skuVinculado, codigoRotuladora) {
+        var skuUpper = skuVinculado.toUpperCase();
+
+        for (var i = 0; i < currentItems.length; i++) {
+          var item = currentItems[i];
+          var itemSku = (item.sku || '').toUpperCase();
+          var itemDesc = (item.description || '').toUpperCase();
+
+          // Buscar coincidencia en SKU o descripción
+          if (itemSku === skuUpper || itemSku.indexOf(skuUpper) !== -1 ||
+              skuUpper.indexOf(itemSku) !== -1 || itemDesc.indexOf(skuUpper) !== -1) {
+            showStatus('Match por código: ' + item.description, 'success');
+            marcarProductoVerificado(i, 'rotuladora');
+            return;
+          }
+        }
+
+        showStatus('SKU ' + skuVinculado + ' (código ' + codigoRotuladora + ') no encontrado', 'error');
       }
 
       function tryMatchModelWithItems(modelo, color) {

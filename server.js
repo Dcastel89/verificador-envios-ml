@@ -2043,12 +2043,15 @@ Respondé SOLO con este JSON:
 }`;
     } else {
       // MODO EXTRACCIÓN: Solo extraer info de la imagen (sin comparar)
-      prompt = `Analizá esta imagen de un producto (funda de celular).
+      prompt = `Analizá esta imagen de un producto (funda de celular o vidrio templado).
 
 Extraé:
-1. **Modelo/SKU**: Buscá códigos en etiquetas (A25, A36, B12, "For A06", etc.)
-2. **Color**: Color real del producto (no del fondo de madera)
-3. **Tipo**: Qué tipo de producto es
+1. **Código de rotuladora**: Si ves un código numérico de 7 dígitos (ej: 0000001, 0001234), extrae EXACTAMENTE como aparece
+2. **Modelo/SKU**: Buscá códigos en etiquetas (A25, A36, B12, "For A06", etc.)
+3. **Color**: Color real del producto (no del fondo de madera)
+4. **Tipo**: Qué tipo de producto es (funda silicona, funda transparente, vidrio templado, etc.)
+
+PRIORIDAD: Si hay código de rotuladora (7 dígitos numéricos), ese es el identificador principal.
 
 IGNORAR en el modelo: "Fashion Case", "New", "Phone case", "Made in China", "SX", "For", "Galaxy", marcas como "Samsung", "MOTO", "Xiaomi"
 
@@ -2072,7 +2075,8 @@ REGLA 4G/5G (MUY IMPORTANTE):
 
 Respondé SOLO con este JSON:
 {
-  "modeloDetectado": "código encontrado o null",
+  "codigoRotuladora": "código de 7 dígitos si lo ves, o null",
+  "modeloDetectado": "código de modelo encontrado o null",
   "colorDetectado": "color del producto",
   "tipoProducto": "funda silicona/funda transparente/vidrio/etc",
   "confianza": "alta/media/baja"
@@ -2112,6 +2116,12 @@ Respondé SOLO con este JSON:
     }
 
     var result = JSON.parse(jsonMatch[0]);
+
+    // Si hay código de rotuladora, buscar SKU en el cache de barcodes
+    if (result.codigoRotuladora && barcodeCache[result.codigoRotuladora]) {
+      result.skuVinculado = barcodeCache[result.codigoRotuladora];
+      console.log('Código rotuladora ' + result.codigoRotuladora + ' -> SKU: ' + result.skuVinculado);
+    }
 
     res.json({
       success: true,
@@ -2602,6 +2612,42 @@ app.get('/api/barcodes', function(req, res) {
 app.post('/api/barcodes/reload', async function(req, res) {
   await loadBarcodesFromSheets();
   res.json({ success: true, count: Object.keys(barcodeCache).length });
+});
+
+// Importar códigos de rotuladora en lote
+app.post('/api/barcodes/import', requireAuth, async function(req, res) {
+  var codigos = req.body.codigos; // Array de { codigo, sku }
+  if (!codigos || !Array.isArray(codigos)) {
+    return res.status(400).json({ error: 'Se requiere array de codigos' });
+  }
+
+  if (!sheets || !SHEET_ID) {
+    return res.status(500).json({ error: 'Sheets no configurado' });
+  }
+
+  try {
+    // Preparar filas para agregar
+    var rows = codigos.map(function(c) {
+      return [c.codigo, c.sku, 'Rotuladora'];
+    });
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: 'Barcodes!A:C',
+      valueInputOption: 'RAW',
+      resource: { values: rows }
+    });
+
+    // Actualizar cache local
+    codigos.forEach(function(c) {
+      barcodeCache[c.codigo] = c.sku;
+    });
+
+    res.json({ success: true, imported: codigos.length });
+  } catch (error) {
+    console.error('Error importando códigos:', error.message);
+    res.status(500).json({ error: 'Error importando: ' + error.message });
+  }
 });
 
 // ============================================
