@@ -317,6 +317,9 @@ async function loadBarcodesFromSheets() {
     return;
   }
 
+  barcodeCache = {};
+
+  // Cargar desde pestaña Barcodes
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
@@ -324,26 +327,48 @@ async function loadBarcodesFromSheets() {
     });
 
     var rows = response.data.values || [];
-    barcodeCache = {};
-
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
       if (!row[0] || !row[1]) continue;
-
       var barcode = row[0].toString().trim();
       var sku = row[1].toString().trim();
       barcodeCache[barcode] = sku;
     }
-
-    console.log('Cargados ' + Object.keys(barcodeCache).length + ' mapeos barcode-SKU');
+    console.log('Cargados ' + (rows.length - 1) + ' códigos de Barcodes');
   } catch (error) {
     if (error.message && error.message.includes('Unable to parse range')) {
       console.log('Hoja Barcodes no existe, creándola...');
       await createBarcodesSheet();
     } else {
-      console.error('Error cargando barcodes desde Sheets:', error.message);
+      console.error('Error cargando Barcodes:', error.message);
     }
   }
+
+  // Cargar desde pestaña Rotuladora
+  try {
+    var response2 = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'Rotuladora!A:B'
+    });
+
+    var rows2 = response2.data.values || [];
+    for (var i = 1; i < rows2.length; i++) {
+      var row = rows2[i];
+      if (!row[0] || !row[1]) continue;
+      var codigo = row[0].toString().trim();
+      var sku = row[1].toString().trim();
+      barcodeCache[codigo] = sku;
+    }
+    console.log('Cargados ' + (rows2.length - 1) + ' códigos de Rotuladora');
+  } catch (error) {
+    if (error.message && error.message.includes('Unable to parse range')) {
+      console.log('Hoja Rotuladora no existe (se creará cuando agregues datos)');
+    } else {
+      console.error('Error cargando Rotuladora:', error.message);
+    }
+  }
+
+  console.log('Total códigos en cache: ' + Object.keys(barcodeCache).length);
 }
 
 async function createBarcodesSheet() {
