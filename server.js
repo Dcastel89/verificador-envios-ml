@@ -1993,6 +1993,12 @@ app.post('/api/vision/analyze', async function(req, res) {
       // MODO VERIFICACIÓN: Comparar imagen con producto esperado
       prompt = `Sos un verificador de pedidos. Tu trabajo es confirmar si el producto en la foto coincide con lo que se pidió.
 
+PASO 1 - LEER TEXTO (FUNDAMENTAL):
+Antes de analizar nada, buscá y leé TODO el texto visible en la imagen:
+- ETIQUETAS BLANCAS PEQUEÑAS: Las fundas tienen etiquetitas blancas con códigos impresos. LEÉ ESE TEXTO.
+- PAPELES O STICKERS: Si hay un papel con números/texto, transcribilo.
+- CÓDIGOS DE 7 DÍGITOS: Si ves "0000001" o similar, es un código de rotuladora - extráelo.
+
 PRODUCTO ESPERADO DEL PEDIDO:
 ${typeof productoEsperado === 'string' ? productoEsperado : JSON.stringify(productoEsperado, null, 2)}
 
