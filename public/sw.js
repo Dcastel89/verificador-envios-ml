@@ -1,5 +1,5 @@
 // Service Worker para Verificador Envíos ML
-var CACHE_NAME = 'verificador-v3';
+var CACHE_NAME = 'verificador-v4';
 var urlsToCache = [
   '/',
   '/index.html',
