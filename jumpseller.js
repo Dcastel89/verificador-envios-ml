@@ -999,6 +999,81 @@ router.get('/api/mayorista/accounts', async function(req, res) {
   }
 });
 
+// POST /api/mayorista/import/:id - Importar un pedido específico forzadamente
+router.post('/api/mayorista/import/:id', async function(req, res) {
+  try {
+    var orderId = req.params.id;
+    console.log('Jumpseller: Importación forzada de orden ' + orderId);
+
+    if (jumpsellerAccounts.length === 0) {
+      await loadJumpsellerTokens();
+    }
+
+    if (jumpsellerAccounts.length === 0) {
+      return res.status(400).json({ success: false, error: 'No hay cuentas Jumpseller configuradas' });
+    }
+
+    // Buscar la orden en todas las cuentas
+    var orderDetail = null;
+    var foundAccount = null;
+
+    for (var i = 0; i < jumpsellerAccounts.length; i++) {
+      var account = jumpsellerAccounts[i];
+      console.log('Jumpseller: Buscando orden ' + orderId + ' en cuenta ' + account.name);
+
+      var detail = await getJumpsellerOrderDetail(account, orderId);
+      if (detail && detail.id) {
+        orderDetail = detail;
+        foundAccount = account;
+        console.log('Jumpseller: Orden encontrada en cuenta ' + account.name);
+        break;
+      }
+    }
+
+    if (!orderDetail) {
+      return res.status(404).json({ success: false, error: 'Orden no encontrada en ninguna cuenta de Jumpseller' });
+    }
+
+    // Verificar si ya existe en la hoja del día
+    var sheetName = getTodayMayoristaSheetName();
+    var existingOrders = await getOrdersFromSheet(sheetName);
+    var yaExiste = existingOrders.find(function(o) { return o.orderId === orderId.toString(); });
+
+    if (yaExiste) {
+      return res.json({
+        success: true,
+        mensaje: 'La orden ya estaba importada',
+        order: orderDetail,
+        yaExistia: true
+      });
+    }
+
+    // Preparar orden para guardar
+    orderDetail.account = foundAccount.name;
+    var ordersToSave = [orderDetail];
+
+    // Guardar en la hoja del día
+    var saved = await saveAllOrdersToSheet(sheetName, ordersToSave);
+
+    // Guardar items
+    var fecha = getArgentinaTime().toLocaleDateString('es-AR');
+    var itemsSaved = await saveAllItemsToSheet(ordersToSave, fecha);
+
+    console.log('Jumpseller: Orden ' + orderId + ' importada exitosamente');
+
+    res.json({
+      success: true,
+      mensaje: 'Orden importada exitosamente',
+      order: orderDetail,
+      cuenta: foundAccount.name,
+      items: itemsSaved
+    });
+  } catch (error) {
+    console.error('Jumpseller: Error importando orden:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // GET /api/mayorista/resumen - Resumen del día
 router.get('/api/mayorista/resumen', async function(req, res) {
   try {

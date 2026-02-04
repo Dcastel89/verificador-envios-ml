@@ -165,6 +165,20 @@
     .pack-btn:disabled { background: #9ca3af; cursor: not-allowed; }
     .pack-btn .pack-icon { font-size: 16px; }
     .pack-info { font-size: 11px; color: #6b7280; margin-top: 4px; }
+
+    /* Importar pedido específico */
+    .import-section { background: #f9fafb; border-radius: 8px; padding: 12px; margin-top: 16px; border: 1px dashed #d1d5db; }
+    .import-section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+    .import-input-group { display: flex; gap: 8px; }
+    .import-input { flex: 1; padding: 10px 12px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 6px; }
+    .import-input:focus { outline: none; border-color: #7c3aed; }
+    .import-btn { padding: 10px 16px; background: #7c3aed; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .import-btn:hover { background: #6d28d9; }
+    .import-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .import-result { margin-top: 8px; padding: 8px 12px; border-radius: 6px; font-size: 13px; display: none; }
+    .import-result.show { display: block; }
+    .import-result.success { background: #dcfce7; color: #16a34a; }
+    .import-result.error { background: #fef2f2; color: #dc2626; }
   </style>
 </head>
 <body>
@@ -228,6 +242,17 @@
             <div class="sync-progress-bar"></div>
           </div>
         </div>
+
+        <!-- Importar pedido específico -->
+        <div class="import-section">
+          <div class="import-section-title">Importar pedido específico</div>
+          <div class="import-input-group">
+            <input type="text" class="import-input" id="importOrderInput" placeholder="Número de orden...">
+            <button type="button" class="import-btn" id="importOrderBtn">Importar</button>
+          </div>
+          <div class="import-result" id="importResult"></div>
+        </div>
+
         <div class="app-switch">
           <a href="selector.html">Cambiar a MercadoLibre</a>
         </div>
@@ -575,6 +600,66 @@
 
       // Cargar resumen inicial
       cargarResumenDia();
+
+      // ============================================
+      // IMPORTAR PEDIDO ESPECÍFICO
+      // ============================================
+      var importOrderInput = document.getElementById('importOrderInput');
+      var importOrderBtn = document.getElementById('importOrderBtn');
+      var importResult = document.getElementById('importResult');
+
+      function showImportResult(message, type) {
+        importResult.textContent = message;
+        importResult.className = 'import-result show ' + type;
+        if (type === 'success') {
+          setTimeout(function() {
+            importResult.className = 'import-result';
+          }, 5000);
+        }
+      }
+
+      function importOrder() {
+        var orderId = importOrderInput.value.trim();
+        if (!orderId) {
+          showImportResult('Ingresá un número de orden', 'error');
+          return;
+        }
+
+        importOrderBtn.disabled = true;
+        importOrderBtn.textContent = 'Importando...';
+        importResult.className = 'import-result';
+
+        authFetch(API_URL + '/api/mayorista/import/' + orderId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) {
+            if (data.yaExistia) {
+              showImportResult('La orden #' + orderId + ' ya estaba importada', 'success');
+            } else {
+              showImportResult('Orden #' + orderId + ' importada de ' + data.cuenta, 'success');
+            }
+            importOrderInput.value = '';
+            cargarResumenDia();
+          } else {
+            showImportResult(data.error || 'Error importando orden', 'error');
+          }
+        })
+        .catch(function(err) {
+          showImportResult('Error: ' + err.message, 'error');
+        })
+        .finally(function() {
+          importOrderBtn.disabled = false;
+          importOrderBtn.textContent = 'Importar';
+        });
+      }
+
+      importOrderBtn.onclick = importOrder;
+      importOrderInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') importOrder();
+      });
 
       // ============================================
       // UTILIDADES
