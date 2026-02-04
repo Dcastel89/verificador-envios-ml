@@ -87,8 +87,11 @@ function buildVerificationPrompt(productoEsperado, imageCount) {
   var tipoDetectado = detectProductType(sku, descripcion);
   var tipoConfig = tipoDetectado.config;
 
-  // Texto del producto esperado para mostrar en el prompt
-  var textoProducto = descripcion || sku || 'No especificado';
+  // Texto del producto esperado para mostrar en el prompt (ambos: SKU + nombre)
+  var partes = [];
+  if (sku) partes.push('SKU: ' + sku);
+  if (descripcion) partes.push('Descripción: ' + descripcion);
+  var textoProducto = partes.length > 0 ? partes.join('\n') : 'No especificado';
 
   // Prefijo multi-foto
   var multiPhotoPrefix = '';

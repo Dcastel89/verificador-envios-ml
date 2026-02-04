@@ -17,12 +17,12 @@
       "notasExtra": ""
     },
     "vidrio": {
-      "prefijos": ["VF", "VT"],
-      "palabrasClave": ["vidrio templado", "vidrio", "tempered glass", "protector pantalla"],
+      "prefijos": ["VF", "VT", "VM"],
+      "palabrasClave": ["vidrio templado", "vidrio mate", "vidrio", "tempered glass", "protector pantalla"],
       "dondeVerificar": "Buscar en el packaging/caja el modelo de celular.",
       "reglaColor": "No aplica color. Verificar solo modelo.",
       "formatoModelo": "Código corto: A25, G15, IP16.",
-      "notasExtra": "Verificar que sea vidrio templado y no otro tipo de protector."
+      "notasExtra": "VF = vidrio full/templado, VM = vidrio mate. Verificar que el tipo coincida con el SKU."
     },
     "funda-anillo": {
       "prefijos": ["FAN"],
@@ -33,7 +33,7 @@
       "notasExtra": ""
     },
     "smartband": {
-      "prefijos": [],
+      "prefijos": ["SMT"],
       "palabrasClave": ["smart band", "smartband", "mi band", "pulsera inteligente", "M7", "M8"],
       "dondeVerificar": "Leer el texto de la parte SUPERIOR de la CAJA. Ahí dice el modelo (ej: Smart Band 7).",
       "reglaColor": "Buscar un PUNTITO DE COLOR en el costado de la caja. Si hay un punto de color, ese es el color del producto. Si NO se ve ningún puntito de color, asumir NEGRO.",
@@ -41,7 +41,7 @@
       "notasExtra": "Smart Band 7 ≠ Smart Band 8. El número del modelo es lo más importante. El puntito de color puede verse mejor en una segunda foto del costado de la caja."
     },
     "auriculares": {
-      "prefijos": [],
+      "prefijos": ["AURI"],
       "palabrasClave": ["auricular", "earbuds", "buds", "headphone"],
       "dondeVerificar": "Leer el texto de la CAJA del producto.",
       "reglaColor": "Si no hay indicador de color en la caja, asumir NEGRO.",
@@ -62,6 +62,14 @@
       "dondeVerificar": "Leer texto en el packaging o etiqueta del cable.",
       "reglaColor": "No verificar color.",
       "formatoModelo": "Tipo de conector: USB-C, Lightning, Micro USB. Largo si visible.",
+      "notasExtra": ""
+    },
+    "adultos": {
+      "prefijos": ["MUN"],
+      "palabrasClave": [],
+      "dondeVerificar": "Buscar cualquier texto, etiqueta o código visible en el producto o packaging.",
+      "reglaColor": "Reportar el color si es visible.",
+      "formatoModelo": "Cualquier código o nombre de modelo visible.",
       "notasExtra": ""
     },
     "reloj": {
