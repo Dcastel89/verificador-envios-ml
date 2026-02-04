@@ -3252,7 +3252,7 @@ async function initializeServer() {
 
   app.listen(PORT, function() {
     console.log('Servidor corriendo en puerto ' + PORT);
-    setTimeout(syncPendingShipments, 5000);
+    // Sync automático deshabilitado - solo manual o programado (8:30 y 19:00)
   });
 }
 
