@@ -3191,7 +3191,11 @@ app.get('/selector', function(req, res) {
 });
 
 app.get('/mayorista', function(req, res) {
-  res.sendFile(path.join(__dirname, 'public', 'mayorista.html'));
+  res.sendFile(path.join(__dirname, 'public', 'mayorista', 'index.html'));
+});
+
+app.get('/mayorista/', function(req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'mayorista', 'index.html'));
 });
 
 // ============================================

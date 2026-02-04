@@ -1,11 +1,9 @@
 // Service Worker para Verificador Envíos ML
-var CACHE_NAME = 'verificador-v4';
+var CACHE_NAME = 'verificador-v5';
 var urlsToCache = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/mayorista.html',
-  '/manifest-mayorista.json',
   '/selector.html'
 ];
 
