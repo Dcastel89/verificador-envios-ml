@@ -1991,13 +1991,17 @@ app.post('/api/vision/analyze', async function(req, res) {
 
     if (productoEsperado) {
       // MODO VERIFICACIÓN: Comparar imagen con producto esperado
-      prompt = `Sos un verificador de pedidos. Tu trabajo es confirmar si el producto en la foto coincide con lo que se pidió.
+      prompt = `TAREA: Leer códigos y verificar productos.
 
-PASO 1 - LEER TEXTO (FUNDAMENTAL):
-Antes de analizar nada, buscá y leé TODO el texto visible en la imagen:
-- ETIQUETAS BLANCAS PEQUEÑAS: Las fundas tienen etiquetitas blancas con códigos impresos. LEÉ ESE TEXTO.
-- PAPELES O STICKERS: Si hay un papel con números/texto, transcribilo.
-- CÓDIGOS DE 7 DÍGITOS: Si ves "0000001" o similar, es un código de rotuladora - extráelo.
+PASO 1 - BUSCAR CÓDIGO DE ROTULADORA (PRIORIDAD MÁXIMA):
+Buscá en la imagen una ETIQUETA BLANCA PEQUEÑA con un número de 7 dígitos (ejemplo: 0000001, 0001234).
+- Puede estar pegada en una funda, en un papel, o en cualquier superficie
+- Si encontrás este código, TRANSCRIBILO EXACTAMENTE en el campo "codigoRotuladora"
+- Este código es MÁS IMPORTANTE que cualquier otra cosa
+
+PASO 2 - Si no hay código de rotuladora, buscar código de modelo:
+- En etiquetas de fundas: A25, G51, IP16, etc.
+- LEÉ el texto de cualquier etiqueta o papel visible
 
 PRODUCTO ESPERADO DEL PEDIDO:
 ${typeof productoEsperado === 'string' ? productoEsperado : JSON.stringify(productoEsperado, null, 2)}
@@ -2067,6 +2071,7 @@ IMPORTANTE - DÓNDE BUSCAR EL CÓDIGO:
 
 Respondé SOLO con este JSON:
 {
+  "codigoRotuladora": "código de 7 dígitos si lo ves (ej: 0000001), o null si no hay",
   "correcto": true/false,
   "productoDetectado": "descripción breve de lo que ves en la foto",
   "modeloDetectado": "código del modelo sin marca (ej: A25, G15, no Samsung A25)",
