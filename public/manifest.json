@@ -1,4 +1,5 @@
 {
+  "id": "verificador-ml",
   "name": "Verificador de Envios ML",
   "short_name": "Verificador",
   "description": "Verificador de envios para MercadoLibre",
