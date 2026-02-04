@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#7c3aed">
+  <title>Verificador Mayorista</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; min-height: 100vh; padding-bottom: 80px; }
+    .header { background: #7c3aed; color: white; padding: 16px; text-align: center; }
+    .header h1 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+    .nav-tabs { display: flex; gap: 8px; justify-content: center; }
+    .nav-tab { padding: 8px 24px; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: white; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .nav-tab:hover { background: rgba(255,255,255,0.1); }
+    .nav-tab.active { background: white; color: #7c3aed; border-color: white; }
+    .view-section { display: none; }
+    .view-section.active { display: block; }
+    .container { padding: 16px; max-width: 500px; margin: 0 auto; }
+    .scan-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .scan-input-group { display: flex; gap: 8px; }
+    .scan-input { flex: 1; padding: 14px 16px; font-size: 16px; border: 2px solid #e5e7eb; border-radius: 8px; }
+    .scan-btn { padding: 14px 20px; background: #7c3aed; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .scan-btn:disabled { background: #9ca3af; }
+    .camera-btn { position: fixed; bottom: 0; left: 0; right: 0; padding: 18px; background: #059669; color: white; border: none; font-size: 18px; font-weight: 600; cursor: pointer; z-index: 90; }
+    .camera-btn.product-mode { background: #7c3aed; }
+    .camera-container { display: none; margin-top: 16px; position: relative; }
+    .camera-container.active { display: block; }
+    #video { width: 100%; border-radius: 8px; }
+    .close-camera { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 20px; cursor: pointer; }
+    .status-message { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; display: none; }
+    .status-message.show { display: block; }
+    .status-message.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .status-message.loading { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .status-message.success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .items-section { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .items-header { padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .items-header h2 { font-size: 16px; font-weight: 600; color: #374151; }
+    .items-count { font-size: 14px; color: #6b7280; }
+    .item-card { padding: 16px; padding-right: 60px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; transition: all 0.3s ease; position: relative; }
+    .item-card:last-child { border-bottom: none; }
+    .item-card.checked { background: #f0fdf4; }
+    .item-card.highlight { background: #fef3c7; animation: pulse 0.5s ease-in-out; }
+    .item-card.just-scanned { background: #dcfce7; border-left: 4px solid #22c55e; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+    .item-main-checkbox { width: 28px; height: 28px; cursor: pointer; flex-shrink: 0; margin-top: 4px; pointer-events: none; }
+    .item-info { flex: 1; }
+    .item-description { font-size: 20px; font-weight: 700; color: #111827; line-height: 1.3; }
+    .item-sku { font-size: 14px; color: #6b7280; margin-top: 6px; font-family: monospace; }
+    .item-quantity { font-size: 18px; color: #111827; font-weight: 700; margin-top: 8px; background: #fef3c7; padding: 6px 12px; border-radius: 6px; display: inline-block; }
+    .unit-checkboxes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e7eb; }
+    .unit-checkbox { width: 36px; height: 36px; cursor: pointer; accent-color: #22c55e; }
+    .unit-checkbox.scanned { outline: 3px solid #7c3aed; outline-offset: 2px; }
+    .complete-banner { display: none; position: fixed; bottom: 56px; left: 0; right: 0; background: #22c55e; color: white; padding: 20px; text-align: center; font-size: 18px; font-weight: 600; z-index: 100; }
+    .complete-banner.show { display: block; }
+    .reset-btn { width: 100%; padding: 14px; margin-top: 16px; background: #ef4444; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .hidden { display: none; }
+
+    /* Vision/IA - Análisis con Claude */
+    .capture-photo-btn { position: fixed; bottom: 0; left: 0; right: 0; background: #f59e0b; color: white; border: none; padding: 18px; font-size: 18px; font-weight: 600; cursor: pointer; z-index: 100; }
+    .capture-photo-btn:disabled { background: #9ca3af; }
+    .vision-result { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 12px; margin-top: 12px; }
+    .vision-result-text { font-family: monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; }
+    .vision-result-colors { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .verify-photo-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #7c3aed; color: white; border: none; width: 56px; height: 56px; border-radius: 50%; font-size: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(124,58,237,0.4); transition: all 0.2s; }
+    .verify-photo-btn:hover { background: #6d28d9; transform: translateY(-50%) scale(1.1); }
+    .verify-photo-btn:active { background: #5b21b6; transform: translateY(-50%) scale(0.95); }
+    .item-card { padding-right: 80px; }
+
+    /* Modal para guardar barcode */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: white; border-radius: 12px; padding: 24px; max-width: 400px; width: 100%; }
+    .modal h3 { font-size: 18px; margin-bottom: 16px; color: #111827; }
+    .modal p { font-size: 14px; color: #6b7280; margin-bottom: 16px; }
+    .modal-barcode { font-family: monospace; background: #f3f4f6; padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 16px; font-weight: 600; }
+    .modal-sku-list { max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+    .modal-sku-option { padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+    .modal-sku-option:hover { border-color: #7c3aed; background: #f5f3ff; }
+    .modal-sku-option.selected { border-color: #7c3aed; background: #f5f3ff; }
+    .modal-sku-name { font-weight: 600; color: #111827; }
+    .modal-sku-desc { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    .modal-buttons { display: flex; gap: 12px; }
+    .modal-btn { flex: 1; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+    .modal-btn.primary { background: #7c3aed; color: white; }
+    .modal-btn.secondary { background: #f3f4f6; color: #374151; }
+
+    /* Scan mode indicator */
+    .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
+    .scan-mode-indicator.show { display: block; }
+
+    /* Resumen del día */
+    .resumen-section { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .resumen-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .resumen-header h2 { font-size: 16px; font-weight: 600; color: #374151; }
+    .resumen-fecha { font-size: 12px; color: #6b7280; }
+    .resumen-stats { display: flex; gap: 12px; margin-bottom: 16px; }
+    .resumen-stat { flex: 1; text-align: center; padding: 12px; border-radius: 8px; }
+    .resumen-stat.total { background: #f5f3ff; }
+    .resumen-stat.verificados { background: #f0fdf4; }
+    .resumen-stat.pendientes { background: #fef2f2; }
+    .resumen-stat-number { font-size: 24px; font-weight: 700; }
+    .resumen-stat.total .resumen-stat-number { color: #7c3aed; }
+    .resumen-stat.verificados .resumen-stat-number { color: #16a34a; }
+    .resumen-stat.pendientes .resumen-stat-number { color: #dc2626; }
+    .resumen-stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .cuentas-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+    .cuenta-btn { flex: 1; min-width: 80px; padding: 10px 8px; border: 2px solid #e5e7eb; background: white; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.2s; }
+    .cuenta-btn:hover { border-color: #7c3aed; background: #f5f3ff; }
+    .cuenta-btn.active { border-color: #7c3aed; background: #7c3aed; color: white; }
+    .resumen-status { padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; }
+    .resumen-status.completo { background: #dcfce7; color: #16a34a; }
+    .resumen-status.pendiente { background: #fef3c7; color: #b45309; }
+    .resumen-status.vacio { background: #f3f4f6; color: #6b7280; }
+    .resumen-pendientes-list { margin-top: 12px; max-height: 200px; overflow-y: auto; }
+    .resumen-pendiente-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #fef2f2; border-radius: 6px; margin-bottom: 6px; font-size: 13px; cursor: pointer; }
+    .resumen-pendiente-item:hover { background: #fee2e2; }
+    .resumen-pendiente-id { font-weight: 600; color: #dc2626; }
+    .resumen-pendiente-cuenta { font-size: 11px; color: #6b7280; }
+    .resumen-sync-btn { background: #7c3aed; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .resumen-sync-btn:hover { background: #6d28d9; }
+    .resumen-sync-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .resumen-sync-btn .spinner { width: 16px; height: 16px; border: 2px solid #ffffff40; border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
+    .resumen-sync-btn.loading .spinner { display: block; }
+    .resumen-sync-btn.loading .btn-text { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sync-progress { width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; margin-top: 8px; overflow: hidden; display: none; }
+    .sync-progress.active { display: block; }
+    .sync-progress-bar { height: 100%; background: #7c3aed; border-radius: 2px; animation: progress 2s ease-in-out infinite; width: 30%; }
+    @keyframes progress { 0% { margin-left: 0; } 50% { margin-left: 70%; } 100% { margin-left: 0; } }
+
+    /* Login screen */
+    .login-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .login-overlay.hidden { display: none; }
+    .login-box { background: white; border-radius: 16px; padding: 32px; max-width: 360px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    .login-logo { text-align: center; margin-bottom: 24px; }
+    .login-logo h1 { font-size: 24px; color: #7c3aed; margin-bottom: 8px; }
+    .login-logo p { font-size: 14px; color: #6b7280; }
+    .login-form { display: flex; flex-direction: column; gap: 16px; }
+    .login-input { padding: 14px 16px; font-size: 16px; border: 2px solid #e5e7eb; border-radius: 8px; outline: none; transition: border-color 0.2s; }
+    .login-input:focus { border-color: #7c3aed; }
+    .login-btn { padding: 14px 20px; background: #7c3aed; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .login-btn:hover { background: #6d28d9; }
+    .login-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .login-error { background: #fef2f2; color: #dc2626; padding: 12px; border-radius: 8px; font-size: 14px; text-align: center; display: none; }
+    .login-error.show { display: block; }
+    .logout-btn { position: fixed; top: 12px; right: 12px; background: rgba(255,255,255,0.2); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; z-index: 101; transition: background 0.2s; }
+    .logout-btn:hover { background: rgba(255,255,255,0.3); }
+    .logout-btn.hidden { display: none; }
+
+    /* Link para cambiar de app */
+    .app-switch { text-align: center; margin-top: 12px; }
+    .app-switch a { color: #7c3aed; font-size: 13px; text-decoration: none; }
+    .app-switch a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <!-- Login Overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <div class="login-logo">
+        <h1>Verificador Mayorista</h1>
+        <p>Inicia sesion para continuar</p>
+      </div>
+      <form class="login-form" id="loginForm">
+        <input type="text" class="login-input" id="loginUser" placeholder="Usuario" autocomplete="username" required>
+        <input type="password" class="login-input" id="loginPassword" placeholder="Contrasena" autocomplete="current-password" required>
+        <div class="login-error" id="loginError">Usuario o contrasena incorrectos</div>
+        <button type="submit" class="login-btn" id="loginBtn">Iniciar Sesion</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Logout Button -->
+  <button type="button" class="logout-btn hidden" id="logoutBtn">Salir</button>
+
+  <div class="header">
+    <h1>Verificador Mayorista</h1>
+    <div class="nav-tabs">
+      <button type="button" class="nav-tab active" id="navPanel" data-view="panel">Panel</button>
+      <button type="button" class="nav-tab" id="navVerificar" data-view="verificar">Verificar</button>
+    </div>
+  </div>
+  <div class="container">
+    <!-- Vista Panel -->
+    <div class="view-section active" id="viewPanel">
+      <div class="resumen-section" id="resumenSection">
+        <div class="resumen-header">
+          <h2 id="resumenTitulo">Pedidos del Dia</h2>
+          <span class="resumen-fecha" id="resumenFecha">--/--/----</span>
+        </div>
+        <div class="resumen-stats">
+          <div class="resumen-stat total">
+            <div class="resumen-stat-number" id="resumenTotal">-</div>
+            <div class="resumen-stat-label">TOTAL</div>
+          </div>
+          <div class="resumen-stat verificados">
+            <div class="resumen-stat-number" id="resumenVerificados">-</div>
+            <div class="resumen-stat-label">VERIF</div>
+          </div>
+          <div class="resumen-stat pendientes">
+            <div class="resumen-stat-number" id="resumenPendientes">-</div>
+            <div class="resumen-stat-label">PEND</div>
+          </div>
+        </div>
+        <div class="resumen-status vacio" id="resumenStatus">Cargando...</div>
+        <div class="cuentas-btns" id="cuentasBtns"></div>
+        <div class="resumen-pendientes-list hidden" id="resumenPendientesList"></div>
+        <div style="text-align: center; margin-top: 12px;">
+          <button type="button" class="resumen-sync-btn" id="resumenSync">
+            <span class="spinner"></span>
+            <span class="btn-text">Sincronizar Jumpseller</span>
+          </button>
+          <div class="sync-progress" id="syncProgress">
+            <div class="sync-progress-bar"></div>
+          </div>
+        </div>
+        <div class="app-switch">
+          <a href="selector.html">Cambiar a MercadoLibre</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vista Verificar -->
+    <div class="view-section" id="viewVerificar">
+      <div class="scan-section">
+        <div class="scan-input-group">
+          <input type="text" id="orderInput" class="scan-input" placeholder="Numero de orden...">
+          <button type="button" id="searchBtn" class="scan-btn">Buscar</button>
+        </div>
+        <div class="camera-container" id="cameraContainer">
+          <video id="video" playsinline></video>
+          <button type="button" class="close-camera" id="closeCamera">X</button>
+          <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar con IA</button>
+        </div>
+        <div class="vision-result hidden" id="visionResult">
+          <div><strong>Resultado:</strong></div>
+          <div class="vision-result-text" id="visionText"></div>
+          <div class="vision-result-colors" id="visionColors"></div>
+        </div>
+      </div>
+      <div class="scan-mode-indicator" id="scanModeIndicator">Modo escaneo de productos activo</div>
+      <div class="status-message" id="statusMessage"></div>
+      <div class="items-section hidden" id="itemsSection">
+        <div class="items-header">
+          <h2>Productos a verificar</h2>
+          <span class="items-count" id="itemsCount">0/0</span>
+        </div>
+        <div id="itemsList"></div>
+      </div>
+      <button type="button" class="reset-btn hidden" id="resetBtn">Nueva orden</button>
+    </div>
+  </div>
+  <div class="complete-banner" id="completeBanner">Orden verificada correctamente</div>
+  <button type="button" id="cameraBtn" class="camera-btn">Escanear orden</button>
+
+  <!-- Modal para guardar barcode -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h3>Codigo no registrado</h3>
+      <p>Este codigo de barras no esta vinculado a ningun SKU. Selecciona el producto correspondiente para guardarlo:</p>
+      <div class="modal-barcode" id="modalBarcode"></div>
+      <div class="modal-sku-list" id="modalSkuList"></div>
+      <div class="modal-buttons">
+        <button type="button" class="modal-btn secondary" id="modalCancel">Cancelar</button>
+        <button type="button" class="modal-btn primary" id="modalSave">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
+  <script>
+    // ============================================
+    // SISTEMA DE AUTENTICACION
+    // ============================================
+    (function authInit() {
+      var loginOverlay = document.getElementById('loginOverlay');
+      var loginForm = document.getElementById('loginForm');
+      var loginUser = document.getElementById('loginUser');
+      var loginPassword = document.getElementById('loginPassword');
+      var loginError = document.getElementById('loginError');
+      var loginBtn = document.getElementById('loginBtn');
+      var logoutBtn = document.getElementById('logoutBtn');
+
+      function checkAuth() {
+        return fetch('/api/auth/check', { credentials: 'include' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.authenticated) {
+              showApp();
+              return true;
+            } else {
+              showLogin();
+              return false;
+            }
+          })
+          .catch(function() {
+            showLogin();
+            return false;
+          });
+      }
+
+      function showLogin() {
+        loginOverlay.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
+        loginUser.focus();
+      }
+
+      function showApp() {
+        loginOverlay.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+        if (typeof initMainApp === 'function') {
+          initMainApp();
+        }
+      }
+
+      loginForm.onsubmit = function(e) {
+        e.preventDefault();
+        loginError.classList.remove('show');
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Ingresando...';
+
+        fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            username: loginUser.value,
+            password: loginPassword.value
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Iniciar Sesion';
+          if (data.success) {
+            loginPassword.value = '';
+            showApp();
+          } else {
+            loginError.textContent = data.error || 'Error al iniciar sesion';
+            loginError.classList.add('show');
+          }
+        })
+        .catch(function(err) {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Iniciar Sesion';
+          loginError.textContent = 'Error de conexion';
+          loginError.classList.add('show');
+        });
+      };
+
+      logoutBtn.onclick = function() {
+        fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+        .then(function() { showLogin(); })
+        .catch(function() { showLogin(); });
+      };
+
+      checkAuth();
+    })();
+
+    // ============================================
+    // APP PRINCIPAL MAYORISTA
+    // ============================================
+    var mainAppInitialized = false;
+    function initMainApp() {
+      if (mainAppInitialized) return;
+      mainAppInitialized = true;
+
+      var API_URL = '';
+
+      function authFetch(url, options) {
+        options = options || {};
+        options.credentials = 'include';
+        return fetch(url, options).then(function(response) {
+          if (response.status === 401) {
+            window.location.reload();
+            return Promise.reject(new Error('Sesion expirada'));
+          }
+          return response;
+        });
+      }
+
+      var currentOrder = null;
+      var currentItems = [];
+      var unitChecks = {};
+      var codeReader = null;
+      var isScanning = false;
+      var currentOrderId = '';
+      var currentAccount = '';
+      var alreadySaved = false;
+      var scanMode = 'order'; // 'order' o 'product'
+      var pendingBarcode = null;
+      var selectedSkuForModal = null;
+
+      var orderInput = document.getElementById('orderInput');
+      var searchBtn = document.getElementById('searchBtn');
+      var cameraBtn = document.getElementById('cameraBtn');
+      var cameraContainer = document.getElementById('cameraContainer');
+      var closeCameraBtn = document.getElementById('closeCamera');
+      var video = document.getElementById('video');
+      var statusMessage = document.getElementById('statusMessage');
+      var itemsSection = document.getElementById('itemsSection');
+      var itemsList = document.getElementById('itemsList');
+      var itemsCount = document.getElementById('itemsCount');
+      var completeBanner = document.getElementById('completeBanner');
+      var resetBtn = document.getElementById('resetBtn');
+      var scanModeIndicator = document.getElementById('scanModeIndicator');
+
+      var navPanel = document.getElementById('navPanel');
+      var navVerificar = document.getElementById('navVerificar');
+      var viewPanel = document.getElementById('viewPanel');
+      var viewVerificar = document.getElementById('viewVerificar');
+      var currentView = 'panel';
+
+      var modalOverlay = document.getElementById('modalOverlay');
+      var modalBarcode = document.getElementById('modalBarcode');
+      var modalSkuList = document.getElementById('modalSkuList');
+      var modalCancel = document.getElementById('modalCancel');
+      var modalSave = document.getElementById('modalSave');
+
+      // Vision/IA elements
+      var capturePhotoBtn = document.getElementById('capturePhotoBtn');
+      var visionResult = document.getElementById('visionResult');
+      var visionText = document.getElementById('visionText');
+      var visionColors = document.getElementById('visionColors');
+      var productoAVerificar = null;
+
+      // ============================================
+      // NAVEGACION
+      // ============================================
+      function switchView(view) {
+        currentView = view;
+        if (view === 'panel') {
+          viewPanel.classList.add('active');
+          viewVerificar.classList.remove('active');
+          navPanel.classList.add('active');
+          navVerificar.classList.remove('active');
+          cameraBtn.classList.add('hidden');
+        } else {
+          viewPanel.classList.remove('active');
+          viewVerificar.classList.add('active');
+          navPanel.classList.remove('active');
+          navVerificar.classList.add('active');
+          cameraBtn.classList.remove('hidden');
+        }
+      }
+
+      navPanel.onclick = function() { switchView('panel'); };
+      navVerificar.onclick = function() { switchView('verificar'); };
+
+      // ============================================
+      // RESUMEN DEL DIA
+      // ============================================
+      var resumenFecha = document.getElementById('resumenFecha');
+      var resumenTotal = document.getElementById('resumenTotal');
+      var resumenVerificados = document.getElementById('resumenVerificados');
+      var resumenPendientes = document.getElementById('resumenPendientes');
+      var resumenStatus = document.getElementById('resumenStatus');
+      var resumenPendientesList = document.getElementById('resumenPendientesList');
+      var cuentasBtns = document.getElementById('cuentasBtns');
+      var resumenSync = document.getElementById('resumenSync');
+      var syncProgress = document.getElementById('syncProgress');
+
+      function cargarResumenDia() {
+        authFetch(API_URL + '/api/mayorista/resumen')
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (!data.success) throw new Error(data.error || 'Error');
+
+            resumenFecha.textContent = data.fecha;
+            resumenTotal.textContent = data.estadisticas.total;
+            resumenVerificados.textContent = data.estadisticas.verificados;
+            resumenPendientes.textContent = data.estadisticas.pendientes;
+
+            // Estado
+            if (data.estadisticas.total === 0) {
+              resumenStatus.className = 'resumen-status vacio';
+              resumenStatus.textContent = 'Sin pedidos para hoy';
+            } else if (data.estadisticas.pendientes === 0) {
+              resumenStatus.className = 'resumen-status completo';
+              resumenStatus.textContent = 'Todos los pedidos verificados';
+            } else {
+              resumenStatus.className = 'resumen-status pendiente';
+              resumenStatus.textContent = data.estadisticas.pendientes + ' pedidos pendientes';
+            }
+
+            // Botones de cuentas
+            cuentasBtns.innerHTML = '';
+            var cuentas = Object.keys(data.porCuenta || {});
+            cuentas.forEach(function(cuenta) {
+              var info = data.porCuenta[cuenta];
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'cuenta-btn';
+              btn.textContent = cuenta + ' (' + info.pendientes + '/' + info.total + ')';
+              btn.onclick = function() {
+                // Podría filtrar por cuenta
+              };
+              cuentasBtns.appendChild(btn);
+            });
+
+            // Lista de pendientes
+            if (data.pendientes && data.pendientes.length > 0) {
+              resumenPendientesList.classList.remove('hidden');
+              resumenPendientesList.innerHTML = '';
+              data.pendientes.forEach(function(p) {
+                var item = document.createElement('div');
+                item.className = 'resumen-pendiente-item';
+                item.innerHTML = '<span class="resumen-pendiente-id">#' + p.orderId + '</span>' +
+                  '<span class="resumen-pendiente-cuenta">' + (p.cuenta || '') + ' - ' + (p.cliente || '') + '</span>';
+                item.onclick = function() {
+                  orderInput.value = p.orderId;
+                  searchOrder(p.orderId);
+                };
+                resumenPendientesList.appendChild(item);
+              });
+            } else {
+              resumenPendientesList.classList.add('hidden');
+            }
+          })
+          .catch(function(err) {
+            console.error('Error cargando resumen:', err);
+            resumenStatus.className = 'resumen-status vacio';
+            resumenStatus.textContent = 'Error cargando datos';
+          });
+      }
+
+      // Sincronizar
+      resumenSync.onclick = function() {
+        resumenSync.disabled = true;
+        resumenSync.classList.add('loading');
+        syncProgress.classList.add('active');
+
+        authFetch(API_URL + '/api/mayorista/sync')
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.success) {
+              showStatus('Sincronizado: ' + data.total + ' pedidos', 'success');
+            } else {
+              showStatus(data.mensaje || 'Error sincronizando', 'error');
+            }
+            cargarResumenDia();
+          })
+          .catch(function(err) {
+            showStatus('Error: ' + err.message, 'error');
+          })
+          .finally(function() {
+            resumenSync.disabled = false;
+            resumenSync.classList.remove('loading');
+            syncProgress.classList.remove('active');
+          });
+      };
+
+      // Cargar resumen inicial
+      cargarResumenDia();
+
+      // ============================================
+      // UTILIDADES
+      // ============================================
+      function showStatus(message, type) {
+        statusMessage.textContent = message;
+        statusMessage.className = 'status-message show ' + type;
+        if (type === 'success') {
+          setTimeout(hideStatus, 3000);
+        }
+      }
+
+      function hideStatus() {
+        statusMessage.className = 'status-message';
+      }
+
+      function isItemComplete(index) {
+        var item = currentItems[index];
+        var checks = unitChecks[index] || [];
+        for (var i = 0; i < item.quantity; i++) {
+          var check = checks[i];
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) return false;
+        }
+        return true;
+      }
+
+      function countCompletedItems() {
+        var count = 0;
+        for (var i = 0; i < currentItems.length; i++) {
+          if (isItemComplete(i)) count++;
+        }
+        return count;
+      }
+
+      function saveVerification() {
+        if (alreadySaved) return;
+        alreadySaved = true;
+
+        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/verificado', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ metodo: 'scanner' })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          cargarResumenDia();
+        })
+        .catch(function(err) {
+          console.error('Error guardando verificacion:', err);
+        });
+      }
+
+      function updateItemsCount() {
+        var total = currentItems.length;
+        var checked = countCompletedItems();
+        itemsCount.textContent = checked + '/' + total;
+        if (checked === total && total > 0) {
+          completeBanner.classList.add('show');
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+          saveVerification();
+          setScanMode('order');
+        } else {
+          completeBanner.classList.remove('show');
+        }
+      }
+
+      function updateCard(index) {
+        var card = document.querySelector('.item-card[data-index="' + index + '"]');
+        if (!card) return;
+        var mainCheckbox = card.querySelector('.item-main-checkbox');
+        var complete = isItemComplete(index);
+        mainCheckbox.checked = complete;
+        card.className = 'item-card' + (complete ? ' checked' : '');
+        updateItemsCount();
+      }
+
+      function highlightCard(index) {
+        var card = document.querySelector('.item-card[data-index="' + index + '"]');
+        if (!card) return;
+        card.classList.add('just-scanned');
+        setTimeout(function() {
+          card.classList.remove('just-scanned');
+        }, 2000);
+      }
+
+      // ============================================
+      // RENDER ITEMS
+      // ============================================
+      function renderItems() {
+        itemsList.innerHTML = '';
+        for (var i = 0; i < currentItems.length; i++) {
+          var item = currentItems[i];
+          // No reiniciar unitChecks si ya tiene datos (verificación parcial)
+          if (!unitChecks[i]) unitChecks[i] = [];
+
+          var card = document.createElement('div');
+          card.className = 'item-card';
+          card.setAttribute('data-index', i);
+          card.setAttribute('data-sku', item.sku || '');
+
+          // Verificar si este item está completo
+          var itemComplete = isItemComplete(i);
+          if (itemComplete) card.classList.add('checked');
+
+          var mainCheckbox = document.createElement('input');
+          mainCheckbox.type = 'checkbox';
+          mainCheckbox.className = 'item-main-checkbox';
+          mainCheckbox.checked = itemComplete;
+
+          var info = document.createElement('div');
+          info.className = 'item-info';
+
+          var descDiv = document.createElement('div');
+          descDiv.className = 'item-description';
+          descDiv.textContent = item.name || item.description || item.sku || 'Sin nombre';
+
+          var skuDiv = document.createElement('div');
+          skuDiv.className = 'item-sku';
+          skuDiv.textContent = item.sku ? 'SKU: ' + item.sku : 'Sin SKU';
+
+          var qtyDiv = document.createElement('div');
+          qtyDiv.className = 'item-quantity';
+          var verificados = item.verificados || 0;
+          if (verificados > 0 && verificados < item.quantity) {
+            qtyDiv.textContent = 'Cantidad: ' + item.quantity + ' (' + verificados + ' verificados)';
+          } else {
+            qtyDiv.textContent = 'Cantidad: ' + item.quantity;
+          }
+
+          var unitsDiv = document.createElement('div');
+          unitsDiv.className = 'unit-checkboxes';
+
+          for (var j = 0; j < item.quantity; j++) {
+            var unitCb = document.createElement('input');
+            unitCb.type = 'checkbox';
+            unitCb.className = 'unit-checkbox';
+            unitCb.setAttribute('data-item', i);
+            unitCb.setAttribute('data-unit', j);
+            // Restaurar estado de verificación
+            var check = unitChecks[i][j];
+            if (check && (check === true || check.checked === true)) {
+              unitCb.checked = true;
+            }
+            unitsDiv.appendChild(unitCb);
+          }
+
+          info.appendChild(descDiv);
+          info.appendChild(skuDiv);
+          info.appendChild(qtyDiv);
+          info.appendChild(unitsDiv);
+          card.appendChild(mainCheckbox);
+          card.appendChild(info);
+
+          // Botón para verificar con foto/IA
+          var verifyBtn = document.createElement('button');
+          verifyBtn.className = 'verify-photo-btn';
+          verifyBtn.textContent = '📷';
+          verifyBtn.title = 'Verificar con foto';
+          verifyBtn.setAttribute('data-index', i);
+          verifyBtn.onclick = function(e) {
+            e.stopPropagation();
+            var idx = parseInt(this.getAttribute('data-index'));
+            iniciarVerificacionFoto(idx);
+          };
+          card.appendChild(verifyBtn);
+
+          itemsList.appendChild(card);
+        }
+        updateItemsCount();
+      }
+
+      itemsList.addEventListener('click', function(e) {
+        if (e.target.classList.contains('unit-checkbox')) {
+          var itemIndex = parseInt(e.target.getAttribute('data-item'));
+          var unitIndex = parseInt(e.target.getAttribute('data-unit'));
+          if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
+          unitChecks[itemIndex][unitIndex] = e.target.checked ? { checked: true, method: 'manual' } : null;
+          updateCard(itemIndex);
+
+          // Guardar verificación parcial en servidor
+          saveItemVerification(itemIndex, 'manual');
+        }
+      });
+
+      function saveItemVerification(itemIndex, metodo) {
+        var item = currentItems[itemIndex];
+        if (!item || !currentOrderId) return;
+
+        // Contar verificados
+        var checks = unitChecks[itemIndex] || [];
+        var verificados = 0;
+        for (var i = 0; i < item.quantity; i++) {
+          var check = checks[i];
+          if (check && (check === true || check.checked === true)) verificados++;
+        }
+
+        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/item/verificar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sku: item.sku,
+            verificados: verificados,
+            metodo: metodo
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (!data.success) {
+            console.error('Error guardando verificación:', data.error);
+          }
+        })
+        .catch(function(err) {
+          console.error('Error guardando verificación:', err);
+        });
+      }
+
+      // ============================================
+      // BUSCAR ORDEN
+      // ============================================
+      function searchOrder(orderId) {
+        if (!orderId || orderId.trim() === '') {
+          showStatus('Ingresa un numero de orden', 'error');
+          return;
+        }
+        showStatus('Buscando orden...', 'loading');
+        searchBtn.disabled = true;
+        searchBtn.textContent = '...';
+
+        // Usar el endpoint de items que trae el estado de verificación
+        authFetch(API_URL + '/api/mayorista/order/' + orderId.trim() + '/items')
+          .then(function(response) {
+            return response.json().then(function(data) {
+              if (!response.ok) throw new Error(data.error || 'Error al buscar orden');
+              return data;
+            });
+          })
+          .then(function(data) {
+            if (!data.success) throw new Error(data.error || 'Orden no encontrada');
+            if (!data.items || data.items.length === 0) throw new Error('Orden sin items');
+
+            currentOrderId = orderId.trim();
+            currentAccount = data.items[0].cuenta || '';
+            alreadySaved = false;
+
+            // Construir items con estado de verificación
+            currentItems = [];
+            unitChecks = {};
+
+            data.items.forEach(function(item, index) {
+              currentItems.push({
+                sku: item.sku || '',
+                name: item.nombre || item.name || '',
+                quantity: item.cantidad || 1,
+                verificados: item.verificados || 0,
+                metodo: item.metodo || ''
+              });
+
+              // Restaurar estado de verificación
+              unitChecks[index] = [];
+              var verificados = item.verificados || 0;
+              for (var j = 0; j < verificados; j++) {
+                unitChecks[index][j] = { checked: true, method: item.metodo || 'restored' };
+              }
+            });
+
+            hideStatus();
+            itemsSection.classList.remove('hidden');
+            resetBtn.classList.remove('hidden');
+            renderItems();
+            stopCamera();
+            setScanMode('product');
+            switchView('verificar');
+
+            // Mostrar si es parcial
+            var totalVerif = currentItems.reduce(function(sum, it) { return sum + (it.verificados || 0); }, 0);
+            if (totalVerif > 0) {
+              showStatus('Orden con verificación parcial - continuá donde quedaste', 'success');
+            }
+          })
+          .catch(function(error) {
+            showStatus(error.message, 'error');
+            itemsSection.classList.add('hidden');
+          })
+          .finally(function() {
+            searchBtn.disabled = false;
+            searchBtn.textContent = 'Buscar';
+          });
+      }
+
+      searchBtn.onclick = function() {
+        searchOrder(orderInput.value);
+      };
+
+      orderInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          searchOrder(orderInput.value);
+        }
+      });
+
+      // ============================================
+      // SCAN MODE
+      // ============================================
+      function setScanMode(mode) {
+        scanMode = mode;
+        if (mode === 'product') {
+          cameraBtn.textContent = 'Escanear producto';
+          cameraBtn.classList.add('product-mode');
+          scanModeIndicator.classList.add('show');
+        } else {
+          cameraBtn.textContent = 'Escanear orden';
+          cameraBtn.classList.remove('product-mode');
+          scanModeIndicator.classList.remove('show');
+        }
+      }
+
+      // ============================================
+      // SCANNER
+      // ============================================
+      function findItemBySku(sku) {
+        for (var i = 0; i < currentItems.length; i++) {
+          if (currentItems[i].sku === sku) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
+      function findNextUncheckedUnit(itemIndex) {
+        var item = currentItems[itemIndex];
+        var checks = unitChecks[itemIndex] || [];
+        for (var i = 0; i < item.quantity; i++) {
+          var check = checks[i];
+          var isChecked = check && (check === true || check.checked === true);
+          if (!isChecked) return i;
+        }
+        return -1;
+      }
+
+      function markProductByBarcode(barcode) {
+        // Buscar en la base de barcodes
+        authFetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
+          .then(function(response) { return response.json(); })
+          .then(function(data) {
+            if (data.found && data.sku) {
+              var itemIndex = findItemBySku(data.sku);
+              if (itemIndex >= 0) {
+                var unitIndex = findNextUncheckedUnit(itemIndex);
+                if (unitIndex >= 0) {
+                  if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
+                  unitChecks[itemIndex][unitIndex] = { checked: true, method: 'scanned' };
+
+                  var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + unitIndex + '"]');
+                  if (checkbox) {
+                    checkbox.checked = true;
+                    checkbox.classList.add('scanned');
+                    setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
+                  }
+
+                  updateCard(itemIndex);
+                  highlightCard(itemIndex);
+                  if (navigator.vibrate) navigator.vibrate(50);
+
+                  // Guardar verificación parcial en servidor
+                  saveItemVerification(itemIndex, 'scanned');
+                } else {
+                  showStatus('Producto ya escaneado completo', 'error');
+                  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                }
+              } else {
+                showStatus('Producto no en esta orden', 'error');
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+              }
+            } else {
+              // Barcode no registrado, mostrar modal
+              showBarcodeModal(barcode);
+            }
+          })
+          .catch(function(err) {
+            console.error('Error buscando barcode:', err);
+            showStatus('Error buscando codigo', 'error');
+          });
+      }
+
+      function showBarcodeModal(barcode) {
+        pendingBarcode = barcode;
+        modalBarcode.textContent = barcode;
+        modalSkuList.innerHTML = '';
+        selectedSkuForModal = null;
+
+        currentItems.forEach(function(item, index) {
+          if (!item.sku) return;
+          var option = document.createElement('div');
+          option.className = 'modal-sku-option';
+          option.setAttribute('data-sku', item.sku);
+          option.innerHTML = '<div class="modal-sku-name">' + item.sku + '</div>' +
+            '<div class="modal-sku-desc">' + (item.name || '') + '</div>';
+          option.onclick = function() {
+            document.querySelectorAll('.modal-sku-option').forEach(function(o) { o.classList.remove('selected'); });
+            option.classList.add('selected');
+            selectedSkuForModal = item.sku;
+          };
+          modalSkuList.appendChild(option);
+        });
+
+        modalOverlay.classList.add('show');
+      }
+
+      modalCancel.onclick = function() {
+        modalOverlay.classList.remove('show');
+        pendingBarcode = null;
+        selectedSkuForModal = null;
+      };
+
+      modalSave.onclick = function() {
+        if (!pendingBarcode || !selectedSkuForModal) {
+          showStatus('Selecciona un producto', 'error');
+          return;
+        }
+
+        var item = currentItems.find(function(i) { return i.sku === selectedSkuForModal; });
+        var description = item ? item.name : '';
+
+        authFetch(API_URL + '/api/barcode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            barcode: pendingBarcode,
+            sku: selectedSkuForModal,
+            description: description
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showStatus('Codigo guardado', 'success');
+            markProductByBarcode(pendingBarcode);
+          } else {
+            showStatus('Error guardando codigo', 'error');
+          }
+        })
+        .catch(function(err) {
+          showStatus('Error: ' + err.message, 'error');
+        });
+
+        modalOverlay.classList.remove('show');
+        pendingBarcode = null;
+        selectedSkuForModal = null;
+      };
+
+      // ============================================
+      // CAMARA
+      // ============================================
+      function startCamera() {
+        if (isScanning) return;
+
+        cameraContainer.classList.add('active');
+        isScanning = true;
+
+        if (!codeReader) {
+          codeReader = new ZXing.BrowserMultiFormatReader();
+        }
+
+        codeReader.decodeFromVideoDevice(null, 'video', function(result, err) {
+          if (result) {
+            var codigo = result.getText();
+            if (navigator.vibrate) navigator.vibrate(50);
+
+            if (scanMode === 'order') {
+              orderInput.value = codigo;
+              searchOrder(codigo);
+              stopCamera();
+            } else {
+              markProductByBarcode(codigo);
+            }
+          }
+        });
+      }
+
+      function stopCamera() {
+        if (codeReader) {
+          codeReader.reset();
+        }
+        cameraContainer.classList.remove('active');
+        isScanning = false;
+        visionResult.classList.add('hidden');
+      }
+
+      cameraBtn.onclick = function() {
+        if (isScanning) {
+          stopCamera();
+        } else {
+          startCamera();
+        }
+      };
+
+      closeCameraBtn.onclick = function() {
+        stopCamera();
+      };
+
+      // ============================================
+      // VISION API - Verificación con Claude
+      // ============================================
+
+      function iniciarVerificacionFoto(itemIndex) {
+        productoAVerificar = {
+          index: itemIndex,
+          item: currentItems[itemIndex],
+          descripcion: currentItems[itemIndex].name || currentItems[itemIndex].sku
+        };
+        showStatus('Verificando: ' + productoAVerificar.descripcion, 'loading');
+
+        scanMode = 'product';
+        startCamera();
+
+        setTimeout(function() {
+          cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+
+      function capturePhoto() {
+        if (!video.srcObject) {
+          showStatus('Camara no activa', 'error');
+          return;
+        }
+
+        capturePhotoBtn.disabled = true;
+        capturePhotoBtn.textContent = 'Analizando...';
+        showStatus('Claude esta analizando...', 'loading');
+
+        var canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        var imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+
+        var requestBody = { image: imageBase64 };
+        if (productoAVerificar) {
+          requestBody.producto = productoAVerificar.descripcion;
+        }
+
+        authFetch(API_URL + '/api/vision/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          capturePhotoBtn.disabled = false;
+          capturePhotoBtn.textContent = 'Analizar con IA';
+
+          if (data.success) {
+            if (productoAVerificar && data.correcto !== undefined) {
+              mostrarResultadoVerificacion(data);
+            } else {
+              showVisionResult(data);
+              if (data.modeloDetectado && scanMode === 'product') {
+                tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado);
+              }
+            }
+          } else {
+            showStatus('Error: ' + (data.error || 'Error desconocido'), 'error');
+          }
+        })
+        .catch(function(err) {
+          capturePhotoBtn.disabled = false;
+          capturePhotoBtn.textContent = 'Analizar con IA';
+          showStatus('Error de conexion', 'error');
+          console.error(err);
+        });
+      }
+
+      function mostrarResultadoVerificacion(data) {
+        stopCamera();
+
+        if (data.correcto) {
+          showStatus('CORRECTO: ' + data.productoDetectado, 'success');
+          marcarProductoVerificado(productoAVerificar.index, 'claude');
+        } else {
+          showStatus('INCORRECTO: ' + (data.motivo || 'No coincide'), 'error');
+        }
+
+        visionText.textContent = 'Modelo: ' + (data.modeloDetectado || '?') + ' | Color: ' + (data.colorDetectado || '?');
+        visionColors.innerHTML = '<strong>Confianza:</strong> ' + (data.confianza || 'media');
+        visionResult.classList.remove('hidden');
+
+        productoAVerificar = null;
+      }
+
+      function marcarProductoVerificado(itemIndex, method) {
+        var item = currentItems[itemIndex];
+        if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
+
+        for (var j = 0; j < item.quantity; j++) {
+          if (!unitChecks[itemIndex][j] || !unitChecks[itemIndex][j].checked) {
+            unitChecks[itemIndex][j] = { checked: true, method: method };
+            var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
+            if (checkbox) {
+              checkbox.checked = true;
+              checkbox.classList.add('scanned');
+              setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
+            }
+            break;
+          }
+        }
+
+        updateCard(itemIndex);
+        highlightCard(itemIndex);
+        updateItemsCount();
+        saveItemVerification(itemIndex, method);
+      }
+
+      function tryMatchModelWithItems(modelo, color) {
+        if (!modelo) return;
+        var modeloUpper = modelo.toUpperCase();
+
+        for (var i = 0; i < currentItems.length; i++) {
+          var desc = (currentItems[i].name || '').toUpperCase();
+          if (desc.indexOf(modeloUpper) !== -1 || modeloUpper.indexOf(desc.split(' ').pop()) !== -1) {
+            showStatus('Match encontrado: ' + currentItems[i].name, 'success');
+            marcarProductoVerificado(i, 'claude-auto');
+            return;
+          }
+        }
+        showStatus('Modelo detectado: ' + modelo + ' (sin match automatico)', 'loading');
+      }
+
+      function showVisionResult(data) {
+        var info = [];
+        if (data.modeloDetectado) info.push('Modelo: ' + data.modeloDetectado);
+        if (data.colorDetectado) info.push('Color: ' + data.colorDetectado);
+        if (data.tipoProducto) info.push('Tipo: ' + data.tipoProducto);
+
+        visionText.textContent = info.length > 0 ? info.join(' | ') : '(sin datos)';
+        visionColors.innerHTML = data.confianza ? '<strong>Confianza:</strong> ' + data.confianza : '';
+
+        visionResult.classList.remove('hidden');
+        hideStatus();
+      }
+
+      capturePhotoBtn.onclick = capturePhoto;
+
+      // ============================================
+      // RESET
+      // ============================================
+      resetBtn.onclick = function() {
+        currentOrder = null;
+        currentItems = [];
+        unitChecks = {};
+        currentOrderId = '';
+        currentAccount = '';
+        alreadySaved = false;
+        productoAVerificar = null;
+        orderInput.value = '';
+        itemsSection.classList.add('hidden');
+        resetBtn.classList.add('hidden');
+        completeBanner.classList.remove('show');
+        visionResult.classList.add('hidden');
+        setScanMode('order');
+        hideStatus();
+      };
+
+      // Iniciar en modo order
+      setScanMode('order');
+      switchView('panel');
+      cameraBtn.classList.add('hidden');
+    }
+  </script>
+</body>
+</html>

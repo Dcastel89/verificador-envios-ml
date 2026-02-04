@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563eb">
+  <title>Verificador - Seleccionar App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .selector-container {
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .selector-header {
+      text-align: center;
+      margin-bottom: 32px;
+      color: white;
+    }
+
+    .selector-header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .selector-header p {
+      font-size: 14px;
+      opacity: 0.8;
+    }
+
+    .selector-options {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .selector-option {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      text-decoration: none;
+      color: inherit;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .selector-option:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 15px 50px rgba(0,0,0,0.3);
+    }
+
+    .selector-option:active {
+      transform: translateY(-2px);
+    }
+
+    .option-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      flex-shrink: 0;
+    }
+
+    .option-ml .option-icon {
+      background: linear-gradient(135deg, #ffe600 0%, #ffd000 100%);
+    }
+
+    .option-mayorista .option-icon {
+      background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+      color: white;
+    }
+
+    .option-info {
+      flex: 1;
+    }
+
+    .option-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+
+    .option-description {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .option-arrow {
+      color: #9ca3af;
+      font-size: 20px;
+    }
+
+    /* Login overlay */
+    .login-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-overlay.hidden { display: none; }
+
+    .login-box {
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .login-logo h1 {
+      font-size: 24px;
+      color: #2563eb;
+      margin-bottom: 8px;
+    }
+
+    .login-logo p {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .login-input {
+      padding: 14px 16px;
+      font-size: 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .login-input:focus { border-color: #2563eb; }
+
+    .login-btn {
+      padding: 14px 20px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .login-btn:hover { background: #1d4ed8; }
+    .login-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    .login-error {
+      background: #fef2f2;
+      color: #dc2626;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      text-align: center;
+      display: none;
+    }
+
+    .login-error.show { display: block; }
+
+    /* Footer info */
+    .selector-footer {
+      text-align: center;
+      margin-top: 24px;
+      color: rgba(255,255,255,0.6);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <div class="login-logo">
+        <h1>Verificador de Envios</h1>
+        <p>Inicia sesion para continuar</p>
+      </div>
+      <form class="login-form" id="loginForm">
+        <input type="text" class="login-input" id="loginUser" placeholder="Usuario" autocomplete="username" required>
+        <input type="password" class="login-input" id="loginPassword" placeholder="Contrasena" autocomplete="current-password" required>
+        <div class="login-error" id="loginError">Usuario o contrasena incorrectos</div>
+        <button type="submit" class="login-btn" id="loginBtn">Iniciar Sesion</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Selector -->
+  <div class="selector-container">
+    <div class="selector-header">
+      <h1>Verificador de Envios</h1>
+      <p>Selecciona que tipo de pedidos verificar</p>
+    </div>
+
+    <div class="selector-options">
+      <a href="index.html" class="selector-option option-ml">
+        <div class="option-icon">ML</div>
+        <div class="option-info">
+          <div class="option-title">MercadoLibre</div>
+          <div class="option-description">Envios Flex, Colecta y Pickit</div>
+        </div>
+        <div class="option-arrow">></div>
+      </a>
+
+      <a href="mayorista.html" class="selector-option option-mayorista">
+        <div class="option-icon">M</div>
+        <div class="option-info">
+          <div class="option-title">Mayoristas</div>
+          <div class="option-description">Pedidos Jumpseller</div>
+        </div>
+        <div class="option-arrow">></div>
+      </a>
+    </div>
+
+    <div class="selector-footer">
+      Verificador de Envios v2.0
+    </div>
+  </div>
+
+  <script>
+    // Verificar autenticación
+    async function checkAuth() {
+      try {
+        var response = await fetch('/api/auth/check');
+        var data = await response.json();
+
+        if (data.authenticated) {
+          document.getElementById('loginOverlay').classList.add('hidden');
+        } else {
+          document.getElementById('loginOverlay').classList.remove('hidden');
+        }
+      } catch (error) {
+        console.error('Error verificando autenticación:', error);
+        document.getElementById('loginOverlay').classList.remove('hidden');
+      }
+    }
+
+    // Login
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      var username = document.getElementById('loginUser').value;
+      var password = document.getElementById('loginPassword').value;
+      var loginBtn = document.getElementById('loginBtn');
+      var loginError = document.getElementById('loginError');
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Iniciando...';
+      loginError.classList.remove('show');
+
+      try {
+        var response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username, password: password })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+          document.getElementById('loginOverlay').classList.add('hidden');
+        } else {
+          loginError.textContent = data.error || 'Error de autenticación';
+          loginError.classList.add('show');
+        }
+      } catch (error) {
+        loginError.textContent = 'Error de conexión';
+        loginError.classList.add('show');
+      }
+
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Iniciar Sesion';
+    });
+
+    // Detectar si es PC y redirigir (opcional - por ahora mantiene el selector)
+    function checkDevice() {
+      var width = window.innerWidth;
+      // Si es PC (> 768px) podríamos redirigir a una vista unificada
+      // Por ahora dejamos el selector para todos los dispositivos
+      // if (width > 768) {
+      //   window.location.href = 'index.html';
+      // }
+    }
+
+    // Iniciar
+    checkAuth();
+    checkDevice();
+  </script>
+</body>
+</html>

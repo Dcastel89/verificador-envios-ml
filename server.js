@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const scheduler = require('./scheduler');
+const jumpsellerRouter = require('./jumpseller');
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -153,6 +154,10 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) 
   );
   sheets = google.sheets({ version: 'v4', auth: auth });
 }
+
+// Configurar y montar el módulo Jumpseller (Mayoristas)
+jumpsellerRouter.configure(sheets, SHEET_ID);
+app.use(jumpsellerRouter);
 
 // Cuentas de MercadoLibre - los tokens se actualizan desde Google Sheets
 const accounts = [
@@ -2574,7 +2579,7 @@ app.post('/api/barcodes/reload', async function(req, res) {
 // ERRORES DE SKU
 // ============================================
 
-async function saveSkuError(sku, descripcion, nota, envioId, cuenta) {
+async function saveSkuError(sku, descripcion, nota, envioId, cuenta, itemId) {
   if (!sheets || !SHEET_ID) return false;
 
   try {
@@ -2600,10 +2605,10 @@ async function saveSkuError(sku, descripcion, nota, envioId, cuenta) {
 
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: 'Errores_SKU!A1:G1',
+          range: 'Errores_SKU!A1:H1',
           valueInputOption: 'USER_ENTERED',
           resource: {
-            values: [['Fecha', 'Hora', 'SKU', 'Descripcion', 'Nota', 'Envio', 'Cuenta']]
+            values: [['Fecha', 'Hora', 'SKU', 'Descripcion', 'Nota', 'Envio', 'Cuenta', 'ID_ML']]
           }
         });
 
@@ -2618,14 +2623,14 @@ async function saveSkuError(sku, descripcion, nota, envioId, cuenta) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: 'Errores_SKU!A:G',
+      range: 'Errores_SKU!A:H',
       valueInputOption: 'USER_ENTERED',
       resource: {
-        values: [[fecha, hora, sku, descripcion || '', nota || '', envioId || '', cuenta || '']]
+        values: [[fecha, hora, sku, descripcion || '', nota || '', envioId || '', cuenta || '', itemId || '']]
       }
     });
 
-    console.log('Error de SKU reportado: ' + sku);
+    console.log('Error de SKU reportado: ' + sku + ' (ID_ML: ' + (itemId || 'N/A') + ')');
     return true;
   } catch (error) {
     console.error('Error guardando error de SKU:', error.message);
@@ -2639,12 +2644,13 @@ app.post('/api/error-sku', async function(req, res) {
   var nota = req.body.nota || '';
   var envioId = req.body.envioId || '';
   var cuenta = req.body.cuenta || '';
+  var itemId = req.body.itemId || '';
 
   if (!sku) {
     return res.status(400).json({ error: 'SKU es requerido' });
   }
 
-  var success = await saveSkuError(sku.trim(), descripcion, nota, envioId, cuenta);
+  var success = await saveSkuError(sku.trim(), descripcion, nota, envioId, cuenta, itemId);
 
   if (success) {
     res.json({ ok: true, message: 'Error reportado', sku: sku });
@@ -3179,6 +3185,15 @@ app.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Rutas para selector y mayorista
+app.get('/selector', function(req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'selector.html'));
+});
+
+app.get('/mayorista', function(req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'mayorista.html'));
+});
+
 // ============================================
 // INICIO DEL SERVIDOR
 // ============================================
@@ -3189,6 +3204,8 @@ async function initializeServer() {
   try {
     await loadTokensFromSheets();
     await loadBarcodesFromSheets();
+    // Cargar tokens de Jumpseller (Mayoristas)
+    await jumpsellerRouter.loadJumpsellerTokens();
     console.log('Datos cargados exitosamente');
   } catch (error) {
     console.error('Error cargando datos:', error.message);

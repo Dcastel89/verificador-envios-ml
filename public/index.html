@@ -521,6 +521,7 @@
       var errorModalSend = document.getElementById('errorModalSend');
       var pendingErrorSku = null;
       var pendingErrorDesc = null;
+      var pendingErrorItemId = null;
 
       function switchView(view) {
         currentView = view;
@@ -751,11 +752,13 @@
           reportBtn.title = 'Reportar error de SKU';
           reportBtn.setAttribute('data-sku', item.sku);
           reportBtn.setAttribute('data-desc', item.description || item.title || '');
+          reportBtn.setAttribute('data-item-id', item.id || '');
           reportBtn.onclick = function(e) {
             e.stopPropagation();
             var sku = this.getAttribute('data-sku');
             var desc = this.getAttribute('data-desc');
-            showErrorModal(sku, desc);
+            var itemId = this.getAttribute('data-item-id');
+            showErrorModal(sku, desc, itemId);
           };
           card.appendChild(reportBtn);
 
@@ -999,9 +1002,10 @@
       modalSave.onclick = saveBarcodeMapping;
 
       // Funciones del modal de error SKU
-      function showErrorModal(sku, description) {
+      function showErrorModal(sku, description, itemId) {
         pendingErrorSku = sku;
         pendingErrorDesc = description;
+        pendingErrorItemId = itemId || null;
         errorModalSku.textContent = sku + (description ? ' - ' + description : '');
         errorModalNote.value = '';
         errorModalOverlay.classList.add('show');
@@ -1011,6 +1015,7 @@
         errorModalOverlay.classList.remove('show');
         pendingErrorSku = null;
         pendingErrorDesc = null;
+        pendingErrorItemId = null;
       }
 
       function sendErrorReport() {
@@ -1026,7 +1031,8 @@
             descripcion: pendingErrorDesc || '',
             nota: nota,
             envioId: currentShipmentId,
-            cuenta: currentAccount
+            cuenta: currentAccount,
+            itemId: pendingErrorItemId || ''
           })
         })
         .then(function(response) { return response.json(); })
