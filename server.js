@@ -6,7 +6,7 @@ const path = require('path');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const scheduler = require('./scheduler');
-const { buildVerificationPrompt, buildExtractionPrompt, buildConfigDescriptionPrompt, getProductConfig } = require('./prompts');
+const { buildVerificationPrompt, buildExtractionPrompt, buildConfigDescriptionPrompt, getProductConfig, loadConfig } = require('./prompts');
 const jumpsellerRouter = require('./jumpseller');
 const auth = require('./auth');
 const barcodesRouter = require('./barcodes');
@@ -1809,6 +1809,61 @@ app.post('/api/vision/analyze', async function(req, res) {
     if (result.codigoRotuladora && barcodesRouter.getSkuByBarcode(result.codigoRotuladora)) {
       result.skuVinculado = barcodesRouter.getSkuByBarcode(result.codigoRotuladora);
       console.log('Código rotuladora ' + result.codigoRotuladora + ' -> SKU: ' + result.skuVinculado);
+    }
+
+    // Buscar SKUs sugeridos por coincidencia con modelo/tipo/texto
+    if (!result.skuVinculado) {
+      try {
+        var config = loadConfig();
+        var skuRules = config.skuRules || {};
+        var tipos = config.tipos || {};
+        var modelo = (result.modeloDetectado || '').toLowerCase();
+        var texto = (result.textoEncontrado || '').toLowerCase();
+        var tipo = (result.tipoProducto || '').toLowerCase();
+        var sugeridos = [];
+
+        var ruleKeys = Object.keys(skuRules);
+        for (var r = 0; r < ruleKeys.length; r++) {
+          var key = ruleKeys[r];
+          var rule = skuRules[key];
+          var score = 0;
+
+          // Buscar modelo en formatoModelo o dondeVerificar
+          if (modelo && modelo.length > 1) {
+            var fmt = (rule.formatoModelo || '').toLowerCase();
+            var donde = (rule.dondeVerificar || '').toLowerCase();
+            var nota = (typeof rule === 'object' ? (rule.nota || '') : '').toLowerCase();
+            if (fmt.indexOf(modelo) !== -1) score += 3;
+            if (donde.indexOf(modelo) !== -1) score += 2;
+            if (nota.indexOf(modelo) !== -1) score += 1;
+          }
+
+          // Buscar texto encontrado que coincida con nota o dondeVerificar
+          if (texto && score === 0) {
+            var notaText = (typeof rule === 'object' ? (rule.nota || '') : '').toLowerCase();
+            var dondeText = (rule.dondeVerificar || '').toLowerCase();
+            // Buscar palabras clave del texto en la regla
+            var palabras = texto.split(/\s+/).filter(function(p) { return p.length > 3; });
+            var matches = 0;
+            for (var p = 0; p < palabras.length; p++) {
+              if (notaText.indexOf(palabras[p]) !== -1 || dondeText.indexOf(palabras[p]) !== -1) matches++;
+            }
+            if (matches >= 2) score += matches;
+          }
+
+          if (score > 0) {
+            sugeridos.push({ sku: key, score: score });
+          }
+        }
+
+        // Ordenar por score y tomar los mejores
+        sugeridos.sort(function(a, b) { return b.score - a.score; });
+        if (sugeridos.length > 0) {
+          result.skusSugeridos = sugeridos.slice(0, 3).map(function(s) { return s.sku; });
+        }
+      } catch (e) {
+        console.error('Error buscando SKUs sugeridos:', e.message);
+      }
     }
 
     res.json({

@@ -361,6 +361,13 @@
     <button type="button" class="capture-btn" id="captureBtn">Sacar foto para IA</button>
   </div>
 
+  <!-- Barra multi-foto (oculta por defecto) -->
+  <div id="multiPhotoBar" class="config-actions hidden">
+    <button type="button" class="btn-edit" id="btnOtraFoto">+ Otra foto</button>
+    <button type="button" class="btn-save" id="btnEnviarFotos">Enviar analisis</button>
+    <span id="photoCount" style="color:#aaa;font-size:0.85em;align-self:center"></span>
+  </div>
+
   <!-- Status -->
   <div class="status" id="status"></div>
 
@@ -596,66 +603,66 @@
     // ================================
     // VISION (FOTO)
     // ================================
-    function sendPhotoToVision(imageBase64) {
+    function sendPhotosToVision(images) {
       var photoSku = document.getElementById('skuInput').value.trim();
       var isConfigMode = photoSku.length > 0;
 
+      document.getElementById('multiPhotoBar').classList.add('hidden');
       captureBtn.disabled = true;
       captureBtn.textContent = 'Analizando...';
+      stopCamera();
 
+      var body = { images: images };
       if (isConfigMode) {
-        // Con SKU: mandar a IA en modo config-describe
-        showStatus('IA describiendo producto para config...', 'loading');
-        authFetch(API_URL + '/api/vision/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ images: [imageBase64], mode: 'config-describe', sku: photoSku })
-        })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (data.error) {
-              showStatus('Error: ' + data.error, 'error');
-            } else {
-              showStatus('Descripcion generada', 'success');
-              showConfigFromVision(data, photoSku);
-            }
-            captureBtn.disabled = false;
-            captureBtn.textContent = 'Sacar foto para IA';
-          })
-          .catch(function(err) {
-            showStatus('Error: ' + err.message, 'error');
-            captureBtn.disabled = false;
-            captureBtn.textContent = 'Sacar foto para IA';
-          });
-      } else {
-        // Sin SKU: identificación normal
-        showStatus('IA identificando producto...', 'loading');
-        authFetch(API_URL + '/api/vision/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ images: [imageBase64] })
-        })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (data.error) {
-              showStatus('Error: ' + data.error, 'error');
-            } else {
-              showStatus('Analisis completado', 'success');
-              showVisionResult(data);
-            }
-            captureBtn.disabled = false;
-            captureBtn.textContent = 'Sacar foto para IA';
-          })
-          .catch(function(err) {
-            showStatus('Error: ' + err.message, 'error');
-            captureBtn.disabled = false;
-            captureBtn.textContent = 'Sacar foto para IA';
-          });
+        body.mode = 'config-describe';
+        body.sku = photoSku;
       }
+
+      showStatus('IA analizando ' + images.length + ' foto' + (images.length > 1 ? 's' : '') + '...', 'loading');
+
+      authFetch(API_URL + '/api/vision/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            showStatus('Error: ' + data.error, 'error');
+          } else if (isConfigMode) {
+            showStatus('Descripcion generada', 'success');
+            showConfigFromVision(data, photoSku);
+          } else {
+            showStatus('Analisis completado', 'success');
+            showVisionResult(data);
+          }
+          capturedImages = [];
+          captureBtn.disabled = false;
+          captureBtn.textContent = 'Sacar foto para IA';
+        })
+        .catch(function(err) {
+          showStatus('Error: ' + err.message, 'error');
+          capturedImages = [];
+          captureBtn.disabled = false;
+          captureBtn.textContent = 'Sacar foto para IA';
+        });
     }
 
     function showVisionResult(data) {
       var html = '<h3>Resultado de IA</h3>';
+      // SKU vinculado (por código rotuladora)
+      if (data.skuVinculado) {
+        html += '<div class="result-sku">' + data.skuVinculado + '</div>';
+      }
+      // SKUs sugeridos (por coincidencia de modelo/texto)
+      if (data.skusSugeridos && data.skusSugeridos.length > 0) {
+        html += '<div class="result-text" style="border-left:3px solid #3b82f6;padding-left:10px"><strong>SKUs posibles:</strong> ';
+        for (var s = 0; s < data.skusSugeridos.length; s++) {
+          if (s > 0) html += ', ';
+          html += '<span style="color:#6c9fff;cursor:pointer;text-decoration:underline" onclick="document.getElementById(\'skuInput\').value=\'' + data.skusSugeridos[s] + '\'">' + data.skusSugeridos[s] + '</span>';
+        }
+        html += '</div>';
+      }
       var rows = [];
       if (data.tipoProducto) rows.push(['Tipo', data.tipoProducto]);
       if (data.modeloDetectado) rows.push(['Modelo', data.modeloDetectado]);
@@ -843,6 +850,8 @@
       cameraMode = '';
       cameraContainer.classList.remove('active');
       cameraContainer.classList.remove('frozen');
+      document.getElementById('multiPhotoBar').classList.add('hidden');
+      capturedImages = [];
       scanBtn.textContent = 'Escanear codigo';
       scanBtn.classList.remove('active');
 
@@ -852,6 +861,8 @@
         video.srcObject = null;
       }
     }
+
+    var capturedImages = [];
 
     function capturePhoto() {
       if (!video.srcObject) return;
@@ -869,8 +880,24 @@
       cameraContainer.classList.add('frozen');
 
       var imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-      sendPhotoToVision(imageBase64);
+      capturedImages.push(imageBase64);
+
+      // Mostrar barra multi-foto
+      var bar = document.getElementById('multiPhotoBar');
+      bar.classList.remove('hidden');
+      document.getElementById('photoCount').textContent = capturedImages.length + ' foto' + (capturedImages.length > 1 ? 's' : '');
+      showStatus('Foto ' + capturedImages.length + ' capturada', 'success');
     }
+
+    document.getElementById('btnOtraFoto').onclick = function() {
+      // Descongelar para tomar otra
+      cameraContainer.classList.remove('frozen');
+    };
+
+    document.getElementById('btnEnviarFotos').onclick = function() {
+      if (capturedImages.length === 0) return;
+      sendPhotosToVision(capturedImages);
+    };
 
     // ================================
     // USB SCANNER
