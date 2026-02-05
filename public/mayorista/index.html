@@ -131,6 +131,22 @@
     .modal-btn.primary { background: #7c3aed; color: white; }
     .modal-btn.secondary { background: #f3f4f6; color: #374151; }
 
+    /* Modo edición */
+    .edit-mode-btn { padding: 6px 14px; border: 2px solid #7c3aed; background: white; color: #7c3aed; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .edit-mode-btn.active { background: #7c3aed; color: white; }
+    .edit-controls { display: none; }
+    .items-section.editing .edit-controls { display: flex; }
+    .edit-delete-btn { position: absolute; top: 8px; left: 8px; width: 32px; height: 32px; border-radius: 50%; background: #fef2f2; color: #dc2626; border: 2px solid #fecaca; font-size: 18px; font-weight: 700; cursor: pointer; align-items: center; justify-content: center; z-index: 5; transition: all 0.2s; }
+    .edit-delete-btn:hover { background: #dc2626; color: white; border-color: #dc2626; }
+    .qty-controls { align-items: center; gap: 8px; margin-top: 8px; }
+    .qty-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #e5e7eb; background: white; font-size: 20px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; color: #374151; }
+    .qty-btn:hover { border-color: #7c3aed; background: #f5f3ff; }
+    .qty-btn:active { transform: scale(0.9); }
+    .qty-display { font-size: 16px; font-weight: 700; color: #374151; min-width: 24px; text-align: center; }
+    .add-item-btn { display: none; width: 100%; padding: 16px; border: 2px dashed #d1d5db; background: #f9fafb; color: #6b7280; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .add-item-btn:hover { border-color: #7c3aed; color: #7c3aed; background: #f5f3ff; }
+    .items-section.editing .add-item-btn { display: block; }
+
     /* Scan mode indicator */
     .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
     .scan-mode-indicator.show { display: block; }
@@ -334,9 +350,13 @@
       <div class="items-section hidden" id="itemsSection">
         <div class="items-header">
           <h2>Productos a verificar</h2>
-          <span class="items-count" id="itemsCount">0/0</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="items-count" id="itemsCount">0/0</span>
+            <button type="button" class="edit-mode-btn" id="editModeBtn">Editar</button>
+          </div>
         </div>
         <div id="itemsList"></div>
+        <button type="button" class="add-item-btn" id="addItemBtn">+ Agregar producto</button>
       </div>
       <button type="button" class="reset-btn hidden" id="resetBtn">Nueva orden</button>
     </div>
@@ -373,6 +393,25 @@
       <div class="modal-buttons">
         <button type="button" class="modal-btn secondary" id="modalCancel">Cancelar</button>
         <button type="button" class="modal-btn primary" id="modalSave">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para agregar producto -->
+  <div class="modal-overlay" id="addItemModalOverlay">
+    <div class="modal">
+      <h3>Agregar producto</h3>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <input type="text" id="addItemSku" class="login-input" placeholder="SKU (ej: FT-A15)" style="font-family:monospace;">
+        <input type="text" id="addItemName" class="login-input" placeholder="Nombre del producto">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label style="font-size:14px;color:#374151;font-weight:600;">Cantidad:</label>
+          <input type="number" id="addItemQty" class="login-input" value="1" min="1" style="width:80px;text-align:center;">
+        </div>
+      </div>
+      <div class="modal-buttons" style="margin-top:16px;">
+        <button type="button" class="modal-btn secondary" id="addItemCancel">Cancelar</button>
+        <button type="button" class="modal-btn primary" id="addItemConfirm">Agregar</button>
       </div>
     </div>
   </div>
@@ -509,6 +548,7 @@
       var scanMode = 'order'; // 'order' o 'product'
       var pendingBarcode = null;
       var selectedSkuForModal = null;
+      var editMode = false;
 
       var orderInput = document.getElementById('orderInput');
       var searchBtn = document.getElementById('searchBtn');
@@ -919,6 +959,108 @@
       }
 
       // ============================================
+      // MODO EDICION
+      // ============================================
+      var editModeBtn = document.getElementById('editModeBtn');
+      var addItemBtn = document.getElementById('addItemBtn');
+
+      function toggleEditMode() {
+        editMode = !editMode;
+        editModeBtn.textContent = editMode ? 'Listo' : 'Editar';
+        editModeBtn.classList.toggle('active', editMode);
+        itemsSection.classList.toggle('editing', editMode);
+      }
+
+      function deleteItem(index) {
+        var item = currentItems[index];
+        var nombre = item.name || item.sku || 'este producto';
+        var verificados = getCheckedCount(index);
+        var msg = 'Eliminar "' + nombre + '"?';
+        if (verificados > 0) {
+          msg += '\n(tiene ' + verificados + ' unidad(es) verificada(s))';
+        }
+        if (!confirm(msg)) return;
+
+        currentItems.splice(index, 1);
+
+        // Reordenar unitChecks
+        var newChecks = {};
+        for (var i = 0; i < currentItems.length; i++) {
+          if (i < index) {
+            newChecks[i] = unitChecks[i] || [];
+          } else {
+            newChecks[i] = unitChecks[i + 1] || [];
+          }
+        }
+        unitChecks = newChecks;
+
+        renderItems();
+      }
+
+      function changeQuantity(index, delta) {
+        var item = currentItems[index];
+        var newQty = item.quantity + delta;
+        if (newQty < 1) return;
+
+        var verificados = getCheckedCount(index);
+
+        if (delta < 0 && newQty < verificados) {
+          if (!confirm('Reducir cantidad va a desmarcar unidades verificadas. Continuar?')) return;
+          // Truncar unitChecks
+          unitChecks[index] = (unitChecks[index] || []).slice(0, newQty);
+        }
+
+        item.quantity = newQty;
+        renderItems();
+      }
+
+      // Modal agregar producto
+      var addItemModalOverlay = document.getElementById('addItemModalOverlay');
+      var addItemSkuInput = document.getElementById('addItemSku');
+      var addItemNameInput = document.getElementById('addItemName');
+      var addItemQtyInput = document.getElementById('addItemQty');
+      var addItemCancel = document.getElementById('addItemCancel');
+      var addItemConfirm = document.getElementById('addItemConfirm');
+
+      function showAddItemModal() {
+        addItemSkuInput.value = '';
+        addItemNameInput.value = '';
+        addItemQtyInput.value = '1';
+        addItemModalOverlay.classList.add('show');
+        addItemSkuInput.focus();
+      }
+
+      function addNewItem() {
+        var sku = addItemSkuInput.value.trim();
+        var name = addItemNameInput.value.trim();
+        var qty = parseInt(addItemQtyInput.value) || 1;
+        if (qty < 1) qty = 1;
+
+        if (!sku && !name) {
+          showStatus('Ingresa al menos un SKU o nombre', 'error');
+          return;
+        }
+
+        currentItems.push({
+          sku: sku,
+          name: name || sku,
+          quantity: qty,
+          verificados: 0,
+          metodo: ''
+        });
+
+        unitChecks[currentItems.length - 1] = [];
+        addItemModalOverlay.classList.remove('show');
+        renderItems();
+        showStatus('Producto agregado', 'success');
+      }
+
+      addItemBtn.onclick = showAddItemModal;
+      editModeBtn.onclick = toggleEditMode;
+      addItemCancel.onclick = function() { addItemModalOverlay.classList.remove('show'); };
+      addItemConfirm.onclick = addNewItem;
+
+      // ============================================
       // RENDER ITEMS
       // ============================================
       function renderItems() {
@@ -1028,6 +1170,47 @@
             iniciarVerificacionFoto(idx);
           };
           card.appendChild(verifyBtn);
+
+          // Controles de edición (solo visibles en modo edición)
+          var deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'edit-controls edit-delete-btn';
+          deleteBtn.textContent = '\u00D7';
+          deleteBtn.title = 'Eliminar producto';
+          deleteBtn.setAttribute('data-index', i);
+          deleteBtn.onclick = function(e) {
+            e.stopPropagation();
+            deleteItem(parseInt(this.getAttribute('data-index')));
+          };
+          card.appendChild(deleteBtn);
+
+          var qtyCtrl = document.createElement('div');
+          qtyCtrl.className = 'edit-controls qty-controls';
+          var minusBtn = document.createElement('button');
+          minusBtn.type = 'button';
+          minusBtn.className = 'qty-btn';
+          minusBtn.textContent = '\u2212';
+          minusBtn.setAttribute('data-index', i);
+          minusBtn.onclick = function(e) {
+            e.stopPropagation();
+            changeQuantity(parseInt(this.getAttribute('data-index')), -1);
+          };
+          var qtyLabel = document.createElement('span');
+          qtyLabel.className = 'qty-display';
+          qtyLabel.textContent = item.quantity;
+          var plusBtn = document.createElement('button');
+          plusBtn.type = 'button';
+          plusBtn.className = 'qty-btn';
+          plusBtn.textContent = '+';
+          plusBtn.setAttribute('data-index', i);
+          plusBtn.onclick = function(e) {
+            e.stopPropagation();
+            changeQuantity(parseInt(this.getAttribute('data-index')), 1);
+          };
+          qtyCtrl.appendChild(minusBtn);
+          qtyCtrl.appendChild(qtyLabel);
+          qtyCtrl.appendChild(plusBtn);
+          info.appendChild(qtyCtrl);
 
           itemsList.appendChild(card);
         }
@@ -1866,6 +2049,10 @@
         currentAccount = '';
         alreadySaved = false;
         productoAVerificar = null;
+        editMode = false;
+        editModeBtn.textContent = 'Editar';
+        editModeBtn.classList.remove('active');
+        itemsSection.classList.remove('editing');
         orderInput.value = '';
         itemsSection.classList.add('hidden');
         resetBtn.classList.add('hidden');
