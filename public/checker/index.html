@@ -448,6 +448,7 @@
           if (productConfig.tipo) {
             html += '<div class="result-row"><span class="result-label">Tipo</span><span class="result-value">' + productConfig.tipo + '</span></div>';
           }
+          html += '<div class="result-row"><span class="result-label">Fotos requeridas</span><span class="result-value">' + (productConfig.fotosMinimas || 1) + '</span></div>';
           // Contenedor de config (vista)
           html += '<div id="configView">';
           if (productConfig.dondeVerificar) {
@@ -505,6 +506,13 @@
       ];
 
       var html = '';
+      // Selector de fotos mínimas
+      var fotosVal = pc.fotosMinimas || 1;
+      html += '<label class="config-field-label">Fotos requeridas</label>';
+      html += '<select class="config-edit-area" id="edit_fotosMinimas" style="min-height:auto;padding:8px">';
+      html += '<option value="1"' + (fotosVal == 1 ? ' selected' : '') + '>1 foto</option>';
+      html += '<option value="2"' + (fotosVal == 2 ? ' selected' : '') + '>2 fotos</option>';
+      html += '</select>';
       for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
         var val = pc[f.key] || '';
@@ -533,6 +541,8 @@
         var el = document.getElementById('edit_' + keys[i]);
         if (el) fields[keys[i]] = el.value.trim();
       }
+      var fotosEl = document.getElementById('edit_fotosMinimas');
+      if (fotosEl) fields.fotosMinimas = parseInt(fotosEl.value);
 
       showStatus('Guardando config...', 'loading');
       authFetch(API_URL + '/api/product-config', {
@@ -621,6 +631,13 @@
       html += '<label class="config-field-label">SKU (obligatorio para guardar)</label>';
       html += '<input type="text" class="config-edit-area" id="visionSku" placeholder="Escribi el SKU..." style="min-height:auto;padding:10px">';
 
+      // Selector de fotos requeridas
+      html += '<label class="config-field-label">Fotos requeridas</label>';
+      html += '<select class="config-edit-area" id="vision_fotosMinimas" style="min-height:auto;padding:8px">';
+      html += '<option value="1">1 foto</option>';
+      html += '<option value="2"' + (data.mensajeFoto ? ' selected' : '') + '>2 fotos</option>';
+      html += '</select>';
+
       // Campos editables con los valores de la IA
       for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
@@ -652,6 +669,8 @@
         var el = document.getElementById('vision_' + keys[i]);
         if (el) fields[keys[i]] = el.value.trim();
       }
+      var fotosEl = document.getElementById('vision_fotosMinimas');
+      if (fotosEl) fields.fotosMinimas = parseInt(fotosEl.value);
 
       showStatus('Guardando config para ' + sku + '...', 'loading');
       authFetch(API_URL + '/api/product-config', {

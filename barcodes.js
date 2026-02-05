@@ -276,6 +276,7 @@ router.get('/api/barcode/:barcode', function(req, res) {
     var productConfig = {
       tipo: tipo.nombre,
       skuRuleKey: skuRuleKey,
+      fotosMinimas: merged.fotosMinimas || 1,
       dondeVerificar: merged.dondeVerificar || null,
       reglaColor: merged.reglaColor || null,
       formatoModelo: merged.formatoModelo || null,
