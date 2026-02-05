@@ -15,6 +15,21 @@ var requireAuthFn = null;
 // Cache en memoria para mapeo barcode -> SKU
 var barcodeCache = {};
 
+// Normaliza barcodes que Sheets pudo convertir a notación científica (ej: 7.89123E+12 -> 7891230000000)
+function normalizeBarcode(value) {
+  var str = value.toString().trim();
+  // Si tiene E+ o e+ es notación científica, convertir al número entero
+  if (/[eE]\+/.test(str)) {
+    try {
+      var num = Number(str);
+      if (!isNaN(num) && isFinite(num)) {
+        return num.toFixed(0);
+      }
+    } catch (e) {}
+  }
+  return str;
+}
+
 // ============================================
 // CONFIGURACIÓN - Se llama desde server.js
 // ============================================
@@ -46,14 +61,16 @@ async function loadBarcodesFromSheets() {
     });
 
     var rows = response.data.values || [];
+    var fixed = 0;
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
       if (!row[0] || !row[1]) continue;
-      var barcode = row[0].toString().trim();
+      var barcode = normalizeBarcode(row[0]);
       var sku = row[1].toString().trim();
+      if (barcode !== row[0].toString().trim()) fixed++;
       barcodeCache[barcode] = sku;
     }
-    console.log('Cargados ' + (rows.length - 1) + ' códigos de Barcodes');
+    console.log('Cargados ' + (rows.length - 1) + ' códigos de Barcodes' + (fixed ? ' (' + fixed + ' corregidos de notación científica)' : ''));
   } catch (error) {
     if (error.message && error.message.includes('Unable to parse range')) {
       console.log('Hoja Barcodes no existe, creándola...');
@@ -71,14 +88,16 @@ async function loadBarcodesFromSheets() {
     });
 
     var rows2 = response2.data.values || [];
+    var fixed2 = 0;
     for (var i = 1; i < rows2.length; i++) {
       var row = rows2[i];
       if (!row[0] || !row[1]) continue;
-      var codigo = row[0].toString().trim();
+      var codigo = normalizeBarcode(row[0]);
       var sku = row[1].toString().trim();
+      if (codigo !== row[0].toString().trim()) fixed2++;
       barcodeCache[codigo] = sku;
     }
-    console.log('Cargados ' + (rows2.length - 1) + ' códigos de Rotuladora');
+    console.log('Cargados ' + (rows2.length - 1) + ' códigos de Rotuladora' + (fixed2 ? ' (' + fixed2 + ' corregidos de notación científica)' : ''));
   } catch (error) {
     if (error.message && error.message.includes('Unable to parse range')) {
       console.log('Hoja Rotuladora no existe (se creará cuando agregues datos)');
@@ -144,11 +163,11 @@ async function saveBarcodeMapping(barcode, sku, description) {
     }
 
     if (rowIndex === -1) {
-      // Agregar nuevo
+      // Agregar nuevo (RAW para que Sheets no convierta barcodes a notación científica)
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'Barcodes!A:C',
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW',
         resource: {
           values: [[barcode, sku, description || '']]
         }
@@ -158,7 +177,7 @@ async function saveBarcodeMapping(barcode, sku, description) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: 'Barcodes!A' + rowIndex + ':C' + rowIndex,
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW',
         resource: {
           values: [[barcode, sku, description || '']]
         }
@@ -187,8 +206,10 @@ router.get('/api/barcode/:barcode', function(req, res) {
   var sku = getSkuByBarcode(barcode);
 
   if (sku) {
+    console.log('Barcode encontrado: ' + barcode + ' -> ' + sku);
     res.json({ barcode: barcode, sku: sku, found: true });
   } else {
+    console.log('Barcode NO encontrado: "' + barcode + '" (cache tiene ' + Object.keys(barcodeCache).length + ' códigos)');
     res.json({ barcode: barcode, sku: null, found: false });
   }
 });
@@ -219,6 +240,20 @@ router.get('/api/barcodes', function(req, res) {
     mappings.push({ barcode: barcode, sku: barcodeCache[barcode] });
   }
   res.json({ mappings: mappings, count: mappings.length });
+});
+
+// Buscar barcodes por SKU (búsqueda parcial)
+router.get('/api/barcodes/search', function(req, res) {
+  var q = (req.query.q || '').toUpperCase().trim();
+  if (!q) return res.json({ results: [] });
+  var results = [];
+  for (var barcode in barcodeCache) {
+    var sku = barcodeCache[barcode];
+    if (sku.toUpperCase().indexOf(q) !== -1) {
+      results.push({ barcode: barcode, sku: sku });
+    }
+  }
+  res.json({ results: results });
 });
 
 // Recargar mapeos desde Sheets

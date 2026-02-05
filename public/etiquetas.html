@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador de Etiquetas QR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f3f4f6;
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      color: white;
+      padding: 16px 20px;
+      text-align: center;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; }
+    .header a { color: rgba(255,255,255,0.8); font-size: 13px; text-decoration: none; }
+    .header a:hover { color: white; }
+    .container { max-width: 600px; margin: 0 auto; padding: 16px; }
+
+    .search-section {
+      background: white; border-radius: 12px; padding: 16px;
+      margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .search-section h2 { font-size: 16px; margin-bottom: 12px; color: #374151; }
+    .search-row { display: flex; gap: 8px; }
+    .search-input {
+      flex: 1; padding: 12px 14px; font-size: 16px;
+      border: 2px solid #e5e7eb; border-radius: 8px; outline: none;
+    }
+    .search-input:focus { border-color: #059669; }
+    .search-results {
+      margin-top: 12px; max-height: 250px; overflow-y: auto;
+    }
+    .search-result {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px;
+      margin-bottom: 6px; cursor: pointer; transition: background 0.15s;
+    }
+    .search-result:hover { background: #f0fdf4; border-color: #059669; }
+    .result-sku { font-weight: 600; font-size: 14px; color: #111827; }
+    .result-barcode { font-size: 12px; color: #6b7280; font-family: monospace; }
+    .result-add { color: #059669; font-weight: 700; font-size: 18px; }
+
+    .queue-section {
+      background: white; border-radius: 12px; padding: 16px;
+      margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .queue-section h2 { font-size: 16px; margin-bottom: 12px; color: #374151; }
+    .queue-empty { text-align: center; color: #9ca3af; padding: 20px; font-size: 14px; }
+    .queue-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px;
+      margin-bottom: 6px;
+    }
+    .queue-item-info { flex: 1; }
+    .queue-item-sku { font-weight: 600; font-size: 14px; }
+    .queue-item-barcode { font-size: 12px; color: #6b7280; font-family: monospace; }
+    .queue-item-qty {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .qty-btn {
+      width: 30px; height: 30px; border-radius: 6px; border: 1px solid #d1d5db;
+      background: white; font-size: 16px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .qty-btn:hover { background: #f3f4f6; }
+    .qty-btn.remove { color: #dc2626; border-color: #fecaca; }
+    .qty-btn.remove:hover { background: #fef2f2; }
+    .qty-value {
+      width: 52px; text-align: center; font-size: 16px; font-weight: 600;
+      border: 1px solid #d1d5db; border-radius: 6px; padding: 4px;
+    }
+
+    .generate-btn {
+      width: 100%; padding: 14px; background: #059669; color: white;
+      border: none; border-radius: 10px; font-size: 16px; font-weight: 700;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .generate-btn:hover { background: #047857; }
+    .generate-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    .preview-section {
+      background: white; border-radius: 12px; padding: 16px;
+      margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      display: none;
+    }
+    .preview-section h2 { font-size: 16px; margin-bottom: 12px; color: #374151; }
+    .preview-label {
+      display: inline-flex; flex-direction: column; align-items: center;
+      border: 1px dashed #d1d5db; padding: 8px; margin: 4px; border-radius: 4px;
+      width: 140px;
+    }
+    .preview-label canvas { max-width: 80px !important; max-height: 80px !important; }
+    .preview-label-sku { font-size: 11px; font-weight: 600; margin-top: 4px; text-align: center; word-break: break-all; }
+
+    /* QR temporal oculto */
+    #qrTemp { position: absolute; left: -9999px; top: -9999px; }
+
+    /* Login overlay (mismo estilo que selector) */
+    .login-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .login-overlay.hidden { display: none; }
+    .login-box { background: white; border-radius: 16px; padding: 32px; max-width: 360px; width: 100%; }
+    .login-logo { text-align: center; margin-bottom: 24px; }
+    .login-logo h1 { font-size: 24px; color: #059669; margin-bottom: 8px; }
+    .login-logo p { font-size: 14px; color: #6b7280; }
+    .login-form { display: flex; flex-direction: column; gap: 16px; }
+    .login-input { padding: 14px 16px; font-size: 16px; border: 2px solid #e5e7eb; border-radius: 8px; outline: none; }
+    .login-input:focus { border-color: #059669; }
+    .login-btn { padding: 14px; background: #059669; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .login-btn:hover { background: #047857; }
+    .login-btn:disabled { background: #9ca3af; }
+    .login-error { background: #fef2f2; color: #dc2626; padding: 12px; border-radius: 8px; font-size: 14px; text-align: center; display: none; }
+    .login-error.show { display: block; }
+  </style>
+</head>
+<body>
+  <!-- Login -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <div class="login-logo">
+        <h1>Etiquetas QR</h1>
+        <p>Inicia sesion para continuar</p>
+      </div>
+      <form class="login-form" id="loginForm">
+        <input type="text" class="login-input" id="loginUser" placeholder="Usuario" autocomplete="username" required>
+        <input type="password" class="login-input" id="loginPassword" placeholder="Contrasena" autocomplete="current-password" required>
+        <div class="login-error" id="loginError"></div>
+        <button type="submit" class="login-btn" id="loginBtn">Iniciar Sesion</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="header">
+    <h1>Generador de Etiquetas QR</h1>
+    <a href="/selector">Volver al selector</a>
+  </div>
+
+  <div class="container">
+    <!-- Buscar SKU -->
+    <div class="search-section">
+      <h2>Buscar producto por SKU</h2>
+      <div class="search-row">
+        <input type="text" class="search-input" id="searchInput" placeholder="Escribi el SKU..." autocomplete="off">
+      </div>
+      <div class="search-results" id="searchResults"></div>
+    </div>
+
+    <!-- Cola de impresion -->
+    <div class="queue-section">
+      <h2>Etiquetas a imprimir</h2>
+      <div id="queueList">
+        <div class="queue-empty" id="queueEmpty">Agrega productos buscando por SKU</div>
+      </div>
+      <button type="button" class="generate-btn" id="generateBtn" disabled>Generar PDF</button>
+    </div>
+
+    <!-- Preview -->
+    <div class="preview-section" id="previewSection">
+      <h2>Vista previa</h2>
+      <div id="previewLabels"></div>
+    </div>
+  </div>
+
+  <!-- QR temporal para generar imagenes -->
+  <div id="qrTemp"></div>
+
+  <script>
+    var API_URL = window.location.origin;
+    var printQueue = []; // [{barcode, sku, qty}]
+    var sessionToken = null;
+
+    // ============================================
+    // AUTH
+    // ============================================
+
+    function getToken() {
+      var cookies = document.cookie.split(';');
+      for (var i = 0; i < cookies.length; i++) {
+        var c = cookies[i].trim();
+        if (c.indexOf('session_token=') === 0) return c.substring(14);
+      }
+      return null;
+    }
+
+    function authFetch(url, options) {
+      options = options || {};
+      options.headers = options.headers || {};
+      var token = getToken();
+      if (token) options.headers['x-session-token'] = token;
+      options.credentials = 'include';
+      return fetch(url, options);
+    }
+
+    async function checkAuth() {
+      try {
+        var r = await fetch('/api/auth/check', { credentials: 'include' });
+        var d = await r.json();
+        if (d.authenticated) {
+          document.getElementById('loginOverlay').classList.add('hidden');
+          return true;
+        }
+      } catch (e) {}
+      document.getElementById('loginOverlay').classList.remove('hidden');
+      return false;
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      var user = document.getElementById('loginUser').value;
+      var pass = document.getElementById('loginPassword').value;
+      var btn = document.getElementById('loginBtn');
+      var err = document.getElementById('loginError');
+      btn.disabled = true;
+      err.classList.remove('show');
+      try {
+        var r = await fetch('/api/auth/login', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user, password: pass })
+        });
+        var d = await r.json();
+        if (d.success) {
+          document.getElementById('loginOverlay').classList.add('hidden');
+        } else {
+          err.textContent = d.error || 'Error';
+          err.classList.add('show');
+        }
+      } catch (ex) {
+        err.textContent = 'Error de conexion';
+        err.classList.add('show');
+      }
+      btn.disabled = false;
+    });
+
+    // ============================================
+    // BUSQUEDA
+    // ============================================
+
+    var searchInput = document.getElementById('searchInput');
+    var searchResults = document.getElementById('searchResults');
+    var searchTimeout = null;
+
+    searchInput.addEventListener('input', function() {
+      clearTimeout(searchTimeout);
+      var q = searchInput.value.trim();
+      if (q.length < 2) { searchResults.innerHTML = ''; return; }
+      searchTimeout = setTimeout(function() { doSearch(q); }, 300);
+    });
+
+    async function doSearch(q) {
+      try {
+        var r = await authFetch(API_URL + '/api/barcodes/search?q=' + encodeURIComponent(q));
+        var d = await r.json();
+        renderResults(d.results || []);
+      } catch (e) {
+        searchResults.innerHTML = '<div style="color:#dc2626;padding:8px">Error buscando</div>';
+      }
+    }
+
+    function renderResults(results) {
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div style="color:#9ca3af;padding:8px;text-align:center">Sin resultados</div>';
+        return;
+      }
+      // Agrupar por SKU (un SKU puede tener varios barcodes)
+      var bysku = {};
+      results.forEach(function(r) {
+        if (!bysku[r.sku]) bysku[r.sku] = [];
+        bysku[r.sku].push(r.barcode);
+      });
+
+      var html = '';
+      for (var sku in bysku) {
+        var bc = bysku[sku][0]; // Tomar el primer barcode
+        var alreadyInQueue = printQueue.some(function(item) { return item.sku === sku; });
+        html += '<div class="search-result" onclick="addToQueue(\'' + escapeHtml(bc) + '\',\'' + escapeHtml(sku) + '\')">'
+          + '<div><div class="result-sku">' + escapeHtml(sku) + '</div>'
+          + '<div class="result-barcode">' + escapeHtml(bc) + '</div></div>'
+          + '<div class="result-add">' + (alreadyInQueue ? '&#10003;' : '+') + '</div></div>';
+      }
+      searchResults.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    // ============================================
+    // COLA DE IMPRESION
+    // ============================================
+
+    function addToQueue(barcode, sku) {
+      var existing = printQueue.find(function(item) { return item.sku === sku; });
+      if (existing) {
+        existing.qty++;
+      } else {
+        printQueue.push({ barcode: barcode, sku: sku, qty: 1 });
+      }
+      renderQueue();
+      // Refresh search results to update checkmarks
+      var q = searchInput.value.trim();
+      if (q.length >= 2) doSearch(q);
+    }
+
+    function removeFromQueue(index) {
+      printQueue.splice(index, 1);
+      renderQueue();
+    }
+
+    function changeQty(index, delta) {
+      printQueue[index].qty = Math.max(1, printQueue[index].qty + delta);
+      renderQueue();
+    }
+
+    function setQty(index, val) {
+      var n = parseInt(val) || 1;
+      printQueue[index].qty = Math.max(1, n);
+      renderQueue();
+    }
+
+    function renderQueue() {
+      var list = document.getElementById('queueList');
+      var btn = document.getElementById('generateBtn');
+      var empty = document.getElementById('queueEmpty');
+
+      if (printQueue.length === 0) {
+        list.innerHTML = '';
+        list.appendChild(empty);
+        empty.style.display = 'block';
+        btn.disabled = true;
+        return;
+      }
+
+      empty.style.display = 'none';
+      var total = 0;
+      var html = '';
+      printQueue.forEach(function(item, i) {
+        total += item.qty;
+        html += '<div class="queue-item">'
+          + '<div class="queue-item-info">'
+          + '<div class="queue-item-sku">' + escapeHtml(item.sku) + '</div>'
+          + '<div class="queue-item-barcode">' + escapeHtml(item.barcode) + '</div>'
+          + '</div>'
+          + '<div class="queue-item-qty">'
+          + '<button type="button" class="qty-btn remove" onclick="removeFromQueue(' + i + ')">X</button>'
+          + '<button type="button" class="qty-btn" onclick="changeQty(' + i + ',-1)">-</button>'
+          + '<input type="number" class="qty-value" value="' + item.qty + '" min="1" onchange="setQty(' + i + ',this.value)">'
+          + '<button type="button" class="qty-btn" onclick="changeQty(' + i + ',1)">+</button>'
+          + '</div></div>';
+      });
+      list.innerHTML = html;
+      btn.disabled = false;
+      btn.textContent = 'Generar PDF (' + total + ' etiqueta' + (total !== 1 ? 's' : '') + ')';
+    }
+
+    // ============================================
+    // GENERAR PDF
+    // ============================================
+
+    document.getElementById('generateBtn').addEventListener('click', generatePDF);
+
+    async function generatePDF() {
+      var btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      btn.textContent = 'Generando...';
+
+      try {
+        await doGeneratePDF();
+      } catch (e) {
+        alert('Error generando PDF: ' + e.message);
+        console.error(e);
+      }
+
+      btn.disabled = false;
+      renderQueue();
+    }
+
+    function generateQRDataURL(text, size) {
+      return new Promise(function(resolve) {
+        var container = document.getElementById('qrTemp');
+        container.innerHTML = '';
+        var qr = new QRCode(container, {
+          text: text,
+          width: size,
+          height: size,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+        // QRCode genera async, esperar a que el canvas exista
+        setTimeout(function() {
+          var canvas = container.querySelector('canvas');
+          if (canvas) {
+            resolve(canvas.toDataURL('image/png'));
+          } else {
+            var img = container.querySelector('img');
+            if (img) resolve(img.src);
+            else resolve(null);
+          }
+        }, 100);
+      });
+    }
+
+    async function doGeneratePDF() {
+      var { jsPDF } = window.jspdf;
+
+      // Etiqueta 50x25mm, 2 columnas
+      var labelW = 50;  // mm
+      var labelH = 25;  // mm
+      var cols = 2;
+      var pageW = labelW * cols; // 100mm
+      var pageH = labelH;        // Una fila por pagina cortable
+
+      // Construir lista completa de etiquetas
+      var labels = [];
+      printQueue.forEach(function(item) {
+        for (var i = 0; i < item.qty; i++) {
+          labels.push({ barcode: item.barcode, sku: item.sku });
+        }
+      });
+
+      if (labels.length === 0) return;
+
+      // Generar QR data URLs (cachear por barcode)
+      var qrCache = {};
+      for (var i = 0; i < labels.length; i++) {
+        var bc = labels[i].barcode;
+        if (!qrCache[bc]) {
+          qrCache[bc] = await generateQRDataURL(bc, 200);
+        }
+      }
+
+      // Crear PDF - pagina del tamaño de una fila de 2 etiquetas
+      var doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: [pageH, pageW] // [alto, ancho]
+      });
+
+      var qrSize = 17;    // mm - QR grande
+      var margin = 2;      // mm
+      var skuFontSize = 7; // puntos - SKU chiquito
+
+      for (var i = 0; i < labels.length; i++) {
+        var col = i % cols;
+        var isNewRow = (i > 0 && col === 0);
+
+        if (isNewRow) {
+          doc.addPage([pageH, pageW], 'landscape');
+        }
+
+        var x = col * labelW;
+        var label = labels[i];
+        var qrImg = qrCache[label.barcode];
+
+        // QR centrado en la etiqueta
+        var qrX = x + (labelW - qrSize) / 2;
+        var qrY = margin;
+
+        if (qrImg) {
+          doc.addImage(qrImg, 'PNG', qrX, qrY, qrSize, qrSize);
+        }
+
+        // SKU debajo del QR, centrado
+        doc.setFontSize(skuFontSize);
+        doc.setFont('helvetica', 'bold');
+        var skuText = label.sku;
+        var textWidth = doc.getTextWidth(skuText);
+        var textX = x + (labelW - textWidth) / 2;
+        var textY = qrY + qrSize + 3.5;
+        doc.text(skuText, textX, textY);
+      }
+
+      // Descargar
+      doc.save('etiquetas_qr.pdf');
+    }
+
+    // ============================================
+    // INIT
+    // ============================================
+    checkAuth();
+  </script>
+</body>
+</html>

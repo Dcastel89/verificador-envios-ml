@@ -30,9 +30,45 @@ function loadConfig() {
 }
 
 /**
- * Detecta el tipo de producto a partir del SKU y/o descripción.
- * Prioridad: 1) prefijo del SKU, 2) palabras clave en descripción, 3) genérico
+ * Busca regla específica por SKU en skuRules.
+ * Devuelve el objeto de regla o null si no hay match.
  */
+function findSkuRule(sku) {
+  if (!sku) return null;
+  var config = loadConfig();
+  var skuRules = config.skuRules || {};
+  var skuUpper = sku.toUpperCase();
+  var ruleKeys = Object.keys(skuRules);
+  for (var r = 0; r < ruleKeys.length; r++) {
+    if (skuUpper.indexOf(ruleKeys[r].toUpperCase()) === 0) {
+      var rule = skuRules[ruleKeys[r]];
+      // Si es string, convertir a objeto con nota
+      if (typeof rule === 'string') return { nota: rule };
+      return rule;
+    }
+  }
+  return null;
+}
+
+/**
+ * Mezcla config del tipo con regla de SKU. El SKU gana.
+ */
+function mergeWithSkuRule(tipoConfig, skuRule) {
+  if (!skuRule) return tipoConfig;
+  var merged = {};
+  // Copiar todo del tipo
+  for (var k in tipoConfig) merged[k] = tipoConfig[k];
+  // SKU sobreescribe lo que tenga
+  for (var k in skuRule) {
+    if (k !== 'nota') merged[k] = skuRule[k];
+  }
+  // nota se agrega aparte (no reemplaza notasExtra, se suma)
+  if (skuRule.nota) {
+    merged._notaSku = skuRule.nota;
+  }
+  return merged;
+}
+
 function detectProductType(sku, descripcion) {
   var config = loadConfig();
   var tipos = config.tipos || {};
@@ -76,12 +112,16 @@ function detectProductType(sku, descripcion) {
  */
 function getProductConfig(sku, descripcion) {
   var tipo = detectProductType(sku, descripcion);
+  var merged = mergeWithSkuRule(tipo.config, findSkuRule(sku));
   var result = {
     tipo: tipo.nombre,
-    fotosMinimas: tipo.config.fotosMinimas || 1
+    fotosMinimas: merged.fotosMinimas || 1
   };
-  if (tipo.config.fotosMaximas) {
-    result.fotosMaximas = tipo.config.fotosMaximas;
+  if (merged.fotosMaximas) {
+    result.fotosMaximas = merged.fotosMaximas;
+  }
+  if (merged.mensajeFoto) {
+    result.mensajeFoto = merged.mensajeFoto;
   }
   return result;
 }
@@ -98,9 +138,9 @@ function buildVerificationPrompt(productoEsperado, imageCount) {
     descripcion = productoEsperado || '';
   }
 
-  // Detectar tipo de producto
+  // Detectar tipo de producto y mezclar con regla de SKU
   var tipoDetectado = detectProductType(sku, descripcion);
-  var tipoConfig = tipoDetectado.config;
+  var tipoConfig = mergeWithSkuRule(tipoDetectado.config, findSkuRule(sku));
 
   // Texto del producto esperado para mostrar en el prompt (ambos: SKU + nombre)
   var partes = [];
@@ -114,7 +154,7 @@ function buildVerificationPrompt(productoEsperado, imageCount) {
     multiPhotoPrefix = 'IMPORTANTE: Recibís ' + imageCount + ' fotos del MISMO producto desde distintos ángulos. Analizá TODAS las fotos en conjunto para dar una respuesta más precisa. Si una foto muestra el frente y otra el lateral o la etiqueta, combiná la información.\n\n';
   }
 
-  // Sección específica del tipo de producto (inyectada desde config)
+  // Sección específica del tipo de producto (ya mergeada con SKU rules)
   var seccionTipo = '';
   if (tipoConfig.dondeVerificar) {
     seccionTipo += 'DÓNDE BUSCAR CÓDIGO/MODELO:\n' + tipoConfig.dondeVerificar + '\n\n';
@@ -127,6 +167,9 @@ function buildVerificationPrompt(productoEsperado, imageCount) {
   }
   if (tipoConfig.notasExtra) {
     seccionTipo += 'NOTAS ADICIONALES:\n' + tipoConfig.notasExtra + '\n\n';
+  }
+  if (tipoConfig._notaSku) {
+    seccionTipo += 'REGLA ESPECIAL PARA ESTE SKU:\n' + tipoConfig._notaSku + '\n\n';
   }
 
   return multiPhotoPrefix + 'TAREA: Leer códigos y verificar productos.\n\n' +

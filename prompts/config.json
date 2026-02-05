@@ -38,6 +38,7 @@
       "prefijos": ["SMT"],
       "palabrasClave": ["smart band", "smartband", "mi band", "pulsera inteligente", "M7", "M8"],
       "fotosMinimas": 2,
+      "mensajeFoto": "Sacale una foto al costado de la caja para ver el puntito de color",
       "dondeVerificar": "Leer el texto de la parte SUPERIOR de la CAJA. Ahí dice el modelo (ej: Smart Band 7).",
       "reglaColor": "Buscar un PUNTITO DE COLOR en el costado de la caja. Si hay un punto de color, ese es el color del producto. Si NO se ve ningún puntito de color, asumir NEGRO.",
       "formatoModelo": "Nombre completo: Smart Band 7, Mi Band 8. El número es clave.",
@@ -46,10 +47,10 @@
     "auriculares": {
       "prefijos": ["AURI"],
       "palabrasClave": ["auricular", "earbuds", "buds", "headphone"],
-      "dondeVerificar": "Leer el texto de la CAJA del producto.",
-      "reglaColor": "Si no hay indicador de color en la caja, asumir NEGRO.",
-      "formatoModelo": "Nombre completo del producto: Redmi Buds 4, Haylou GT1, etc.",
-      "notasExtra": ""
+      "dondeVerificar": "Buscar el MODELO en la caja. Suele estar en un recuadro destacado o en letra grande (ej: F9, E6, E10, A6S, i12). También buscar texto como 'TWS', 'Wireless', versión de Bluetooth.",
+      "reglaColor": "No verificar color.",
+      "formatoModelo": "Código corto del modelo: F9, E6, E10, A6S. NO incluir 'TRUE WIRELESS HEADSET' ni la versión de Bluetooth, solo el código/nombre del modelo.",
+      "notasExtra": "Muchos auriculares genéricos tienen cajas muy parecidas. Lo que los diferencia es el código de modelo (F9, E6, etc). Ese código suele estar en la parte frontal de la caja en un recuadro o resaltado."
     },
     "cargador": {
       "prefijos": [],
@@ -82,6 +83,21 @@
       "reglaColor": "Verificar color si está indicado en la caja.",
       "formatoModelo": "Nombre completo del producto.",
       "notasExtra": ""
+    }
+  },
+  "skuRules": {
+    "AURIF9-5": {
+      "fotosMinimas": 2,
+      "dondeVerificar": "Buscar 'BTH-F9-5' o 'F9-5' en un recuadro amarillo en la parte superior de la caja.",
+      "formatoModelo": "El modelo es F9-5 (o BTH-F9-5). Debe decir F9-5, NO solo F9.",
+      "reglaColor": "Buscar un PUNTITO DE COLOR en el costado de la caja. Si hay un punto de color, ese es el color del producto. Si NO hay puntito, asumir NEGRO.",
+      "mensajeFoto": "Sacale una foto al costado de la caja para ver el puntito de color",
+      "nota": "Esta caja es AZUL, dice 'TWS' y 'TRUE WIRELESS EARBUDS WITH POWER BANK'. Si la caja es negra/gris y dice solo 'F9' en recuadro rojo, es el producto EQUIVOCADO (ese es el F9 ALTO)."
+    },
+    "AURIF9ALTO": {
+      "dondeVerificar": "Buscar 'F9' en un recuadro rojo en la parte superior derecha de la caja.",
+      "formatoModelo": "El modelo es F9. Debe decir solo 'F9', NO 'F9-5' ni 'BTH-F9-5'.",
+      "nota": "Esta caja es NEGRA/GRIS, dice 'TRUE WIRELESS HEADSET' y Bluetooth 5.4. Si la caja es azul y dice 'BTH-F9-5' o 'F9-5', es el producto EQUIVOCADO (ese es el F9-5)."
     }
   },
   "generico": {

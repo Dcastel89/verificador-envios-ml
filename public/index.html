@@ -1193,7 +1193,13 @@
         var faltan = minFotos - capturedImages.length;
         if (faltan > 0) {
           btnEnviarAnalisis.disabled = true;
-          btnEnviarAnalisis.textContent = 'Falta' + (faltan > 1 ? 'n ' : ' ') + faltan + ' foto' + (faltan > 1 ? 's' : '');
+          var msg = 'Falta' + (faltan > 1 ? 'n ' : ' ') + faltan + ' foto' + (faltan > 1 ? 's' : '');
+          btnEnviarAnalisis.textContent = msg;
+          // Mostrar mensaje explicativo si existe
+          var mensajeFoto = productoAVerificar && productoAVerificar.mensajeFoto;
+          if (mensajeFoto) {
+            showStatus(mensajeFoto, 'loading');
+          }
         } else {
           btnEnviarAnalisis.disabled = false;
           btnEnviarAnalisis.textContent = 'Enviar analisis';
@@ -1300,6 +1306,7 @@
             if (productoAVerificar) {
               productoAVerificar.fotosMinimas = cfg.fotosMinimas || 1;
               if (cfg.fotosMaximas) productoAVerificar.fotosMaximas = cfg.fotosMaximas;
+              if (cfg.mensajeFoto) productoAVerificar.mensajeFoto = cfg.mensajeFoto;
             }
           })
           .catch(function() {}); // Si falla, queda en 1

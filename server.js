@@ -2861,6 +2861,10 @@ app.get('/selector', function(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'selector.html'));
 });
 
+app.get('/etiquetas', function(req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'etiquetas.html'));
+});
+
 app.get('/mayorista', function(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'mayorista', 'index.html'));
 });
