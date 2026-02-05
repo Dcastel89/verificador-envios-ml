@@ -115,13 +115,11 @@ async function loadBarcodesFromSheets() {
       var fabricaData = JSON.parse(fs.readFileSync(fabricaPath, 'utf8'));
       var fabricaCount = 0;
       for (var barcode in fabricaData) {
-        // No sobreescribir si ya existe en Sheets (Sheets tiene prioridad)
-        if (!barcodeCache[barcode]) {
-          barcodeCache[barcode] = fabricaData[barcode];
-          fabricaCount++;
-        }
+        // Archivo de fábrica tiene prioridad (datos correctos del Excel)
+        barcodeCache[barcode] = fabricaData[barcode];
+        fabricaCount++;
       }
-      console.log('Cargados ' + fabricaCount + ' códigos de fábrica (de ' + Object.keys(fabricaData).length + ' en archivo)');
+      console.log('Cargados ' + fabricaCount + ' códigos de fábrica (sobreescriben Sheets)');
     }
   } catch (error) {
     console.error('Error cargando códigos de fábrica:', error.message);
