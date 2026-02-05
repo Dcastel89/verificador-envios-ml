@@ -47,9 +47,9 @@
     "auriculares": {
       "prefijos": ["AURI"],
       "palabrasClave": ["auricular", "earbuds", "buds", "headphone"],
-      "dondeVerificar": "Buscar el MODELO en la caja. Suele estar en un recuadro destacado o en letra grande (ej: F9, E6, E10, A6S, i12). También buscar texto como 'TWS', 'Wireless', versión de Bluetooth.",
+      "dondeVerificar": "Buscar el MODELO en la caja. Suele estar en un recuadro destacado o en letra grande (ej: F9, E6, E10, A6S, i12).",
       "reglaColor": "No verificar color.",
-      "formatoModelo": "Código corto del modelo: F9, E6, E10, A6S. NO incluir 'TRUE WIRELESS HEADSET' ni la versión de Bluetooth, solo el código/nombre del modelo.",
+      "formatoModelo": "Código corto del modelo: F9, E6, E10, A6S. NO incluir 'TRUE WIRELESS HEADSET', solo el código/nombre del modelo.",
       "notasExtra": "Muchos auriculares genéricos tienen cajas muy parecidas. Lo que los diferencia es el código de modelo (F9, E6, etc). Ese código suele estar en la parte frontal de la caja en un recuadro o resaltado."
     },
     "cargador": {
@@ -97,7 +97,56 @@
     "AURIF9ALTO": {
       "dondeVerificar": "Buscar 'F9' en un recuadro rojo en la parte superior derecha de la caja.",
       "formatoModelo": "El modelo es F9. Debe decir solo 'F9', NO 'F9-5' ni 'BTH-F9-5'.",
-      "nota": "Esta caja es NEGRA/GRIS, dice 'TRUE WIRELESS HEADSET' y Bluetooth 5.4. Si la caja es azul y dice 'BTH-F9-5' o 'F9-5', es el producto EQUIVOCADO (ese es el F9-5)."
+      "nota": "Esta caja es NEGRA/GRIS, dice 'TRUE WIRELESS HEADSET'. Si la caja es azul y dice 'BTH-F9-5' o 'F9-5', es el producto EQUIVOCADO (ese es el F9-5)."
+    },
+    "Pro6": {
+      "fotosMinimas": 2,
+      "dondeVerificar": "Buscar 'Pro 6' en la parte inferior de la caja.",
+      "formatoModelo": "El modelo es Pro 6. Debe decir 'Pro 6' en la caja.",
+      "reglaColor": "Buscar un PUNTITO DE COLOR en el costado de la caja. Si hay un punto de color, ese es el color del producto. Si NO hay puntito, el color es BLANCO.",
+      "mensajeFoto": "Sacale una foto al costado de la caja para ver el puntito de color"
+    },
+    "AURIM32": {
+      "dondeVerificar": "Buscar 'M32' en la parte superior izquierda de la caja, junto a 'music headset'.",
+      "formatoModelo": "El modelo es M32. Debe decir 'M32' en la caja.",
+      "reglaColor": "No verificar color. Solo viene en negro.",
+      "nota": "Caja blanca con case negro que tiene display digital. Si dice otro modelo, es el producto EQUIVOCADO."
+    },
+    "AURIE6S": {
+      "dondeVerificar": "Buscar 'E6S' en la esquina superior izquierda de la caja.",
+      "formatoModelo": "El modelo es E6S. Debe decir 'E6S' en la caja.",
+      "reglaColor": "No verificar color. Solo viene en negro.",
+      "nota": "Caja blanca arriba y celeste/azul abajo. Dice 'True Wireless Headset'. Si dice otro modelo (F9, A6S, etc), es el producto EQUIVOCADO."
+    },
+    "SMTD18": {
+      "fotosMinimas": 2,
+      "dondeVerificar": "La caja NO dice 'D18'. Buscar el texto 'SMART BRACELET' en MAYÚSCULAS y color VERDE, y debajo 'YOUR HEALTH STEWARD'. La pantalla del reloj muestra la hora 08:36.",
+      "formatoModelo": "No tiene código de modelo visible. Se identifica por: 'SMART BRACELET' (mayúsculas, verde) + 'YOUR HEALTH STEWARD' + hora 08:36 en pantalla. Si coincide, es el D18.",
+      "reglaColor": "Buscar un PUNTITO DE COLOR en el costado de la caja. Colores posibles: NEGRO, ROJO, VIOLETA, VERDE o AZUL.",
+      "mensajeFoto": "Sacale una foto al costado de la caja para ver el puntito de color",
+      "nota": "CUIDADO: Existe otra caja MUY PARECIDA (119 Plus) que también dice 'Smart Bracelet' pero con diferencias: el 119 Plus dice 'UNLEASH YOUR RUN' (no 'YOUR HEALTH STEWARD') y muestra la hora 20:36 (no 08:36). Si dice 'UNLEASH YOUR RUN' o muestra 20:36, es el producto EQUIVOCADO."
+    },
+    "SMT119PLUS": {
+      "fotosMinimas": 1,
+      "dondeVerificar": "Buscar el texto 'Smart Bracelet' (mixta, negro) y debajo 'UNLEASH YOUR RUN'. La pantalla muestra la hora 20:36 con anillos de actividad coloridos.",
+      "formatoModelo": "Se identifica por: 'Smart Bracelet' + 'UNLEASH YOUR RUN' + hora 20:36 con anillos de actividad. Si coincide, es el 119 Plus.",
+      "reglaColor": "Buscar un CÍRCULO DE COLOR grande en el frente de la caja (a la derecha del reloj). Colores posibles: NEGRO, AZUL, ROJO o GRIS.",
+      "nota": "CUIDADO: Existe otra caja MUY PARECIDA (D18) que también dice 'Smart Bracelet' pero con diferencias: el D18 dice 'YOUR HEALTH STEWARD' (no 'UNLEASH YOUR RUN') y muestra la hora 08:36 (no 20:36). Si dice 'YOUR HEALTH STEWARD' o muestra 08:36, es el producto EQUIVOCADO."
+    },
+    "SMTM8": {
+      "fotosMinimas": 1,
+      "dondeVerificar": "Buscar el logo 'm8' en un recuadro rojo arriba a la derecha y 'Smart Band 8' en la parte inferior de la caja.",
+      "formatoModelo": "El modelo es M8 (Smart Band 8). Debe decir 'm8' y 'Smart Band 8'.",
+      "reglaColor": "Buscar un PUNTITO DE COLOR en el frente de la caja. Colores posibles: NEGRO, AZUL, ROJO, VERDE o ROSA.",
+      "nota": "El puntito de color está en el FRENTE de la caja, no al costado. No confundir con Smart Band 7 (que dice 'm7')."
+    },
+    "SMTT2PRO": {
+      "fotosMinimas": 2,
+      "dondeVerificar": "La caja dice 'Active 2' en letras grandes naranjas y tiene un sticker circular que dice 'T2 pro'. Verificar que diga 'Active 2' y 'T2 pro'.",
+      "formatoModelo": "El modelo es T2 Pro (Active 2). Debe decir 'Active 2' en la caja.",
+      "reglaColor": "Buscar un CIRCULITO DE COLOR en el costado de la caja. Los colores posibles son: NEGRO, DORADO o PLATEADO. Si no se ve circulito, indicar que no se pudo determinar el color.",
+      "mensajeFoto": "Sacale una foto al costado de la caja para ver el circulito de color",
+      "nota": "Este es un smartwatch T2 Pro. La caja siempre dice 'Active 2' en grande. El color se determina por un circulito en el costado de la caja (negro, dorado o plateado)."
     }
   },
   "generico": {
