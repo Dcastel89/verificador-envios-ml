@@ -291,6 +291,47 @@ router.get('/api/barcode/:barcode', function(req, res) {
   }
 });
 
+// Obtener config completa por SKU
+router.get('/api/product-config/:sku', function(req, res) {
+  var sku = req.params.sku.trim();
+  if (!sku) return res.status(400).json({ error: 'SKU vacío' });
+
+  var tipo = prompts.detectProductType(sku, '');
+  var skuRule = null;
+  var skuRuleKey = null;
+  var config = prompts.loadConfig();
+  var skuRules = config.skuRules || {};
+  var skuUpper = sku.toUpperCase();
+  var ruleKeys = Object.keys(skuRules);
+  for (var r = 0; r < ruleKeys.length; r++) {
+    if (skuUpper.indexOf(ruleKeys[r].toUpperCase()) === 0) {
+      skuRule = skuRules[ruleKeys[r]];
+      skuRuleKey = ruleKeys[r];
+      break;
+    }
+  }
+  var merged = Object.assign({}, tipo.config);
+  if (skuRule) {
+    for (var k in skuRule) {
+      if (k !== 'nota') merged[k] = skuRule[k];
+    }
+    if (skuRule.nota) merged.nota = skuRule.nota;
+  }
+  res.json({
+    sku: sku,
+    tipo: tipo.nombre,
+    skuRuleKey: skuRuleKey,
+    hasExistingRule: !!skuRuleKey,
+    fotosMinimas: merged.fotosMinimas || 1,
+    dondeVerificar: merged.dondeVerificar || null,
+    reglaColor: merged.reglaColor || null,
+    formatoModelo: merged.formatoModelo || null,
+    notasExtra: merged.notasExtra || null,
+    nota: merged.nota || null,
+    mensajeFoto: merged.mensajeFoto || null
+  });
+});
+
 // Guardar/editar config de producto en config.json (skuRules)
 router.post('/api/product-config', function(req, res) {
   var skuRuleKey = req.body.skuRuleKey;

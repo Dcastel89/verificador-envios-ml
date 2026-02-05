@@ -1770,7 +1770,7 @@ app.post('/api/vision/analyze', async function(req, res) {
     var mode = req.body.mode;
     var prompt;
     if (mode === 'config-describe') {
-      prompt = buildConfigDescriptionPrompt(imageCount);
+      prompt = buildConfigDescriptionPrompt(imageCount, req.body.sku);
     } else if (productoEsperado) {
       prompt = buildVerificationPrompt(productoEsperado, imageCount);
     } else {

@@ -303,13 +303,18 @@ function buildExtractionPrompt(imageCount) {
 '}';
 }
 
-function buildConfigDescriptionPrompt(imageCount) {
+function buildConfigDescriptionPrompt(imageCount, sku) {
   var multiPhotoPrefix = '';
   if (imageCount > 1) {
     multiPhotoPrefix = 'IMPORTANTE: Recibís ' + imageCount + ' fotos del MISMO producto desde distintos ángulos. Analizá TODAS las fotos en conjunto.\n\n';
   }
 
-  return multiPhotoPrefix +
+  var skuContext = '';
+  if (sku) {
+    skuContext = 'CONTEXTO: Este producto tiene el SKU "' + sku + '". Usá esta información para entender qué tipo de producto es y enfocar tu descripción en los detalles relevantes para verificarlo.\n\n';
+  }
+
+  return multiPhotoPrefix + skuContext +
 'Sos un asistente que describe productos para crear reglas de verificación.\n' +
 'Analizá la foto del producto y su packaging, y generá instrucciones detalladas para que alguien pueda verificar este producto en el futuro.\n\n' +
 'Respondé SOLO con este JSON:\n' +
