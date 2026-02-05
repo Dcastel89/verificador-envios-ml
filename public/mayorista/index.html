@@ -199,7 +199,9 @@
     /* Importar pedido específico */
     .import-section { background: #f9fafb; border-radius: 8px; padding: 12px; margin-top: 16px; border: 1px dashed #d1d5db; }
     .import-section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
-    .import-input-group { display: flex; gap: 8px; }
+    .import-input-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .import-account-select { padding: 10px 12px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 6px; background: white; color: #374151; min-width: 100px; }
+    .import-account-select:focus { outline: none; border-color: #7c3aed; }
     .import-input { flex: 1; padding: 10px 12px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 6px; }
     .import-input:focus { outline: none; border-color: #7c3aed; }
     .import-btn { padding: 10px 16px; background: #7c3aed; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
@@ -277,6 +279,9 @@
         <div class="import-section">
           <div class="import-section-title">Importar pedido específico</div>
           <div class="import-input-group">
+            <select class="import-account-select" id="importAccountSelect">
+              <option value="">Todas las cuentas</option>
+            </select>
             <input type="text" class="import-input" id="importOrderInput" placeholder="Número de orden...">
             <button type="button" class="import-btn" id="importOrderBtn">Importar</button>
           </div>
@@ -657,6 +662,26 @@
       var importOrderInput = document.getElementById('importOrderInput');
       var importOrderBtn = document.getElementById('importOrderBtn');
       var importResult = document.getElementById('importResult');
+      var importAccountSelect = document.getElementById('importAccountSelect');
+
+      // Cargar cuentas disponibles en el selector
+      function loadImportAccounts() {
+        authFetch(API_URL + '/api/mayorista/accounts')
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.success && data.cuentas) {
+              importAccountSelect.innerHTML = '<option value="">Todas las cuentas</option>';
+              data.cuentas.forEach(function(c) {
+                var opt = document.createElement('option');
+                opt.value = c.name;
+                opt.textContent = c.name;
+                importAccountSelect.appendChild(opt);
+              });
+            }
+          })
+          .catch(function() {});
+      }
+      loadImportAccounts();
 
       function showImportResult(message, type) {
         importResult.textContent = message;
@@ -679,9 +704,11 @@
         importOrderBtn.textContent = 'Importando...';
         importResult.className = 'import-result';
 
+        var cuentaSeleccionada = importAccountSelect.value;
         authFetch(API_URL + '/api/mayorista/import/' + orderId, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cuenta: cuentaSeleccionada || '' })
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {

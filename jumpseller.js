@@ -1013,12 +1013,26 @@ router.post('/api/mayorista/import/:id', async function(req, res) {
       return res.status(400).json({ success: false, error: 'No hay cuentas Jumpseller configuradas' });
     }
 
-    // Buscar la orden en todas las cuentas
+    // Filtrar cuentas si se especificó una
+    var cuentaFiltro = req.body && req.body.cuenta ? req.body.cuenta.trim() : '';
+    var cuentasABuscar = jumpsellerAccounts;
+
+    if (cuentaFiltro) {
+      cuentasABuscar = jumpsellerAccounts.filter(function(a) {
+        return a.name.toUpperCase() === cuentaFiltro.toUpperCase();
+      });
+      if (cuentasABuscar.length === 0) {
+        return res.status(400).json({ success: false, error: 'Cuenta "' + cuentaFiltro + '" no encontrada' });
+      }
+      console.log('Jumpseller: Buscando solo en cuenta ' + cuentaFiltro);
+    }
+
+    // Buscar la orden en las cuentas
     var orderDetail = null;
     var foundAccount = null;
 
-    for (var i = 0; i < jumpsellerAccounts.length; i++) {
-      var account = jumpsellerAccounts[i];
+    for (var i = 0; i < cuentasABuscar.length; i++) {
+      var account = cuentasABuscar[i];
       console.log('Jumpseller: Buscando orden ' + orderId + ' en cuenta ' + account.name);
 
       var detail = await getJumpsellerOrderDetail(account, orderId);
@@ -1031,7 +1045,10 @@ router.post('/api/mayorista/import/:id', async function(req, res) {
     }
 
     if (!orderDetail) {
-      return res.status(404).json({ success: false, error: 'Orden no encontrada en ninguna cuenta de Jumpseller' });
+      var msg = cuentaFiltro
+        ? 'Orden no encontrada en la cuenta ' + cuentaFiltro
+        : 'Orden no encontrada en ninguna cuenta de Jumpseller';
+      return res.status(404).json({ success: false, error: msg });
     }
 
     // Verificar si ya existe en la hoja del día

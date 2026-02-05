@@ -193,7 +193,28 @@ async function saveBarcodeMapping(barcode, sku, description) {
 }
 
 function getSkuByBarcode(barcode) {
-  return barcodeCache[barcode] || null;
+  // Búsqueda exacta primero
+  if (barcodeCache[barcode]) return barcodeCache[barcode];
+
+  // Si tiene 13 dígitos y empieza con 0, probar sin el cero (por si Sheets lo truncó)
+  if (barcode.length === 13 && barcode.charAt(0) === '0') {
+    var sinCero = barcode.substring(1);
+    if (barcodeCache[sinCero]) {
+      console.log('Barcode: match sin cero inicial: ' + barcode + ' -> ' + sinCero);
+      return barcodeCache[sinCero];
+    }
+  }
+
+  // Si tiene 12 dígitos, probar con cero al inicio (EAN-13 con cero perdido)
+  if (barcode.length === 12 && /^\d+$/.test(barcode)) {
+    var conCero = '0' + barcode;
+    if (barcodeCache[conCero]) {
+      console.log('Barcode: match con cero inicial: ' + barcode + ' -> ' + conCero);
+      return barcodeCache[conCero];
+    }
+  }
+
+  return null;
 }
 
 // ============================================
