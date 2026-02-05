@@ -491,7 +491,7 @@
 
       var constraints = {
         audio: false,
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } }
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } }
       };
 
       codeReader.decodeFromConstraints(constraints, 'video', function(result, error) {
@@ -521,7 +521,7 @@
 
       var constraints = {
         audio: false,
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } }
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } }
       };
 
       navigator.mediaDevices.getUserMedia(constraints)
