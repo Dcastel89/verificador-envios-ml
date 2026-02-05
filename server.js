@@ -1630,6 +1630,20 @@ app.get('/api/shipment/:shipmentId', async function(req, res) {
     }
   }
 
+  // Unificar items con el mismo SKU sumando cantidades
+  var skuMap = {};
+  var mergedItems = [];
+  for (var k = 0; k < processedItems.length; k++) {
+    var pi = processedItems[k];
+    if (skuMap[pi.sku] !== undefined) {
+      mergedItems[skuMap[pi.sku]].quantity += pi.quantity;
+    } else {
+      skuMap[pi.sku] = mergedItems.length;
+      mergedItems.push(Object.assign({}, pi));
+    }
+  }
+  processedItems = mergedItems;
+
   // Obtener SLA (fecha límite de despacho) desde el endpoint recomendado por ML
   var slaData = await getShipmentSLA(accountObj, shipmentId);
   var expectedDate = slaData ? slaData.expectedDate : null;
