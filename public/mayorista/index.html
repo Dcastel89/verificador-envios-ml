@@ -1174,6 +1174,20 @@
         return -1;
       }
 
+      // Busca un item cuyo SKU coincida exacto o esté contenido en un SKU compuesto
+      function findItemBySkuFlexible(sku) {
+        var idx = findItemBySku(sku);
+        if (idx >= 0) return idx;
+
+        for (var i = 0; i < currentItems.length; i++) {
+          var itemSku = currentItems[i].sku;
+          if (itemSku && sku.toUpperCase().indexOf(itemSku.toUpperCase()) !== -1) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
       function findNextUncheckedUnit(itemIndex) {
         var item = currentItems[itemIndex];
         var checks = unitChecks[itemIndex] || [];
@@ -1246,7 +1260,7 @@
           .then(function(response) { return response.json(); })
           .then(function(data) {
             if (data.found && data.sku) {
-              var itemIndex = findItemBySku(data.sku);
+              var itemIndex = findItemBySkuFlexible(data.sku);
               if (itemIndex >= 0) {
                 var item = currentItems[itemIndex];
                 var unitIndex = findNextUncheckedUnit(itemIndex);

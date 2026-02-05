@@ -6,6 +6,8 @@
 
 var express = require('express');
 var router = express.Router();
+var fs = require('fs');
+var path = require('path');
 
 // Referencias a Google Sheets (se configuran desde server.js)
 var sheets = null;
@@ -104,6 +106,25 @@ async function loadBarcodesFromSheets() {
     } else {
       console.error('Error cargando Rotuladora:', error.message);
     }
+  }
+
+  // Cargar códigos de fábrica desde archivo local
+  try {
+    var fabricaPath = path.join(__dirname, 'codigos_fabrica.json');
+    if (fs.existsSync(fabricaPath)) {
+      var fabricaData = JSON.parse(fs.readFileSync(fabricaPath, 'utf8'));
+      var fabricaCount = 0;
+      for (var barcode in fabricaData) {
+        // No sobreescribir si ya existe en Sheets (Sheets tiene prioridad)
+        if (!barcodeCache[barcode]) {
+          barcodeCache[barcode] = fabricaData[barcode];
+          fabricaCount++;
+        }
+      }
+      console.log('Cargados ' + fabricaCount + ' códigos de fábrica (de ' + Object.keys(fabricaData).length + ' en archivo)');
+    }
+  } catch (error) {
+    console.error('Error cargando códigos de fábrica:', error.message);
   }
 
   console.log('Total códigos en cache: ' + Object.keys(barcodeCache).length);

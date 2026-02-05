@@ -892,13 +892,30 @@
         return -1;
       }
 
+      // Busca un item cuyo SKU coincida exacto o esté contenido en un SKU compuesto
+      function findItemBySkuFlexible(sku) {
+        // Primero intento exacto
+        var idx = findItemBySku(sku);
+        if (idx >= 0) return idx;
+
+        // Si el SKU del barcode es compuesto (ej: VFA55VFA35),
+        // buscar si algún item del envío tiene un SKU contenido ahí
+        for (var i = 0; i < currentItems.length; i++) {
+          var itemSku = currentItems[i].sku;
+          if (itemSku && sku.toUpperCase().indexOf(itemSku.toUpperCase()) !== -1) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
       function markProductByBarcode(barcode) {
         authFetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
           .then(function(response) { return response.json(); })
           .then(function(data) {
             if (data.found && data.sku) {
-              // Encontramos el SKU para este barcode
-              var itemIndex = findItemBySku(data.sku);
+              // Encontramos el SKU para este barcode (puede ser compuesto)
+              var itemIndex = findItemBySkuFlexible(data.sku);
               if (itemIndex >= 0) {
                 var unitIndex = findNextUncheckedUnit(itemIndex);
                 if (unitIndex >= 0) {
@@ -917,7 +934,8 @@
                   updateCard(itemIndex);
                   highlightCard(itemIndex);
 
-                  showStatus('OK: ' + data.sku, 'success');
+                  var matchedSku = currentItems[itemIndex].sku || data.sku;
+                  showStatus('OK: ' + matchedSku, 'success');
                   if (navigator.vibrate) navigator.vibrate(100);
                 } else {
                   showStatus('Producto ya verificado: ' + data.sku, 'error');
