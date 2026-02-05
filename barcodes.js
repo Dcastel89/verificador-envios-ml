@@ -9,6 +9,9 @@ var router = express.Router();
 var fs = require('fs');
 var path = require('path');
 
+// Prompts config para devolver instrucciones por SKU
+var prompts = require('./prompts');
+
 // Referencias a Google Sheets (se configuran desde server.js)
 var sheets = null;
 var SHEET_ID = null;
@@ -247,7 +250,37 @@ router.get('/api/barcode/:barcode', function(req, res) {
 
   if (sku) {
     console.log('Barcode encontrado: ' + barcode + ' -> ' + sku);
-    res.json({ barcode: barcode, sku: sku, found: true });
+    // Obtener config de prompts para este SKU
+    var tipo = prompts.detectProductType(sku, '');
+    var skuRule = null;
+    var config = prompts.loadConfig();
+    var skuRules = config.skuRules || {};
+    var skuUpper = sku.toUpperCase();
+    var ruleKeys = Object.keys(skuRules);
+    for (var r = 0; r < ruleKeys.length; r++) {
+      if (skuUpper.indexOf(ruleKeys[r].toUpperCase()) === 0) {
+        skuRule = skuRules[ruleKeys[r]];
+        break;
+      }
+    }
+    // Merge tipo config con SKU rule
+    var merged = Object.assign({}, tipo.config);
+    if (skuRule) {
+      for (var k in skuRule) {
+        if (k !== 'nota') merged[k] = skuRule[k];
+      }
+      if (skuRule.nota) merged.nota = skuRule.nota;
+    }
+    var productConfig = {
+      tipo: tipo.nombre,
+      dondeVerificar: merged.dondeVerificar || null,
+      reglaColor: merged.reglaColor || null,
+      formatoModelo: merged.formatoModelo || null,
+      notasExtra: merged.notasExtra || null,
+      nota: merged.nota || null,
+      mensajeFoto: merged.mensajeFoto || null
+    };
+    res.json({ barcode: barcode, sku: sku, found: true, productConfig: productConfig });
   } else {
     console.log('Barcode NO encontrado: "' + barcode + '" (cache tiene ' + Object.keys(barcodeCache).length + ' códigos)');
     res.json({ barcode: barcode, sku: null, found: false });

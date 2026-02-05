@@ -326,7 +326,7 @@
     var codeReader = null;
     var isScanning = false;
     var cameraMode = ''; // 'scan' o 'photo'
-    var history = [];
+    var scanHistory = [];
 
     // Elementos
     var scanBtn = document.getElementById('scanBtn');
@@ -376,11 +376,11 @@
         .then(function(data) {
           if (data.found) {
             showStatus('Encontrado', 'success');
-            showBarcodeResult(barcode, data.sku);
+            showBarcodeResult(barcode, data.sku, data.productConfig);
             addHistory(barcode, data.sku);
           } else {
             showStatus('Codigo no registrado', 'error');
-            showBarcodeResult(barcode, null);
+            showBarcodeResult(barcode, null, null);
             addHistory(barcode, null);
           }
         })
@@ -389,11 +389,31 @@
         });
     }
 
-    function showBarcodeResult(barcode, sku) {
+    function showBarcodeResult(barcode, sku, productConfig) {
       var html = '<h3>Resultado de codigo</h3>';
       if (sku) {
         html += '<div class="result-sku">' + sku + '</div>';
         html += '<div class="result-row"><span class="result-label">Codigo</span><span class="result-value">' + barcode + '</span></div>';
+        if (productConfig) {
+          if (productConfig.tipo) {
+            html += '<div class="result-row"><span class="result-label">Tipo</span><span class="result-value">' + productConfig.tipo + '</span></div>';
+          }
+          if (productConfig.dondeVerificar) {
+            html += '<div class="result-text"><strong>Donde verificar:</strong> ' + productConfig.dondeVerificar + '</div>';
+          }
+          if (productConfig.reglaColor) {
+            html += '<div class="result-text"><strong>Color:</strong> ' + productConfig.reglaColor + '</div>';
+          }
+          if (productConfig.formatoModelo) {
+            html += '<div class="result-text"><strong>Modelo:</strong> ' + productConfig.formatoModelo + '</div>';
+          }
+          if (productConfig.nota) {
+            html += '<div class="result-text" style="border-left:3px solid #f59e0b;padding-left:10px"><strong>Nota especial:</strong> ' + productConfig.nota + '</div>';
+          }
+          if (productConfig.notasExtra) {
+            html += '<div class="result-text"><strong>Notas:</strong> ' + productConfig.notasExtra + '</div>';
+          }
+        }
       } else {
         html += '<div class="result-sku result-not-found">No registrado</div>';
         html += '<div class="result-row"><span class="result-label">Codigo escaneado</span><span class="result-value">' + barcode + '</span></div>';
@@ -496,14 +516,18 @@
 
       codeReader.decodeFromConstraints(constraints, 'video', function(result, error) {
         if (result && isScanning) {
+          isScanning = false;
           var code = result.getText().trim();
+          stopCamera();
           showStatus('Codigo detectado: ' + code, 'success');
           lookupBarcode(code);
         }
       }).catch(function() {
         codeReader.decodeFromVideoDevice(null, 'video', function(result, error) {
           if (result && isScanning) {
+            isScanning = false;
             var code = result.getText().trim();
+            stopCamera();
             showStatus('Codigo detectado: ' + code, 'success');
             lookupBarcode(code);
           }
@@ -614,16 +638,16 @@
     // ================================
     function addHistory(code, sku) {
       // No duplicar el ultimo
-      if (history.length > 0 && history[0].code === code) return;
-      history.unshift({ code: code, sku: sku });
-      if (history.length > 20) history.pop();
+      if (scanHistory.length > 0 && scanHistory[0].code === code) return;
+      scanHistory.unshift({ code: code, sku: sku });
+      if (scanHistory.length > 20) scanHistory.pop();
       renderHistory();
     }
 
     function renderHistory() {
       var html = '';
-      for (var i = 0; i < history.length; i++) {
-        var item = history[i];
+      for (var i = 0; i < scanHistory.length; i++) {
+        var item = scanHistory[i];
         var skuClass = item.sku ? 'history-sku' : 'history-sku not-found';
         var skuText = item.sku || 'No registrado';
         html += '<div class="history-item" data-code="' + item.code + '">';
