@@ -303,9 +303,30 @@ function buildExtractionPrompt(imageCount) {
 '}';
 }
 
+function buildConfigDescriptionPrompt(imageCount) {
+  var multiPhotoPrefix = '';
+  if (imageCount > 1) {
+    multiPhotoPrefix = 'IMPORTANTE: Recibís ' + imageCount + ' fotos del MISMO producto desde distintos ángulos. Analizá TODAS las fotos en conjunto.\n\n';
+  }
+
+  return multiPhotoPrefix +
+'Sos un asistente que describe productos para crear reglas de verificación.\n' +
+'Analizá la foto del producto y su packaging, y generá instrucciones detalladas para que alguien pueda verificar este producto en el futuro.\n\n' +
+'Respondé SOLO con este JSON:\n' +
+'{\n' +
+'  "dondeVerificar": "Describí EXACTAMENTE dónde buscar el código de modelo o nombre del producto en la caja/packaging. Sé muy específico (ej: en la esquina superior izquierda, en un recuadro rojo, en la parte inferior de la caja, en una etiqueta blanca pegada, etc.)",\n' +
+'  "reglaColor": "Describí cómo determinar el color del producto. ¿Hay un puntito de color en el costado? ¿Un círculo en el frente? ¿Se ve a través de la caja? ¿El color está impreso? Si no hay indicador de color, decí que no aplica.",\n' +
+'  "formatoModelo": "¿Qué formato tiene el modelo/nombre visible? (ej: código corto como A25, nombre completo como Smart Band 7, código alfanumérico como F9-5, o no tiene código visible)",\n' +
+'  "nota": "Describí el aspecto general de la caja/producto para poder identificarlo: colores de la caja, texto destacado, logos, forma del producto, cualquier detalle que lo distinga de productos similares.",\n' +
+'  "tipoProducto": "funda silicona/funda transparente/vidrio/smartband/auriculares/cargador/cable/reloj/adultos/otro",\n' +
+'  "mensajeFoto": "Si el producto necesita una segunda foto para verificar algo (ej: costado de la caja para ver color, parte de atrás), indicá qué foto adicional sería útil. Si no hace falta, null."\n' +
+'}';
+}
+
 module.exports = {
   buildVerificationPrompt: buildVerificationPrompt,
   buildExtractionPrompt: buildExtractionPrompt,
+  buildConfigDescriptionPrompt: buildConfigDescriptionPrompt,
   detectProductType: detectProductType,
   getProductConfig: getProductConfig,
   loadConfig: loadConfig

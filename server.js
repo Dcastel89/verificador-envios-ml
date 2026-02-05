@@ -6,7 +6,7 @@ const path = require('path');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const scheduler = require('./scheduler');
-const { buildVerificationPrompt, buildExtractionPrompt, getProductConfig } = require('./prompts');
+const { buildVerificationPrompt, buildExtractionPrompt, buildConfigDescriptionPrompt, getProductConfig } = require('./prompts');
 const jumpsellerRouter = require('./jumpseller');
 const auth = require('./auth');
 const barcodesRouter = require('./barcodes');
@@ -1767,9 +1767,15 @@ app.post('/api/vision/analyze', async function(req, res) {
 
   try {
     // Usar prompts del módulo separado
-    var prompt = productoEsperado
-      ? buildVerificationPrompt(productoEsperado, imageCount)
-      : buildExtractionPrompt(imageCount);
+    var mode = req.body.mode;
+    var prompt;
+    if (mode === 'config-describe') {
+      prompt = buildConfigDescriptionPrompt(imageCount);
+    } else if (productoEsperado) {
+      prompt = buildVerificationPrompt(productoEsperado, imageCount);
+    } else {
+      prompt = buildExtractionPrompt(imageCount);
+    }
 
     // Construir contenido: todas las imágenes + el prompt de texto
     var contentBlocks = imageBlocks.slice();

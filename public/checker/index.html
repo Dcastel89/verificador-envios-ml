@@ -273,6 +273,50 @@
     .history-sku.not-found { color: #fca5a5; }
 
     .hidden { display: none !important; }
+
+    /* Edición de config */
+    .config-edit-area {
+      width: 100%;
+      background: #0f172a;
+      color: #e0e0e0;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 0.85em;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 40px;
+      font-family: inherit;
+      margin-top: 4px;
+    }
+    .config-edit-area:focus { border-color: #6c9fff; outline: none; }
+    .config-field-label {
+      color: #6c9fff;
+      font-size: 0.8em;
+      font-weight: 600;
+      margin-top: 10px;
+      display: block;
+    }
+    .config-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .config-actions button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9em;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-edit { background: #3b82f6; color: #fff; }
+    .btn-edit:hover { background: #2563eb; }
+    .btn-save { background: #22c55e; color: #fff; }
+    .btn-save:hover { background: #16a34a; }
+    .btn-cancel { background: #6b7280; color: #fff; }
+    .btn-cancel:hover { background: #4b5563; }
   </style>
 </head>
 <body>
@@ -389,7 +433,13 @@
         });
     }
 
+    // Guardar la última config para edición
+    var lastProductConfig = null;
+    var lastSku = null;
+
     function showBarcodeResult(barcode, sku, productConfig) {
+      lastProductConfig = productConfig;
+      lastSku = sku;
       var html = '<h3>Resultado de codigo</h3>';
       if (sku) {
         html += '<div class="result-sku">' + sku + '</div>';
@@ -398,6 +448,8 @@
           if (productConfig.tipo) {
             html += '<div class="result-row"><span class="result-label">Tipo</span><span class="result-value">' + productConfig.tipo + '</span></div>';
           }
+          // Contenedor de config (vista)
+          html += '<div id="configView">';
           if (productConfig.dondeVerificar) {
             html += '<div class="result-text"><strong>Donde verificar:</strong> ' + productConfig.dondeVerificar + '</div>';
           }
@@ -407,12 +459,22 @@
           if (productConfig.formatoModelo) {
             html += '<div class="result-text"><strong>Modelo:</strong> ' + productConfig.formatoModelo + '</div>';
           }
+          if (productConfig.mensajeFoto) {
+            html += '<div class="result-text"><strong>Mensaje foto:</strong> ' + productConfig.mensajeFoto + '</div>';
+          }
           if (productConfig.nota) {
             html += '<div class="result-text" style="border-left:3px solid #f59e0b;padding-left:10px"><strong>Nota especial:</strong> ' + productConfig.nota + '</div>';
           }
           if (productConfig.notasExtra) {
             html += '<div class="result-text"><strong>Notas:</strong> ' + productConfig.notasExtra + '</div>';
           }
+          html += '</div>';
+          // Contenedor de edición (oculto)
+          html += '<div id="configEdit" class="hidden"></div>';
+          // Botón editar
+          html += '<div class="config-actions" id="configActions">';
+          html += '<button type="button" class="btn-edit" onclick="startEditConfig()">Editar config</button>';
+          html += '</div>';
         }
       } else {
         html += '<div class="result-sku result-not-found">No registrado</div>';
@@ -422,26 +484,114 @@
       resultCard.classList.add('show');
     }
 
-    // ================================
-    // VISION (FOTO)
-    // ================================
-    function sendPhotoToVision(imageBase64) {
-      showStatus('Analizando con IA...', 'loading');
-      captureBtn.disabled = true;
-      captureBtn.textContent = 'Analizando...';
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
 
-      authFetch(API_URL + '/api/vision/analyze', {
+    function startEditConfig() {
+      var pc = lastProductConfig || {};
+      var editDiv = document.getElementById('configEdit');
+      var viewDiv = document.getElementById('configView');
+      var actionsDiv = document.getElementById('configActions');
+
+      var fields = [
+        { key: 'dondeVerificar', label: 'Donde verificar' },
+        { key: 'reglaColor', label: 'Regla de color' },
+        { key: 'formatoModelo', label: 'Formato de modelo' },
+        { key: 'mensajeFoto', label: 'Mensaje para segunda foto' },
+        { key: 'nota', label: 'Nota especial del SKU' },
+        { key: 'notasExtra', label: 'Notas extra' }
+      ];
+
+      var html = '';
+      for (var i = 0; i < fields.length; i++) {
+        var f = fields[i];
+        var val = pc[f.key] || '';
+        html += '<label class="config-field-label">' + f.label + '</label>';
+        html += '<textarea class="config-edit-area" id="edit_' + f.key + '" rows="2">' + escapeHtml(val) + '</textarea>';
+      }
+      editDiv.innerHTML = html;
+
+      viewDiv.classList.add('hidden');
+      editDiv.classList.remove('hidden');
+      actionsDiv.innerHTML = '<button type="button" class="btn-save" onclick="saveConfig()">Guardar</button>' +
+        '<button type="button" class="btn-cancel" onclick="cancelEditConfig()">Cancelar</button>';
+    }
+
+    function cancelEditConfig() {
+      document.getElementById('configView').classList.remove('hidden');
+      document.getElementById('configEdit').classList.add('hidden');
+      document.getElementById('configActions').innerHTML = '<button type="button" class="btn-edit" onclick="startEditConfig()">Editar config</button>';
+    }
+
+    function saveConfig() {
+      var pc = lastProductConfig || {};
+      var fields = {};
+      var keys = ['dondeVerificar', 'reglaColor', 'formatoModelo', 'mensajeFoto', 'nota', 'notasExtra'];
+      for (var i = 0; i < keys.length; i++) {
+        var el = document.getElementById('edit_' + keys[i]);
+        if (el) fields[keys[i]] = el.value.trim();
+      }
+
+      showStatus('Guardando config...', 'loading');
+      authFetch(API_URL + '/api/product-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: [imageBase64] })
+        body: JSON.stringify({
+          sku: lastSku,
+          skuRuleKey: pc.skuRuleKey || null,
+          fields: fields
+        })
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (data.error) {
             showStatus('Error: ' + data.error, 'error');
           } else {
-            showStatus('Analisis completado', 'success');
-            showVisionResult(data);
+            showStatus('Config guardado para: ' + (data.key || lastSku), 'success');
+            // Actualizar la vista con los nuevos valores
+            for (var k in fields) {
+              if (lastProductConfig) lastProductConfig[k] = fields[k];
+            }
+            cancelEditConfig();
+            // Refrescar la vista
+            var viewDiv = document.getElementById('configView');
+            var html = '';
+            if (lastProductConfig.dondeVerificar) html += '<div class="result-text"><strong>Donde verificar:</strong> ' + lastProductConfig.dondeVerificar + '</div>';
+            if (lastProductConfig.reglaColor) html += '<div class="result-text"><strong>Color:</strong> ' + lastProductConfig.reglaColor + '</div>';
+            if (lastProductConfig.formatoModelo) html += '<div class="result-text"><strong>Modelo:</strong> ' + lastProductConfig.formatoModelo + '</div>';
+            if (lastProductConfig.mensajeFoto) html += '<div class="result-text"><strong>Mensaje foto:</strong> ' + lastProductConfig.mensajeFoto + '</div>';
+            if (lastProductConfig.nota) html += '<div class="result-text" style="border-left:3px solid #f59e0b;padding-left:10px"><strong>Nota especial:</strong> ' + lastProductConfig.nota + '</div>';
+            if (lastProductConfig.notasExtra) html += '<div class="result-text"><strong>Notas:</strong> ' + lastProductConfig.notasExtra + '</div>';
+            viewDiv.innerHTML = html;
+          }
+        })
+        .catch(function(err) {
+          showStatus('Error: ' + err.message, 'error');
+        });
+    }
+
+    // ================================
+    // VISION (FOTO) - Describir producto para config
+    // ================================
+    function sendPhotoToVision(imageBase64) {
+      showStatus('IA analizando producto...', 'loading');
+      captureBtn.disabled = true;
+      captureBtn.textContent = 'Analizando...';
+
+      authFetch(API_URL + '/api/vision/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: [imageBase64], mode: 'config-describe' })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            showStatus('Error: ' + data.error, 'error');
+          } else {
+            showStatus('Descripcion generada', 'success');
+            showConfigFromVision(data);
           }
           captureBtn.disabled = false;
           captureBtn.textContent = 'Sacar foto para IA';
@@ -453,29 +603,73 @@
         });
     }
 
-    function showVisionResult(data) {
-      var html = '<h3>Resultado de IA</h3>';
-      var rows = [];
-      if (data.skuVinculado) {
-        html += '<div class="result-sku">' + data.skuVinculado + '</div>';
-        rows.push(['SKU vinculado', data.skuVinculado]);
-      }
-      if (data.tipoProducto) rows.push(['Tipo', data.tipoProducto]);
-      if (data.modeloDetectado) rows.push(['Modelo', data.modeloDetectado]);
-      if (data.colorDetectado) rows.push(['Color', data.colorDetectado]);
-      if (data.codigoRotuladora) rows.push(['Cod. rotuladora', data.codigoRotuladora]);
-      if (data.confianza) rows.push(['Confianza', data.confianza]);
+    function showConfigFromVision(data) {
+      var fields = [
+        { key: 'dondeVerificar', label: 'Donde verificar' },
+        { key: 'reglaColor', label: 'Regla de color' },
+        { key: 'formatoModelo', label: 'Formato de modelo' },
+        { key: 'mensajeFoto', label: 'Mensaje para segunda foto' },
+        { key: 'nota', label: 'Nota / Descripcion del producto' }
+      ];
 
-      for (var i = 0; i < rows.length; i++) {
-        html += '<div class="result-row"><span class="result-label">' + rows[i][0] + '</span><span class="result-value">' + rows[i][1] + '</span></div>';
+      var html = '<h3>Config generada por IA</h3>';
+      if (data.tipoProducto) {
+        html += '<div class="result-row"><span class="result-label">Tipo detectado</span><span class="result-value">' + data.tipoProducto + '</span></div>';
       }
 
-      if (data.textoEncontrado) {
-        html += '<div class="result-text">' + data.textoEncontrado + '</div>';
+      // Input para SKU
+      html += '<label class="config-field-label">SKU (obligatorio para guardar)</label>';
+      html += '<input type="text" class="config-edit-area" id="visionSku" placeholder="Escribi el SKU..." style="min-height:auto;padding:10px">';
+
+      // Campos editables con los valores de la IA
+      for (var i = 0; i < fields.length; i++) {
+        var f = fields[i];
+        var val = data[f.key] || '';
+        html += '<label class="config-field-label">' + f.label + '</label>';
+        html += '<textarea class="config-edit-area" id="vision_' + f.key + '" rows="2">' + escapeHtml(val) + '</textarea>';
       }
+
+      // Botones
+      html += '<div class="config-actions">';
+      html += '<button type="button" class="btn-save" onclick="saveConfigFromVision()">Guardar config</button>';
+      html += '</div>';
 
       resultContent.innerHTML = html;
       resultCard.classList.add('show');
+    }
+
+    function saveConfigFromVision() {
+      var sku = document.getElementById('visionSku').value.trim();
+      if (!sku) {
+        showStatus('Escribi un SKU para guardar', 'error');
+        document.getElementById('visionSku').focus();
+        return;
+      }
+
+      var fields = {};
+      var keys = ['dondeVerificar', 'reglaColor', 'formatoModelo', 'mensajeFoto', 'nota'];
+      for (var i = 0; i < keys.length; i++) {
+        var el = document.getElementById('vision_' + keys[i]);
+        if (el) fields[keys[i]] = el.value.trim();
+      }
+
+      showStatus('Guardando config para ' + sku + '...', 'loading');
+      authFetch(API_URL + '/api/product-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku: sku, fields: fields })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            showStatus('Error: ' + data.error, 'error');
+          } else {
+            showStatus('Config guardado para: ' + (data.key || sku), 'success');
+          }
+        })
+        .catch(function(err) {
+          showStatus('Error: ' + err.message, 'error');
+        });
     }
 
     // ================================

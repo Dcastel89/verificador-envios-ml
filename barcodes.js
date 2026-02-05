@@ -253,6 +253,7 @@ router.get('/api/barcode/:barcode', function(req, res) {
     // Obtener config de prompts para este SKU
     var tipo = prompts.detectProductType(sku, '');
     var skuRule = null;
+    var skuRuleKey = null;
     var config = prompts.loadConfig();
     var skuRules = config.skuRules || {};
     var skuUpper = sku.toUpperCase();
@@ -260,6 +261,7 @@ router.get('/api/barcode/:barcode', function(req, res) {
     for (var r = 0; r < ruleKeys.length; r++) {
       if (skuUpper.indexOf(ruleKeys[r].toUpperCase()) === 0) {
         skuRule = skuRules[ruleKeys[r]];
+        skuRuleKey = ruleKeys[r];
         break;
       }
     }
@@ -273,6 +275,7 @@ router.get('/api/barcode/:barcode', function(req, res) {
     }
     var productConfig = {
       tipo: tipo.nombre,
+      skuRuleKey: skuRuleKey,
       dondeVerificar: merged.dondeVerificar || null,
       reglaColor: merged.reglaColor || null,
       formatoModelo: merged.formatoModelo || null,
@@ -284,6 +287,53 @@ router.get('/api/barcode/:barcode', function(req, res) {
   } else {
     console.log('Barcode NO encontrado: "' + barcode + '" (cache tiene ' + Object.keys(barcodeCache).length + ' códigos)');
     res.json({ barcode: barcode, sku: null, found: false });
+  }
+});
+
+// Guardar/editar config de producto en config.json (skuRules)
+router.post('/api/product-config', function(req, res) {
+  var skuRuleKey = req.body.skuRuleKey;
+  var sku = req.body.sku;
+  var fields = req.body.fields;
+
+  if (!fields || (!skuRuleKey && !sku)) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+
+  var configPath = path.join(__dirname, 'prompts', 'config.json');
+  try {
+    var raw = fs.readFileSync(configPath, 'utf8');
+    var config = JSON.parse(raw);
+    if (!config.skuRules) config.skuRules = {};
+
+    // Usar la key existente o crear una nueva con el SKU
+    var key = skuRuleKey || sku;
+
+    // Armar el objeto de la regla
+    var rule = config.skuRules[key] || {};
+    if (fields.dondeVerificar !== undefined) rule.dondeVerificar = fields.dondeVerificar;
+    if (fields.reglaColor !== undefined) rule.reglaColor = fields.reglaColor;
+    if (fields.formatoModelo !== undefined) rule.formatoModelo = fields.formatoModelo;
+    if (fields.nota !== undefined) rule.nota = fields.nota;
+    if (fields.notasExtra !== undefined) rule.notasExtra = fields.notasExtra;
+    if (fields.mensajeFoto !== undefined) rule.mensajeFoto = fields.mensajeFoto;
+    if (fields.fotosMinimas !== undefined) rule.fotosMinimas = fields.fotosMinimas;
+
+    // Limpiar campos vacíos
+    var ruleKeys2 = Object.keys(rule);
+    for (var i = 0; i < ruleKeys2.length; i++) {
+      if (rule[ruleKeys2[i]] === '' || rule[ruleKeys2[i]] === null) {
+        delete rule[ruleKeys2[i]];
+      }
+    }
+
+    config.skuRules[key] = rule;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    console.log('Config actualizado para SKU rule: ' + key);
+    res.json({ ok: true, key: key });
+  } catch (err) {
+    console.error('Error guardando config:', err.message);
+    res.status(500).json({ error: 'Error guardando config: ' + err.message });
   }
 });
 
