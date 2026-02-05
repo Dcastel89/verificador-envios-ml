@@ -650,18 +650,10 @@
 
     function showVisionResult(data) {
       var html = '<h3>Resultado de IA</h3>';
-      // SKU vinculado (por código rotuladora)
-      if (data.skuVinculado) {
-        html += '<div class="result-sku">' + data.skuVinculado + '</div>';
-      }
-      // SKUs sugeridos (por coincidencia de modelo/texto)
-      if (data.skusSugeridos && data.skusSugeridos.length > 0) {
-        html += '<div class="result-text" style="border-left:3px solid #3b82f6;padding-left:10px"><strong>SKUs posibles:</strong> ';
-        for (var s = 0; s < data.skusSugeridos.length; s++) {
-          if (s > 0) html += ', ';
-          html += '<span style="color:#6c9fff;cursor:pointer;text-decoration:underline" onclick="document.getElementById(\'skuInput\').value=\'' + data.skusSugeridos[s] + '\'">' + data.skusSugeridos[s] + '</span>';
-        }
-        html += '</div>';
+      // SKU identificado
+      var skuDetectado = data.skuVinculado || (data.skusSugeridos && data.skusSugeridos.length > 0 ? data.skusSugeridos[0] : null);
+      if (skuDetectado) {
+        html += '<div class="result-sku">' + skuDetectado + '</div>';
       }
       var rows = [];
       if (data.tipoProducto) rows.push(['Tipo', data.tipoProducto]);
