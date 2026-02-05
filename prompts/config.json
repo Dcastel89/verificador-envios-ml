@@ -140,6 +140,14 @@
       "reglaColor": "Buscar un PUNTITO DE COLOR en el frente de la caja. Colores posibles: NEGRO, AZUL, ROJO, VERDE o ROSA.",
       "nota": "El puntito de color está en el FRENTE de la caja, no al costado. No confundir con Smart Band 7 (que dice 'm7')."
     },
+    "MUN153SuccLovelyPilas": {
+      "fotosMinimas": 2,
+      "dondeVerificar": "Es un succionador marca JOCOO en caja blanca/rosa. Verificar que sea el modelo correcto (forma de gota con boquilla de succión y botón de encendido).",
+      "reglaColor": "El COLOR se ve en la parte de ATRÁS de la caja: hay círculos de colores. El color del producto también es visible en el frente. Colores posibles: ROSA, VIOLETA o ROSA PÁLIDO.",
+      "formatoModelo": "Succionador JOCOO Lovely. No tiene código de modelo visible.",
+      "mensajeFoto": "Sacale una foto a la parte de ATRÁS de la caja para ver el color",
+      "nota": "Es una caja blanca/rosa con borde rojo. Dice 'JOCOO' en letras plateadas. El producto se ve a través de la ventana de la caja. El color real del producto determina la variante."
+    },
     "SMTT2PRO": {
       "fotosMinimas": 2,
       "dondeVerificar": "La caja dice 'Active 2' en letras grandes naranjas y tiene un sticker circular que dice 'T2 pro'. Verificar que diga 'Active 2' y 'T2 pro'.",

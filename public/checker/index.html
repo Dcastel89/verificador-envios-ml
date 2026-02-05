@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Chequeador de Productos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 12px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.3em;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .back-link {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      color: #6c9fff;
+      text-decoration: none;
+      font-size: 0.9em;
+    }
+
+    /* Botones principales */
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .actions button {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #scanBtn {
+      background: #3b82f6;
+      color: #fff;
+    }
+    #scanBtn:hover { background: #2563eb; }
+    #scanBtn.active {
+      background: #ef4444;
+    }
+    #photoBtn {
+      background: #8b5cf6;
+      color: #fff;
+    }
+    #photoBtn:hover { background: #7c3aed; }
+
+    /* Input manual */
+    .manual-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .manual-input-row input {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #16213e;
+      color: #fff;
+      font-size: 1em;
+    }
+    .manual-input-row button {
+      padding: 12px 18px;
+      background: #22c55e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* USB toggle */
+    .usb-toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      justify-content: flex-end;
+    }
+    .usb-toggle-label { font-size: 0.85em; color: #aaa; }
+    .usb-toggle {
+      width: 44px;
+      height: 24px;
+      border-radius: 12px;
+      border: 2px solid #555;
+      background: #333;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.3s;
+    }
+    .usb-toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #888;
+      top: 1px;
+      left: 1px;
+      transition: all 0.3s;
+    }
+    .usb-toggle.active {
+      background: #22c55e;
+      border-color: #22c55e;
+    }
+    .usb-toggle.active::after {
+      background: #fff;
+      left: 21px;
+    }
+    .usb-scanner-input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #22c55e;
+      border-radius: 8px;
+      background: #16213e;
+      color: #fff;
+      font-size: 1.1em;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    /* Cámara */
+    .camera-container {
+      display: none;
+      position: relative;
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 12px;
+      background: #000;
+    }
+    .camera-container.active { display: block; }
+    .camera-container video {
+      width: 100%;
+      display: block;
+    }
+    .camera-container canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+    .camera-container.frozen canvas { display: block; }
+    .camera-container.frozen video { visibility: hidden; }
+    .close-camera {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      border: none;
+      font-size: 1.1em;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .capture-btn {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 24px;
+      background: #8b5cf6;
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      font-size: 0.95em;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .capture-btn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    /* Status */
+    .status {
+      text-align: center;
+      padding: 8px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 0.9em;
+      display: none;
+    }
+    .status.show { display: block; }
+    .status.success { background: #166534; color: #86efac; }
+    .status.error { background: #7f1d1d; color: #fca5a5; }
+    .status.loading { background: #1e3a5f; color: #93c5fd; }
+
+    /* Resultado */
+    .result-card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .result-card.show { display: block; }
+    .result-card h3 {
+      font-size: 1em;
+      color: #6c9fff;
+      margin-bottom: 10px;
+    }
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #1e3a5f;
+    }
+    .result-row:last-child { border-bottom: none; }
+    .result-label { color: #888; font-size: 0.9em; }
+    .result-value { color: #fff; font-weight: 600; font-size: 0.95em; text-align: right; max-width: 60%; }
+    .result-sku {
+      font-size: 1.3em;
+      color: #22c55e;
+      text-align: center;
+      padding: 12px;
+      background: #0a2e1a;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+    .result-not-found {
+      color: #fca5a5;
+      background: #3b1111;
+    }
+    .result-text {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 0.85em;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-top: 8px;
+      white-space: pre-wrap;
+    }
+
+    /* Historial */
+    .history { margin-top: 16px; }
+    .history h3 { font-size: 0.95em; color: #888; margin-bottom: 8px; }
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: #16213e;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 0.85em;
+      cursor: pointer;
+    }
+    .history-item:hover { background: #1e3050; }
+    .history-code { color: #aaa; }
+    .history-sku { color: #22c55e; font-weight: 600; }
+    .history-sku.not-found { color: #fca5a5; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <a href="/" class="back-link">Volver</a>
+  <h1>Chequeador de Productos</h1>
+
+  <!-- Botones principales -->
+  <div class="actions">
+    <button id="scanBtn">Escanear codigo</button>
+    <button id="photoBtn">Sacar foto</button>
+  </div>
+
+  <!-- USB toggle -->
+  <div class="usb-toggle-container">
+    <span class="usb-toggle-label">Lector USB</span>
+    <button type="button" id="usbToggle" class="usb-toggle" title="Alternar lector USB externo"></button>
+  </div>
+  <input type="text" id="usbScannerInput" class="usb-scanner-input hidden" placeholder="Esperando lector USB..." autocomplete="off">
+
+  <!-- Input manual -->
+  <div class="manual-input-row">
+    <input type="text" id="manualInput" placeholder="Codigo de barras manual...">
+    <button id="manualBtn">Buscar</button>
+  </div>
+
+  <!-- Cámara -->
+  <div class="camera-container" id="cameraContainer">
+    <video id="video" playsinline></video>
+    <canvas id="capturedOverlay"></canvas>
+    <button type="button" class="close-camera" id="closeCamera">X</button>
+    <button type="button" class="capture-btn" id="captureBtn">Sacar foto para IA</button>
+  </div>
+
+  <!-- Status -->
+  <div class="status" id="status"></div>
+
+  <!-- Resultado -->
+  <div class="result-card" id="resultCard">
+    <div id="resultContent"></div>
+  </div>
+
+  <!-- Historial -->
+  <div class="history" id="historySection">
+    <h3>Historial</h3>
+    <div id="historyList"></div>
+  </div>
+
+  <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
+  <script>
+    var API_URL = '';
+    var codeReader = null;
+    var isScanning = false;
+    var cameraMode = ''; // 'scan' o 'photo'
+    var history = [];
+
+    // Elementos
+    var scanBtn = document.getElementById('scanBtn');
+    var photoBtn = document.getElementById('photoBtn');
+    var cameraContainer = document.getElementById('cameraContainer');
+    var video = document.getElementById('video');
+    var capturedOverlay = document.getElementById('capturedOverlay');
+    var closeCamera = document.getElementById('closeCamera');
+    var captureBtn = document.getElementById('captureBtn');
+    var statusEl = document.getElementById('status');
+    var resultCard = document.getElementById('resultCard');
+    var resultContent = document.getElementById('resultContent');
+    var manualInput = document.getElementById('manualInput');
+    var manualBtn = document.getElementById('manualBtn');
+    var usbToggle = document.getElementById('usbToggle');
+    var usbScannerInput = document.getElementById('usbScannerInput');
+    var historyList = document.getElementById('historyList');
+    var usbModeActive = false;
+
+    function authFetch(url, options) {
+      options = options || {};
+      options.credentials = 'include';
+      return fetch(url, options).then(function(response) {
+        if (response.status === 401) {
+          window.location.reload();
+          return Promise.reject(new Error('Sesion expirada'));
+        }
+        return response;
+      });
+    }
+
+    function showStatus(msg, type) {
+      statusEl.textContent = msg;
+      statusEl.className = 'status show ' + (type || '');
+    }
+    function hideStatus() {
+      statusEl.className = 'status';
+    }
+
+    // ================================
+    // BARCODE LOOKUP
+    // ================================
+    function lookupBarcode(barcode) {
+      showStatus('Buscando ' + barcode + '...', 'loading');
+      authFetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.found) {
+            showStatus('Encontrado', 'success');
+            showBarcodeResult(barcode, data.sku);
+            addHistory(barcode, data.sku);
+          } else {
+            showStatus('Codigo no registrado', 'error');
+            showBarcodeResult(barcode, null);
+            addHistory(barcode, null);
+          }
+        })
+        .catch(function(err) {
+          showStatus('Error: ' + err.message, 'error');
+        });
+    }
+
+    function showBarcodeResult(barcode, sku) {
+      var html = '<h3>Resultado de codigo</h3>';
+      if (sku) {
+        html += '<div class="result-sku">' + sku + '</div>';
+        html += '<div class="result-row"><span class="result-label">Codigo</span><span class="result-value">' + barcode + '</span></div>';
+      } else {
+        html += '<div class="result-sku result-not-found">No registrado</div>';
+        html += '<div class="result-row"><span class="result-label">Codigo escaneado</span><span class="result-value">' + barcode + '</span></div>';
+      }
+      resultContent.innerHTML = html;
+      resultCard.classList.add('show');
+    }
+
+    // ================================
+    // VISION (FOTO)
+    // ================================
+    function sendPhotoToVision(imageBase64) {
+      showStatus('Analizando con IA...', 'loading');
+      captureBtn.disabled = true;
+      captureBtn.textContent = 'Analizando...';
+
+      authFetch(API_URL + '/api/vision/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: [imageBase64] })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            showStatus('Error: ' + data.error, 'error');
+          } else {
+            showStatus('Analisis completado', 'success');
+            showVisionResult(data);
+          }
+          captureBtn.disabled = false;
+          captureBtn.textContent = 'Sacar foto para IA';
+        })
+        .catch(function(err) {
+          showStatus('Error: ' + err.message, 'error');
+          captureBtn.disabled = false;
+          captureBtn.textContent = 'Sacar foto para IA';
+        });
+    }
+
+    function showVisionResult(data) {
+      var html = '<h3>Resultado de IA</h3>';
+      var rows = [];
+      if (data.skuVinculado) {
+        html += '<div class="result-sku">' + data.skuVinculado + '</div>';
+        rows.push(['SKU vinculado', data.skuVinculado]);
+      }
+      if (data.tipoProducto) rows.push(['Tipo', data.tipoProducto]);
+      if (data.modeloDetectado) rows.push(['Modelo', data.modeloDetectado]);
+      if (data.colorDetectado) rows.push(['Color', data.colorDetectado]);
+      if (data.codigoRotuladora) rows.push(['Cod. rotuladora', data.codigoRotuladora]);
+      if (data.confianza) rows.push(['Confianza', data.confianza]);
+
+      for (var i = 0; i < rows.length; i++) {
+        html += '<div class="result-row"><span class="result-label">' + rows[i][0] + '</span><span class="result-value">' + rows[i][1] + '</span></div>';
+      }
+
+      if (data.textoEncontrado) {
+        html += '<div class="result-text">' + data.textoEncontrado + '</div>';
+      }
+
+      resultContent.innerHTML = html;
+      resultCard.classList.add('show');
+    }
+
+    // ================================
+    // CAMARA - ESCANEO
+    // ================================
+    function startScanning() {
+      if (typeof ZXing === 'undefined') {
+        showStatus('Libreria de camara no cargada', 'error');
+        return;
+      }
+      if (!codeReader) {
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.QR_CODE,
+          ZXing.BarcodeFormat.CODE_128,
+          ZXing.BarcodeFormat.CODE_39,
+          ZXing.BarcodeFormat.EAN_13,
+          ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.UPC_A,
+          ZXing.BarcodeFormat.UPC_E,
+          ZXing.BarcodeFormat.ITF
+        ]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        codeReader = new ZXing.BrowserMultiFormatReader(hints, 500);
+      }
+
+      cameraMode = 'scan';
+      isScanning = true;
+      cameraContainer.classList.add('active');
+      captureBtn.classList.add('hidden');
+      scanBtn.textContent = 'Detener';
+      scanBtn.classList.add('active');
+
+      var constraints = {
+        audio: false,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } }
+      };
+
+      codeReader.decodeFromConstraints(constraints, 'video', function(result, error) {
+        if (result && isScanning) {
+          var code = result.getText().trim();
+          showStatus('Codigo detectado: ' + code, 'success');
+          lookupBarcode(code);
+        }
+      }).catch(function() {
+        codeReader.decodeFromVideoDevice(null, 'video', function(result, error) {
+          if (result && isScanning) {
+            var code = result.getText().trim();
+            showStatus('Codigo detectado: ' + code, 'success');
+            lookupBarcode(code);
+          }
+        }).catch(function() {
+          showStatus('No se pudo acceder a la camara', 'error');
+          stopCamera();
+        });
+      });
+    }
+
+    function startPhotoMode() {
+      cameraMode = 'photo';
+      cameraContainer.classList.add('active');
+      captureBtn.classList.remove('hidden');
+
+      var constraints = {
+        audio: false,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } }
+      };
+
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(function(stream) {
+          video.srcObject = stream;
+          video.play();
+        })
+        .catch(function() {
+          navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function(stream) {
+              video.srcObject = stream;
+              video.play();
+            })
+            .catch(function() {
+              showStatus('No se pudo acceder a la camara', 'error');
+              stopCamera();
+            });
+        });
+    }
+
+    function stopCamera() {
+      isScanning = false;
+      cameraMode = '';
+      cameraContainer.classList.remove('active');
+      cameraContainer.classList.remove('frozen');
+      scanBtn.textContent = 'Escanear codigo';
+      scanBtn.classList.remove('active');
+
+      if (codeReader) codeReader.reset();
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(function(t) { t.stop(); });
+        video.srcObject = null;
+      }
+    }
+
+    function capturePhoto() {
+      if (!video.srcObject) return;
+
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      // Freeze
+      capturedOverlay.width = canvas.width;
+      capturedOverlay.height = canvas.height;
+      capturedOverlay.getContext('2d').drawImage(canvas, 0, 0);
+      cameraContainer.classList.add('frozen');
+
+      var imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+      sendPhotoToVision(imageBase64);
+    }
+
+    // ================================
+    // USB SCANNER
+    // ================================
+    usbToggle.onclick = function() {
+      usbModeActive = !usbModeActive;
+      usbToggle.classList.toggle('active', usbModeActive);
+      if (usbModeActive) {
+        usbScannerInput.classList.remove('hidden');
+        usbScannerInput.focus();
+        stopCamera();
+      } else {
+        usbScannerInput.classList.add('hidden');
+        usbScannerInput.value = '';
+      }
+    };
+
+    usbScannerInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var code = usbScannerInput.value.trim();
+        if (!code) return;
+        usbScannerInput.value = '';
+        lookupBarcode(code);
+        setTimeout(function() { usbScannerInput.focus(); }, 100);
+      }
+    });
+
+    usbScannerInput.addEventListener('blur', function() {
+      if (usbModeActive) {
+        setTimeout(function() { if (usbModeActive) usbScannerInput.focus(); }, 200);
+      }
+    });
+
+    // ================================
+    // HISTORIAL
+    // ================================
+    function addHistory(code, sku) {
+      // No duplicar el ultimo
+      if (history.length > 0 && history[0].code === code) return;
+      history.unshift({ code: code, sku: sku });
+      if (history.length > 20) history.pop();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      var html = '';
+      for (var i = 0; i < history.length; i++) {
+        var item = history[i];
+        var skuClass = item.sku ? 'history-sku' : 'history-sku not-found';
+        var skuText = item.sku || 'No registrado';
+        html += '<div class="history-item" data-code="' + item.code + '">';
+        html += '<span class="history-code">' + item.code + '</span>';
+        html += '<span class="' + skuClass + '">' + skuText + '</span>';
+        html += '</div>';
+      }
+      historyList.innerHTML = html;
+    }
+
+    historyList.addEventListener('click', function(e) {
+      var item = e.target.closest('.history-item');
+      if (item) lookupBarcode(item.dataset.code);
+    });
+
+    // ================================
+    // EVENTOS
+    // ================================
+    scanBtn.onclick = function() {
+      if (isScanning) {
+        stopCamera();
+      } else {
+        stopCamera();
+        startScanning();
+      }
+    };
+
+    photoBtn.onclick = function() {
+      if (cameraMode === 'photo') {
+        stopCamera();
+      } else {
+        stopCamera();
+        startPhotoMode();
+      }
+    };
+
+    closeCamera.onclick = stopCamera;
+
+    captureBtn.onclick = capturePhoto;
+
+    manualBtn.onclick = function() {
+      var code = manualInput.value.trim();
+      if (code) {
+        lookupBarcode(code);
+        manualInput.value = '';
+      }
+    };
+
+    manualInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') manualBtn.click();
+    });
+  </script>
+</body>
+</html>
