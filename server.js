@@ -2879,6 +2879,14 @@ app.get('/mayorista/', function(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'mayorista', 'index.html'));
 });
 
+app.get('/checker', function(req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'checker', 'index.html'));
+});
+
+app.get('/checker/', function(req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'checker', 'index.html'));
+});
+
 // ============================================
 // INICIO DEL SERVIDOR
 // ============================================
