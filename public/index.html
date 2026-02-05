@@ -100,6 +100,17 @@
     .modal-btn.primary { background: #2563eb; color: white; }
     .modal-btn.secondary { background: #f3f4f6; color: #374151; }
 
+    /* Toggle lector USB */
+    .usb-toggle-container { position: fixed; bottom: 56px; right: 16px; z-index: 90; display: flex; align-items: center; gap: 8px; }
+    .usb-toggle-label { font-size: 12px; color: #6b7280; font-weight: 600; background: white; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .usb-toggle { position: relative; width: 44px; height: 24px; background: #d1d5db; border-radius: 12px; cursor: pointer; transition: background 0.2s; border: none; padding: 0; }
+    .usb-toggle.active { background: #22c55e; }
+    .usb-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.2s; }
+    .usb-toggle.active::after { transform: translateX(20px); }
+    .usb-scanner-input { position: fixed; bottom: 90px; left: 16px; right: 16px; z-index: 90; padding: 14px 16px; font-size: 18px; border: 3px solid #22c55e; border-radius: 10px; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: monospace; text-align: center; }
+    .usb-scanner-input:focus { outline: none; border-color: #16a34a; }
+    .usb-scanner-input.hidden { display: none; }
+
     /* Scan mode indicator */
     .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
     .scan-mode-indicator.show { display: block; }
@@ -330,6 +341,11 @@
   </div>
   <div class="complete-banner" id="completeBanner">Envio verificado correctamente</div>
   <div class="complete-banner partial" id="partialBanner">Verificacion parcial guardada</div>
+  <input type="text" id="usbScannerInput" class="usb-scanner-input hidden" placeholder="Esperando lector USB..." autocomplete="off">
+  <div class="usb-toggle-container">
+    <span class="usb-toggle-label">Lector USB</span>
+    <button type="button" id="usbToggle" class="usb-toggle" title="Alternar lector USB externo"></button>
+  </div>
   <button type="button" id="cameraBtn" class="camera-btn">Escanear envio</button>
 
   <!-- Modal para guardar barcode -->
@@ -1518,6 +1534,60 @@
       cameraBtn.onclick = startCamera;
       closeCameraBtn.onclick = stopCamera;
       resetBtn.onclick = reset;
+
+      // ============================================
+      // LECTOR USB EXTERNO
+      // ============================================
+      var usbToggle = document.getElementById('usbToggle');
+      var usbScannerInput = document.getElementById('usbScannerInput');
+      var usbModeActive = false;
+
+      usbToggle.onclick = function() {
+        usbModeActive = !usbModeActive;
+        usbToggle.classList.toggle('active', usbModeActive);
+        if (usbModeActive) {
+          usbScannerInput.classList.remove('hidden');
+          usbScannerInput.focus();
+          // Si la cámara está activa, cerrarla
+          stopCamera();
+        } else {
+          usbScannerInput.classList.add('hidden');
+          usbScannerInput.value = '';
+        }
+      };
+
+      usbScannerInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          var codigo = usbScannerInput.value.trim();
+          if (!codigo) return;
+          usbScannerInput.value = '';
+
+          if (scanMode === 'shipment' || !currentItems || currentItems.length === 0) {
+            // Si no hay envío cargado, tratar como ID de envío
+            var shipmentId = extractShipmentId(codigo);
+            shipmentInput.value = shipmentId;
+            searchShipment(shipmentId);
+          } else {
+            // Hay envío cargado, tratar como barcode de producto
+            markProductByBarcode(codigo);
+          }
+
+          // Re-enfocar para el siguiente escaneo
+          setTimeout(function() { usbScannerInput.focus(); }, 100);
+        }
+      });
+
+      // Mantener foco en el input USB cuando está activo
+      usbScannerInput.addEventListener('blur', function() {
+        if (usbModeActive) {
+          setTimeout(function() {
+            if (usbModeActive && !document.querySelector('.modal-overlay.show')) {
+              usbScannerInput.focus();
+            }
+          }, 200);
+        }
+      });
 
       // ============================================
       // RESUMEN DEL DÍA

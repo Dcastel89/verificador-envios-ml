@@ -102,6 +102,17 @@
     .verify-photo-btn:active { background: #5b21b6; transform: translateY(-50%) scale(0.95); }
     .item-card { padding-right: 80px; }
 
+    /* Toggle lector USB */
+    .usb-toggle-container { position: fixed; bottom: 56px; right: 16px; z-index: 90; display: flex; align-items: center; gap: 8px; }
+    .usb-toggle-label { font-size: 12px; color: #6b7280; font-weight: 600; background: white; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .usb-toggle { position: relative; width: 44px; height: 24px; background: #d1d5db; border-radius: 12px; cursor: pointer; transition: background 0.2s; border: none; padding: 0; }
+    .usb-toggle.active { background: #22c55e; }
+    .usb-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.2s; }
+    .usb-toggle.active::after { transform: translateX(20px); }
+    .usb-scanner-input { position: fixed; bottom: 90px; left: 16px; right: 16px; z-index: 90; padding: 14px 16px; font-size: 18px; border: 3px solid #22c55e; border-radius: 10px; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: monospace; text-align: center; }
+    .usb-scanner-input:focus { outline: none; border-color: #16a34a; }
+    .usb-scanner-input.hidden { display: none; }
+
     /* Modal para guardar barcode */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
     .modal-overlay.show { display: flex; }
@@ -344,6 +355,11 @@
   <div class="scan-error-banner" id="scanErrorBanner">
     <div class="scan-icon">✗</div>
     <div class="scan-text" id="scanErrorText">Error</div>
+  </div>
+  <input type="text" id="usbScannerInput" class="usb-scanner-input hidden" placeholder="Esperando lector USB..." autocomplete="off">
+  <div class="usb-toggle-container">
+    <span class="usb-toggle-label">Lector USB</span>
+    <button type="button" id="usbToggle" class="usb-toggle" title="Alternar lector USB externo"></button>
   </div>
   <button type="button" id="cameraBtn" class="camera-btn">Escanear orden</button>
 
@@ -1551,6 +1567,54 @@
       closeCameraBtn.onclick = function() {
         stopCamera();
       };
+
+      // ============================================
+      // LECTOR USB EXTERNO
+      // ============================================
+      var usbToggle = document.getElementById('usbToggle');
+      var usbScannerInput = document.getElementById('usbScannerInput');
+      var usbModeActive = false;
+
+      usbToggle.onclick = function() {
+        usbModeActive = !usbModeActive;
+        usbToggle.classList.toggle('active', usbModeActive);
+        if (usbModeActive) {
+          usbScannerInput.classList.remove('hidden');
+          usbScannerInput.focus();
+          stopCamera();
+        } else {
+          usbScannerInput.classList.add('hidden');
+          usbScannerInput.value = '';
+        }
+      };
+
+      usbScannerInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          var codigo = usbScannerInput.value.trim();
+          if (!codigo) return;
+          usbScannerInput.value = '';
+
+          if (scanMode === 'order' || !currentItems || currentItems.length === 0) {
+            orderInput.value = codigo;
+            searchOrder(codigo);
+          } else {
+            markProductByBarcode(codigo);
+          }
+
+          setTimeout(function() { usbScannerInput.focus(); }, 100);
+        }
+      });
+
+      usbScannerInput.addEventListener('blur', function() {
+        if (usbModeActive) {
+          setTimeout(function() {
+            if (usbModeActive && !document.querySelector('.modal-overlay.show')) {
+              usbScannerInput.focus();
+            }
+          }, 200);
+        }
+      });
 
       // ============================================
       // VISION API - Verificación con Claude
