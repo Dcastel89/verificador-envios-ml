@@ -265,43 +265,48 @@
     .fast-action-btn { flex: 1; padding: 14px; border: 2px solid #e5e7eb; background: white; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; color: #374151; }
     .fast-action-btn:hover { border-color: #7c3aed; background: #f5f3ff; }
 
-    /* Sequential screen */
-    .seq-header { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .seq-progress-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    /* Sequential screen - full height layout */
+    #screenSequential { display: flex; flex-direction: column; min-height: calc(100vh - 130px); }
+    .seq-header { padding: 12px 0; }
+    .seq-progress-row { display: flex; align-items: center; gap: 8px; }
     .seq-progress-bar { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
     .seq-progress-fill { height: 100%; background: #7c3aed; border-radius: 3px; transition: width 0.3s; }
     .seq-progress-text { font-size: 13px; font-weight: 600; color: #374151; }
-    .seq-item-card { background: white; border-radius: 16px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 2px solid #e5e7eb; }
-    .seq-item-card.complete { border-color: #22c55e; background: #f0fdf4; }
-    .seq-item-card.inconsistent { border-color: #f59e0b; background: #fffbeb; }
-    .seq-item-sku { font-family: monospace; font-size: 14px; color: #6b7280; margin-bottom: 4px; }
-    .seq-item-name { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 12px; line-height: 1.3; }
-    .seq-units { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+
+    /* Big product display - centered */
+    .seq-product-display { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8px 0; }
+    .seq-product-name { font-size: 30px; font-weight: 800; color: #111827; line-height: 1.2; margin-bottom: 8px; word-break: break-word; }
+    .seq-product-sku { font-family: monospace; font-size: 20px; color: #7c3aed; font-weight: 700; margin-bottom: 20px; }
+    .seq-units { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 12px; }
     .seq-unit { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; border: 2px solid #e5e7eb; background: white; color: #9ca3af; }
     .seq-unit.verified { border-color: #22c55e; background: #dcfce7; color: #16a34a; }
     .seq-unit.verified.scan { border-color: #3b82f6; background: #dbeafe; color: #2563eb; }
     .seq-unit.verified.ia { border-color: #f59e0b; background: #fef3c7; color: #d97706; }
     .seq-unit.verified.manual { border-color: #8b5cf6; background: #ede9fe; color: #7c3aed; }
-    .seq-methods { display: flex; gap: 8px; margin-bottom: 12px; }
-    .seq-method-btn { flex: 1; padding: 10px 6px; border: 2px solid #e5e7eb; background: white; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.2s; color: #6b7280; }
-    .seq-method-btn:hover { border-color: #7c3aed; color: #374151; }
-    .seq-method-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .seq-method-btn .method-icon { display: block; font-size: 20px; margin-bottom: 2px; }
-    .seq-inconsistency-btn { width: 100%; padding: 10px; border: 2px dashed #f59e0b; background: #fffbeb; color: #d97706; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 12px; }
-    .seq-nav { display: flex; gap: 12px; }
-    .seq-nav-btn { flex: 1; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-    .seq-nav-btn.prev { background: #f3f4f6; color: #374151; }
-    .seq-nav-btn.next { background: #7c3aed; color: white; }
-    .seq-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .seq-confirm-btn { width: 100%; padding: 14px; background: #22c55e; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 12px; }
+    .seq-status-msg { font-size: 16px; font-weight: 600; padding: 12px 20px; border-radius: 10px; margin-top: 8px; }
+    .seq-status-msg.complete { background: #dcfce7; color: #16a34a; }
+    .seq-status-msg.inconsistent { background: #fef3c7; color: #92400e; }
 
-    /* Swipe as default action - always visible when item has pending units */
-    .swipe-container { position: relative; height: 60px; background: linear-gradient(90deg, #f3f4f6, #ede9fe); border-radius: 30px; overflow: hidden; margin-bottom: 16px; }
+    /* Swipe - positioned in lower area */
+    .seq-swipe-area { padding: 0 8px; margin-bottom: 100px; }
+    .swipe-container { position: relative; height: 60px; background: linear-gradient(90deg, #f3f4f6, #ede9fe); border-radius: 30px; overflow: hidden; }
     .swipe-track { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; }
     .swipe-track-text { font-size: 15px; color: #9ca3af; font-weight: 600; letter-spacing: 0.5px; }
     .swipe-thumb { position: absolute; top: 4px; left: 4px; width: 52px; height: 52px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 22px; cursor: grab; touch-action: none; transition: left 0.1s; z-index: 2; box-shadow: 0 2px 8px rgba(124,58,237,0.3); }
     .swipe-thumb.confirmed { background: #22c55e; box-shadow: 0 2px 8px rgba(34,197,94,0.3); }
-    .seq-alt-methods-label { font-size: 12px; color: #9ca3af; text-align: center; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+
+    /* Bottom toolbar for sequential */
+    .seq-toolbar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e5e7eb; padding: 6px 10px; padding-bottom: max(6px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; z-index: 90; display: none; }
+    .seq-toolbar.show { display: grid; }
+    .seq-tool-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 2px; border: 1px solid #e5e7eb; background: white; border-radius: 8px; font-size: 10px; font-weight: 600; color: #374151; cursor: pointer; transition: all 0.15s; }
+    .seq-tool-btn .tool-icon { font-size: 18px; line-height: 1; }
+    .seq-tool-btn:active { background: #f5f3ff; border-color: #7c3aed; }
+    .seq-tool-btn.warning { color: #d97706; border-color: #fde68a; background: #fffbeb; }
+    .seq-tool-btn.warning:active { background: #fef3c7; }
+    .seq-tool-usb { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 2px; border: 1px solid #e5e7eb; background: white; border-radius: 8px; font-size: 10px; font-weight: 600; color: #374151; }
+    .seq-tool-usb .usb-toggle { width: 36px; height: 20px; }
+    .seq-tool-usb .usb-toggle::after { width: 16px; height: 16px; }
+    .seq-tool-usb .usb-toggle.active::after { transform: translateX(16px); }
 
     /* Panel overlay */
     .panel-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 300; }
@@ -524,15 +529,8 @@
             <span class="seq-progress-text" id="seqProgressText">Item 1/1</span>
           </div>
         </div>
-        <div id="seqItemContainer"></div>
-        <div class="seq-nav">
-          <button type="button" class="seq-nav-btn prev" id="seqPrevBtn">Anterior</button>
-          <button type="button" class="seq-nav-btn next" id="seqNextBtn">Siguiente</button>
-        </div>
-        <div class="fast-actions" style="margin-top:8px">
-          <button type="button" class="fast-action-btn" id="seqToFastBtn">Escaneo rapido</button>
-          <button type="button" class="fast-action-btn" id="seqPanelBtn">Panel</button>
-        </div>
+        <div class="seq-product-display" id="seqItemContainer"></div>
+        <div class="seq-swipe-area" id="seqSwipeArea"></div>
       </div>
 
       <!-- Screen: Complete -->
@@ -586,6 +584,19 @@
     <button type="button" id="usbToggle" class="usb-toggle" title="Alternar lector USB externo"></button>
   </div>
   <button type="button" id="cameraBtn" class="camera-btn hidden">Escanear</button>
+
+  <!-- Sequential toolbar -->
+  <div class="seq-toolbar" id="seqToolbar">
+    <button type="button" class="seq-tool-btn" id="seqScanBtn"><span class="tool-icon">&#128225;</span>Escanear</button>
+    <button type="button" class="seq-tool-btn" id="seqIaBtn"><span class="tool-icon">&#128247;</span>Foto IA</button>
+    <button type="button" class="seq-tool-btn" id="seqFastBtn"><span class="tool-icon">&#9889;</span>Esc. rapido</button>
+    <button type="button" class="seq-tool-btn" id="seqOrdenBtn"><span class="tool-icon">&#9776;</span>Orden</button>
+    <button type="button" class="seq-tool-btn warning" id="seqIncBtn"><span class="tool-icon">&#9888;</span>Inconsist.</button>
+    <div class="seq-tool-usb">
+      <span>USB</span>
+      <button type="button" id="seqUsbToggle" class="usb-toggle" title="Lector USB"></button>
+    </div>
+  </div>
 
   <!-- Panel overlay (bottom sheet) -->
   <button type="button" class="panel-btn-open" id="panelBtnOpen">&#9776;</button>
@@ -851,6 +862,8 @@
 
       var usbToggleContainer = document.getElementById('usbToggleContainer');
 
+      var seqToolbar = document.getElementById('seqToolbar');
+
       function switchScreen(name) {
         currentScreen = name;
         Object.keys(screens).forEach(function(k) {
@@ -858,24 +871,25 @@
         });
         if (screens[name]) screens[name].classList.add('active');
 
-        // Show/hide camera btn, panel btn, and USB toggle based on screen
-        var isVerifying = (name === 'fast-path' || name === 'sequential');
-        if (isVerifying) {
+        // Show/hide elements based on screen
+        if (name === 'fast-path') {
           cameraBtn.classList.remove('hidden');
+          cameraBtn.textContent = 'Escanear producto';
+          cameraBtn.className = 'camera-btn product-mode';
           panelBtnOpen.classList.add('show');
           usbToggleContainer.classList.add('show');
+          seqToolbar.classList.remove('show');
+        } else if (name === 'sequential') {
+          // Sequential: toolbar has everything, hide the big camera btn and floating panel/usb
+          cameraBtn.classList.add('hidden');
+          panelBtnOpen.classList.remove('show');
+          usbToggleContainer.classList.remove('show');
+          seqToolbar.classList.add('show');
         } else {
           cameraBtn.classList.add('hidden');
           panelBtnOpen.classList.remove('show');
           usbToggleContainer.classList.remove('show');
-        }
-
-        if (name === 'fast-path') {
-          cameraBtn.textContent = 'Escanear producto';
-          cameraBtn.className = 'camera-btn product-mode';
-        } else if (name === 'sequential') {
-          cameraBtn.textContent = 'Escanear / Foto IA';
-          cameraBtn.className = 'camera-btn product-mode';
+          seqToolbar.classList.remove('show');
         }
       }
 
@@ -1596,7 +1610,16 @@
                   renderFastPath();
                 } else if (currentScreen === 'sequential') {
                   renderSequentialItem();
-                  checkSequentialCompletion();
+                  // Auto-advance if item complete
+                  if (isItemComplete(itemIndex)) {
+                    setTimeout(function() {
+                      if (sequentialIndex < currentItems.length - 1) {
+                        seqNext();
+                      } else {
+                        checkSequentialCompletion();
+                      }
+                    }, 800);
+                  }
                 }
               } else {
                 showScanError('NO EN ESTA ORDEN: ' + data.sku);
@@ -1694,8 +1717,10 @@
       // SEQUENTIAL PATH
       // ============================================
       function renderSequentialItem() {
-        var container = document.getElementById('seqItemContainer');
-        container.innerHTML = '';
+        var display = document.getElementById('seqItemContainer');
+        var swipeArea = document.getElementById('seqSwipeArea');
+        display.innerHTML = '';
+        swipeArea.innerHTML = '';
 
         if (currentItems.length === 0) return;
 
@@ -1711,12 +1736,16 @@
         var complete = isItemComplete(sequentialIndex);
         var methods = unitMethods[sequentialIndex] || [];
 
-        var card = document.createElement('div');
-        card.className = 'seq-item-card' + (complete ? ' complete' : '') + (item.inconsistencia === 'pendiente' ? ' inconsistent' : '');
+        // Big product name + SKU
+        var nameDiv = document.createElement('div');
+        nameDiv.className = 'seq-product-name';
+        nameDiv.textContent = item.name || item.sku || 'Sin nombre';
+        display.appendChild(nameDiv);
 
-        // SKU and name
-        card.innerHTML = '<div class="seq-item-sku">' + (item.sku || 'Sin SKU') + '</div>' +
-          '<div class="seq-item-name">' + (item.name || item.sku || 'Sin nombre') + '</div>';
+        var skuDiv = document.createElement('div');
+        skuDiv.className = 'seq-product-sku';
+        skuDiv.textContent = item.sku || 'Sin SKU';
+        display.appendChild(skuDiv);
 
         // Unit indicators
         var unitsDiv = document.createElement('div');
@@ -1728,82 +1757,41 @@
           unit.textContent = m ? (m === 'scan' ? 'S' : (m === 'ia' || m === 'claude' ? 'IA' : 'M')) : (j + 1);
           unitsDiv.appendChild(unit);
         }
-        card.appendChild(unitsDiv);
+        display.appendChild(unitsDiv);
 
+        // Status message for complete or inconsistent items
         if (complete) {
-          // Already verified - show confirm button
-          var confirmBtn = document.createElement('button');
-          confirmBtn.className = 'seq-confirm-btn';
-          confirmBtn.textContent = 'Verificado - Siguiente';
-          confirmBtn.onclick = function() { seqNext(); };
-          card.appendChild(confirmBtn);
+          var statusMsg = document.createElement('div');
+          statusMsg.className = 'seq-status-msg complete';
+          statusMsg.textContent = 'Verificado';
+          display.appendChild(statusMsg);
         } else if (item.inconsistencia === 'pendiente') {
-          var incNote = document.createElement('div');
-          incNote.style.cssText = 'background:#fef3c7;padding:12px;border-radius:8px;margin-bottom:12px;font-size:14px;color:#92400e;';
-          incNote.textContent = 'Marcado como inconsistencia pendiente';
-          card.appendChild(incNote);
-        } else {
-          // SWIPE as primary action (always visible)
+          var statusMsg = document.createElement('div');
+          statusMsg.className = 'seq-status-msg inconsistent';
+          statusMsg.textContent = 'Inconsistencia pendiente';
+          display.appendChild(statusMsg);
+        }
+
+        // Swipe (only if item has pending units and no inconsistency)
+        if (!complete && item.inconsistencia !== 'pendiente') {
           var swipeDiv = document.createElement('div');
           swipeDiv.className = 'swipe-container';
           swipeDiv.id = 'swipeContainer';
           swipeDiv.innerHTML = '<div class="swipe-track"><span class="swipe-track-text">Desliza para confirmar</span></div>' +
             '<div class="swipe-thumb" id="swipeThumb">&#8594;</div>';
-          card.appendChild(swipeDiv);
-
-          // Init swipe immediately
+          swipeArea.appendChild(swipeDiv);
           setTimeout(function() { initSwipe(sequentialIndex); }, 50);
-
-          // Alternative methods label + buttons (secondary, smaller)
-          var altLabel = document.createElement('div');
-          altLabel.className = 'seq-alt-methods-label';
-          altLabel.textContent = 'o verificar con';
-          card.appendChild(altLabel);
-
-          var methodsDiv = document.createElement('div');
-          methodsDiv.className = 'seq-methods';
-
-          var scanBtn = document.createElement('button');
-          scanBtn.className = 'seq-method-btn';
-          scanBtn.innerHTML = '<span class="method-icon">&#128225;</span>Escanear';
-          scanBtn.onclick = function() {
-            startCamera();
-            cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          };
-          methodsDiv.appendChild(scanBtn);
-
-          var iaBtn = document.createElement('button');
-          iaBtn.className = 'seq-method-btn';
-          iaBtn.innerHTML = '<span class="method-icon">&#128247;</span>Foto IA';
-          iaBtn.onclick = function() {
-            productoAVerificar = {
-              index: sequentialIndex,
-              item: currentItems[sequentialIndex],
-              descripcion: currentItems[sequentialIndex].name || currentItems[sequentialIndex].sku,
-              fotosMinimas: 1
-            };
-            startCamera();
-            cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          };
-          methodsDiv.appendChild(iaBtn);
-
-          card.appendChild(methodsDiv);
-
-          // Inconsistency button
-          var incBtn = document.createElement('button');
-          incBtn.className = 'seq-inconsistency-btn';
-          incBtn.textContent = 'Marcar inconsistencia';
-          incBtn.onclick = function() { markInconsistency(sequentialIndex); };
-          card.appendChild(incBtn);
         }
 
-        container.appendChild(card);
-
-        // Nav buttons state
-        document.getElementById('seqPrevBtn').disabled = (sequentialIndex === 0);
-        var canNext = complete || item.inconsistencia === 'pendiente' || item.inconsistencia === 'faltante_confirmado';
-        document.getElementById('seqNextBtn').disabled = !canNext;
-        document.getElementById('seqNextBtn').textContent = (sequentialIndex === currentItems.length - 1) ? 'Finalizar' : 'Siguiente';
+        // Update toolbar inconsistency button state
+        var incBtn = document.getElementById('seqIncBtn');
+        if (complete || item.inconsistencia === 'pendiente') {
+          incBtn.style.opacity = '0.4';
+          incBtn.style.pointerEvents = 'none';
+        } else {
+          incBtn.style.opacity = '1';
+          incBtn.style.pointerEvents = 'auto';
+        }
       }
 
       function initSwipe(itemIndex) {
@@ -1839,9 +1827,17 @@
             unitMethods[itemIndex].push('manual');
             saveItemVerification(itemIndex, 'manual');
             if (navigator.vibrate) navigator.vibrate(50);
-            container.classList.remove('active');
             renderSequentialItem();
-            checkSequentialCompletion();
+            // Auto-advance if item is now complete
+            if (isItemComplete(itemIndex)) {
+              setTimeout(function() {
+                if (sequentialIndex < currentItems.length - 1) {
+                  seqNext();
+                } else {
+                  checkSequentialCompletion();
+                }
+              }, 600);
+            }
           } else {
             thumb.style.left = '4px';
             thumb.classList.remove('confirmed');
@@ -1874,6 +1870,10 @@
             currentItems[itemIndex].inconsistencia = 'pendiente';
             showStatus('Inconsistencia marcada', 'success');
             renderSequentialItem();
+            // Auto-advance to next item
+            if (sequentialIndex < currentItems.length - 1) {
+              setTimeout(function() { seqNext(); }, 800);
+            }
           }
         })
         .catch(function(err) { showStatus('Error: ' + err.message, 'error'); });
@@ -1907,22 +1907,39 @@
         }
       }
 
-      document.getElementById('seqPrevBtn').onclick = function() {
-        if (sequentialIndex > 0) {
-          sequentialIndex--;
-          renderSequentialItem();
-        }
+      // Sequential toolbar handlers
+      document.getElementById('seqScanBtn').onclick = function() {
+        startCamera();
+        cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
       };
-      document.getElementById('seqNextBtn').onclick = seqNext;
 
-      // Volver a escaneo rápido desde secuencial
-      document.getElementById('seqToFastBtn').onclick = function() {
+      document.getElementById('seqIaBtn').onclick = function() {
+        productoAVerificar = {
+          index: sequentialIndex,
+          item: currentItems[sequentialIndex],
+          descripcion: currentItems[sequentialIndex].name || currentItems[sequentialIndex].sku,
+          fotosMinimas: 1
+        };
+        startCamera();
+        cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+
+      document.getElementById('seqFastBtn').onclick = function() {
         if (verificationPath === 'sequential') verificationPath = 'mixed';
         switchScreen('fast-path');
         renderFastPath();
       };
 
-      document.getElementById('seqPanelBtn').onclick = function() { openPanel(); };
+      document.getElementById('seqOrdenBtn').onclick = function() { openPanel(); };
+
+      document.getElementById('seqIncBtn').onclick = function() {
+        markInconsistency(sequentialIndex);
+      };
+
+      // Sync USB toggle in toolbar with the main toggle
+      document.getElementById('seqUsbToggle').onclick = function() {
+        toggleUSBMode();
+      };
 
       // ============================================
       // PANEL OVERLAY
@@ -2302,7 +2319,15 @@
                 saveItemVerification(idx, 'ia');
                 if (currentScreen === 'sequential') {
                   renderSequentialItem();
-                  checkSequentialCompletion();
+                  if (isItemComplete(idx)) {
+                    setTimeout(function() {
+                      if (sequentialIndex < currentItems.length - 1) {
+                        seqNext();
+                      } else {
+                        checkSequentialCompletion();
+                      }
+                    }, 800);
+                  }
                 } else if (currentScreen === 'fast-path') {
                   renderFastPath();
                 }
@@ -2360,9 +2385,10 @@
       var usbScannerInput = document.getElementById('usbScannerInput');
       var usbModeActive = false;
 
-      usbToggle.onclick = function() {
+      function toggleUSBMode() {
         usbModeActive = !usbModeActive;
         usbToggle.classList.toggle('active', usbModeActive);
+        document.getElementById('seqUsbToggle').classList.toggle('active', usbModeActive);
         if (usbModeActive) {
           usbScannerInput.classList.remove('hidden');
           usbScannerInput.focus();
@@ -2371,7 +2397,9 @@
           usbScannerInput.classList.add('hidden');
           usbScannerInput.value = '';
         }
-      };
+      }
+
+      usbToggle.onclick = toggleUSBMode;
 
       usbScannerInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
