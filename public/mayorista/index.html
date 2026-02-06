@@ -335,6 +335,19 @@
     .panel-resolve-btn { padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
     .panel-btn-open { position: fixed; bottom: 70px; right: 16px; width: 48px; height: 48px; background: #7c3aed; color: white; border: none; border-radius: 50%; font-size: 20px; cursor: pointer; z-index: 95; box-shadow: 0 4px 12px rgba(124,58,237,0.4); display: none; }
     .panel-btn-open.show { display: flex; align-items: center; justify-content: center; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .panel-edit-btn { padding: 5px 12px; border: 2px solid #7c3aed; background: white; color: #7c3aed; border-radius: 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .panel-edit-btn.active { background: #7c3aed; color: white; }
+    .panel-item-actions { display: none; align-items: center; gap: 6px; margin-left: auto; }
+    .panel-item.editing .panel-item-actions { display: flex; }
+    .panel-item-del { width: 24px; height: 24px; border-radius: 50%; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .panel-item-del:active { background: #dc2626; color: white; }
+    .panel-qty-btn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #e5e7eb; background: white; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #374151; }
+    .panel-qty-btn:active { border-color: #7c3aed; background: #f5f3ff; }
+    .panel-qty-val { font-size: 13px; font-weight: 700; color: #374151; min-width: 18px; text-align: center; }
+    .panel-add-btn { width: 100%; padding: 10px; border: 2px dashed #d1d5db; background: #f9fafb; color: #6b7280; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; margin-top: 8px; display: none; }
+    .panel-add-btn:active { border-color: #7c3aed; color: #7c3aed; }
+    .panel-add-btn.show { display: block; }
 
     /* Resolve modal */
     .resolve-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 400; align-items: center; justify-content: center; padding: 20px; }
@@ -603,12 +616,16 @@
   <div class="panel-overlay" id="panelOverlay">
     <div class="panel-sheet">
       <div class="panel-handle"></div>
-      <div class="panel-title">Estado del pedido</div>
+      <div class="panel-header">
+        <div class="panel-title" style="margin-bottom:0">Estado del pedido</div>
+        <button type="button" class="panel-edit-btn" id="panelEditBtn">Editar</button>
+      </div>
       <div class="panel-progress">
         <div class="panel-progress-bar"><div class="panel-progress-fill" id="panelProgressFill" style="width:0%"></div></div>
         <span class="panel-progress-pct" id="panelProgressPct">0%</span>
       </div>
       <div id="panelItemsList"></div>
+      <button type="button" class="panel-add-btn" id="panelAddBtn">+ Agregar producto</button>
     </div>
   </div>
 
@@ -1432,7 +1449,13 @@
         });
         unitMethods[currentItems.length - 1] = [];
         addItemModalOverlay.classList.remove('show');
-        renderPreviewItems();
+        // Refresh whichever screen is active
+        if (currentScreen === 'order-loaded') {
+          renderPreviewItems();
+        } else {
+          renderPanel();
+          refreshCurrentVerificationScreen();
+        }
         showStatus('Producto agregado', 'success');
       };
 
@@ -1944,18 +1967,46 @@
       // ============================================
       // PANEL OVERLAY
       // ============================================
+      var panelEditMode = false;
+      var panelEditBtn = document.getElementById('panelEditBtn');
+      var panelAddBtn = document.getElementById('panelAddBtn');
+
       function openPanel() {
+        panelEditMode = false;
+        panelEditBtn.textContent = 'Editar';
+        panelEditBtn.classList.remove('active');
+        panelAddBtn.classList.remove('show');
         renderPanel();
         panelOverlay.classList.add('show');
       }
 
       function closePanel() {
         panelOverlay.classList.remove('show');
+        panelEditMode = false;
+        panelEditBtn.textContent = 'Editar';
+        panelEditBtn.classList.remove('active');
+        panelAddBtn.classList.remove('show');
       }
 
       panelBtnOpen.onclick = openPanel;
       panelOverlay.onclick = function(e) {
         if (e.target === panelOverlay) closePanel();
+      };
+
+      panelEditBtn.onclick = function() {
+        panelEditMode = !panelEditMode;
+        panelEditBtn.textContent = panelEditMode ? 'Listo' : 'Editar';
+        panelEditBtn.classList.toggle('active', panelEditMode);
+        if (panelEditMode) { panelAddBtn.classList.add('show'); } else { panelAddBtn.classList.remove('show'); }
+        renderPanel();
+      };
+
+      panelAddBtn.onclick = function() {
+        document.getElementById('addItemSku').value = '';
+        document.getElementById('addItemName').value = '';
+        document.getElementById('addItemQty').value = '1';
+        document.getElementById('addItemModalOverlay').classList.add('show');
+        document.getElementById('addItemSku').focus();
       };
 
       function renderPanel() {
@@ -1980,7 +2031,7 @@
           else if (v > 0) { statusClass = 'yellow'; itemClass = 'partial'; }
 
           var div = document.createElement('div');
-          div.className = 'panel-item ' + itemClass;
+          div.className = 'panel-item ' + itemClass + (panelEditMode ? ' editing' : '');
 
           var methodIcons = methods.map(function(m) {
             if (m === 'scan') return 'S';
@@ -1993,32 +2044,108 @@
             '<div class="panel-item-name">' + (item.name || item.sku) + '</div>' +
             '<div class="panel-item-detail">' + (item.sku || '') + ' - ' + v + '/' + item.quantity + (methodIcons ? ' [' + methodIcons + ']' : '') + '</div></div>';
 
-          // Resolve button for inconsistencies
-          if (item.inconsistencia === 'pendiente') {
-            var resolveBtn = document.createElement('button');
-            resolveBtn.className = 'panel-resolve-btn';
-            resolveBtn.textContent = 'Resolver';
-            resolveBtn.setAttribute('data-idx', idx);
-            resolveBtn.onclick = function(e) {
+          if (panelEditMode) {
+            // Edit controls: delete, qty -/+
+            var actions = document.createElement('div');
+            actions.className = 'panel-item-actions';
+            actions.style.display = 'flex';
+
+            var delBtn = document.createElement('button');
+            delBtn.className = 'panel-item-del';
+            delBtn.textContent = '\u00D7';
+            delBtn.setAttribute('data-idx', idx);
+            delBtn.onclick = function(e) {
               e.stopPropagation();
-              openResolveModal(parseInt(this.getAttribute('data-idx')));
+              var i = parseInt(this.getAttribute('data-idx'));
+              var it = currentItems[i];
+              if (!confirm('Eliminar "' + (it.name || it.sku) + '"?')) return;
+              currentItems.splice(i, 1);
+              var newMethods = {};
+              for (var k = 0; k < currentItems.length; k++) {
+                newMethods[k] = k < i ? (unitMethods[k] || []) : (unitMethods[k + 1] || []);
+              }
+              unitMethods = newMethods;
+              if (sequentialIndex >= currentItems.length) sequentialIndex = Math.max(0, currentItems.length - 1);
+              renderPanel();
+              refreshCurrentVerificationScreen();
             };
-            div.appendChild(resolveBtn);
+            actions.appendChild(delBtn);
+
+            var minusBtn = document.createElement('button');
+            minusBtn.className = 'panel-qty-btn';
+            minusBtn.textContent = '\u2212';
+            minusBtn.setAttribute('data-idx', idx);
+            minusBtn.onclick = function(e) {
+              e.stopPropagation();
+              var i = parseInt(this.getAttribute('data-idx'));
+              if (currentItems[i].quantity > 1) {
+                currentItems[i].quantity--;
+                var m = unitMethods[i] || [];
+                if (m.length > currentItems[i].quantity) unitMethods[i] = m.slice(0, currentItems[i].quantity);
+                renderPanel();
+                refreshCurrentVerificationScreen();
+              }
+            };
+            actions.appendChild(minusBtn);
+
+            var qtyVal = document.createElement('span');
+            qtyVal.className = 'panel-qty-val';
+            qtyVal.textContent = item.quantity;
+            actions.appendChild(qtyVal);
+
+            var plusBtn = document.createElement('button');
+            plusBtn.className = 'panel-qty-btn';
+            plusBtn.textContent = '+';
+            plusBtn.setAttribute('data-idx', idx);
+            plusBtn.onclick = function(e) {
+              e.stopPropagation();
+              var i = parseInt(this.getAttribute('data-idx'));
+              currentItems[i].quantity++;
+              renderPanel();
+              refreshCurrentVerificationScreen();
+            };
+            actions.appendChild(plusBtn);
+
+            div.appendChild(actions);
+          } else {
+            // Resolve button for inconsistencies
+            if (item.inconsistencia === 'pendiente') {
+              var resolveBtn = document.createElement('button');
+              resolveBtn.className = 'panel-resolve-btn';
+              resolveBtn.textContent = 'Resolver';
+              resolveBtn.setAttribute('data-idx', idx);
+              resolveBtn.onclick = function(e) {
+                e.stopPropagation();
+                openResolveModal(parseInt(this.getAttribute('data-idx')));
+              };
+              div.appendChild(resolveBtn);
+            }
           }
 
-          // Click to navigate to item in sequential
-          div.setAttribute('data-idx', idx);
-          div.onclick = function() {
-            var i = parseInt(this.getAttribute('data-idx'));
-            closePanel();
-            if (currentScreen === 'sequential') {
-              sequentialIndex = i;
-              renderSequentialItem();
-            }
-          };
+          // Click to navigate to item in sequential (only when not editing)
+          if (!panelEditMode) {
+            div.setAttribute('data-idx', idx);
+            div.onclick = function() {
+              var i = parseInt(this.getAttribute('data-idx'));
+              closePanel();
+              if (currentScreen === 'sequential') {
+                sequentialIndex = i;
+                renderSequentialItem();
+              }
+            };
+          }
 
           list.appendChild(div);
         });
+      }
+
+      // Helper to refresh the active verification screen after editing items
+      function refreshCurrentVerificationScreen() {
+        if (currentScreen === 'sequential') {
+          renderSequentialItem();
+        } else if (currentScreen === 'fast-path') {
+          renderFastPath();
+        }
       }
 
       // ============================================
