@@ -1129,6 +1129,17 @@
         return getVerifiedCount(itemIndex) >= item.quantity;
       }
 
+      function findFirstPendingItemIndex() {
+        for (var i = 0; i < currentItems.length; i++) {
+          if (!isItemComplete(i) && currentItems[i].inconsistencia !== 'pendiente') return i;
+        }
+        // Si todos completos o con inconsistencia, buscar primer inconsistencia
+        for (var j = 0; j < currentItems.length; j++) {
+          if (!isItemComplete(j)) return j;
+        }
+        return 0;
+      }
+
       function getTotalVerifiedUnits() {
         var total = 0;
         for (var i = 0; i < currentItems.length; i++) {
@@ -1279,7 +1290,7 @@
               codigosDesconocidos = [];
             }
 
-            sequentialIndex = 0;
+            sequentialIndex = findFirstPendingItemIndex();
             hideStatus();
             stopCamera();
             switchView('verificar');
@@ -1474,7 +1485,7 @@
         timestampInicio = new Date().toISOString();
         verificationPath = 'sequential';
         transitionState('verifying_sequential');
-        sequentialIndex = 0;
+        sequentialIndex = findFirstPendingItemIndex();
         switchScreen('sequential');
         renderSequentialItem();
       };
@@ -1553,12 +1564,7 @@
         if (verificationPath === 'scan_only') verificationPath = 'mixed';
         orderState = 'verifying_scan_only'; // allow transition
         transitionState('verifying_sequential');
-        sequentialIndex = 0;
-        // Skip already-complete items
-        while (sequentialIndex < currentItems.length && isItemComplete(sequentialIndex)) {
-          sequentialIndex++;
-        }
-        if (sequentialIndex >= currentItems.length) sequentialIndex = 0;
+        sequentialIndex = findFirstPendingItemIndex();
         switchScreen('sequential');
         renderSequentialItem();
       };
@@ -1678,9 +1684,7 @@
                 if (verificationPath === 'scan_only') verificationPath = 'mixed';
                 orderState = 'verifying_scan_only';
                 transitionState('verifying_sequential');
-                sequentialIndex = 0;
-                while (sequentialIndex < currentItems.length && isItemComplete(sequentialIndex)) sequentialIndex++;
-                if (sequentialIndex >= currentItems.length) sequentialIndex = 0;
+                sequentialIndex = findFirstPendingItemIndex();
                 switchScreen('sequential');
                 renderSequentialItem();
               } else {
