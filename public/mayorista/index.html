@@ -133,20 +133,21 @@
     .modal-btn.secondary { background: #f3f4f6; color: #374151; }
 
     /* Modo edición */
+    /* Edición de items en order-loaded */
     .edit-mode-btn { padding: 6px 14px; border: 2px solid #7c3aed; background: white; color: #7c3aed; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
     .edit-mode-btn.active { background: #7c3aed; color: white; }
-    .edit-controls { display: none; }
-    .items-section.editing .edit-controls { display: flex; }
-    .edit-delete-btn { position: absolute; top: 8px; left: 8px; width: 32px; height: 32px; border-radius: 50%; background: #fef2f2; color: #dc2626; border: 2px solid #fecaca; font-size: 18px; font-weight: 700; cursor: pointer; align-items: center; justify-content: center; z-index: 5; transition: all 0.2s; }
-    .edit-delete-btn:hover { background: #dc2626; color: white; border-color: #dc2626; }
-    .qty-controls { align-items: center; gap: 8px; margin-top: 8px; }
-    .qty-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #e5e7eb; background: white; font-size: 20px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; color: #374151; }
+    .preview-item.editing { padding: 12px 0; }
+    .preview-item-actions { display: none; }
+    .preview-item.editing .preview-item-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .preview-delete-btn { width: 28px; height: 28px; border-radius: 50%; background: #fef2f2; color: #dc2626; border: 2px solid #fecaca; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .preview-delete-btn:hover { background: #dc2626; color: white; }
+    .qty-btn { width: 32px; height: 32px; border-radius: 50%; border: 2px solid #e5e7eb; background: white; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; color: #374151; }
     .qty-btn:hover { border-color: #7c3aed; background: #f5f3ff; }
     .qty-btn:active { transform: scale(0.9); }
     .qty-display { font-size: 16px; font-weight: 700; color: #374151; min-width: 24px; text-align: center; }
-    .add-item-btn { display: none; width: 100%; padding: 16px; border: 2px dashed #d1d5db; background: #f9fafb; color: #6b7280; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .add-item-btn { display: none; width: 100%; padding: 14px; border: 2px dashed #d1d5db; background: #f9fafb; color: #6b7280; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; border-radius: 8px; margin-top: 8px; }
     .add-item-btn:hover { border-color: #7c3aed; color: #7c3aed; background: #f5f3ff; }
-    .items-section.editing .add-item-btn { display: block; }
+    .add-item-btn.show { display: block; }
 
     /* Scan mode indicator */
     .scan-mode-indicator { display: none; background: #7c3aed; color: white; padding: 8px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
@@ -481,8 +482,12 @@
           <div class="order-meta" id="orderMeta"></div>
         </div>
         <div class="order-items-preview" id="orderItemsPreview">
-          <h3>Items del pedido</h3>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3>Items del pedido</h3>
+            <button type="button" class="edit-mode-btn" id="editModeBtn">Editar</button>
+          </div>
           <div id="previewItemsList"></div>
+          <button type="button" class="add-item-btn" id="addItemBtn">+ Agregar producto</button>
         </div>
         <div class="start-buttons">
           <button type="button" class="start-btn fast" id="startFastBtn">Escaneo rapido</button>
@@ -523,6 +528,10 @@
         <div class="seq-nav">
           <button type="button" class="seq-nav-btn prev" id="seqPrevBtn">Anterior</button>
           <button type="button" class="seq-nav-btn next" id="seqNextBtn">Siguiente</button>
+        </div>
+        <div class="fast-actions" style="margin-top:8px">
+          <button type="button" class="fast-action-btn" id="seqToFastBtn">Escaneo rapido</button>
+          <button type="button" class="fast-action-btn" id="seqPanelBtn">Panel</button>
         </div>
       </div>
 
@@ -602,6 +611,25 @@
       <div class="modal-buttons">
         <button type="button" class="modal-btn secondary" id="modalCancel">Cancelar</button>
         <button type="button" class="modal-btn primary" id="modalSave">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para agregar producto -->
+  <div class="modal-overlay" id="addItemModalOverlay">
+    <div class="modal">
+      <h3>Agregar producto</h3>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <input type="text" id="addItemSku" class="login-input" placeholder="SKU (ej: FT-A15)" style="font-family:monospace;">
+        <input type="text" id="addItemName" class="login-input" placeholder="Nombre del producto">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label style="font-size:14px;color:#374151;font-weight:600;">Cantidad:</label>
+          <input type="number" id="addItemQty" class="login-input" value="1" min="1" style="width:80px;text-align:center;">
+        </div>
+      </div>
+      <div class="modal-buttons" style="margin-top:16px;">
+        <button type="button" class="modal-btn secondary" id="addItemCancel">Cancelar</button>
+        <button type="button" class="modal-btn primary" id="addItemConfirm">Agregar</button>
       </div>
     </div>
   </div>
@@ -1252,22 +1280,147 @@
       // ============================================
       // ORDER LOADED SCREEN
       // ============================================
+      var editMode = false;
+      var editModeBtn = document.getElementById('editModeBtn');
+      var addItemBtn = document.getElementById('addItemBtn');
+
       function showOrderLoadedScreen() {
         switchScreen('order-loaded');
+        editMode = false;
+        editModeBtn.textContent = 'Editar';
+        editModeBtn.classList.remove('active');
+        addItemBtn.classList.remove('show');
         document.getElementById('orderTitle').textContent = 'Orden #' + currentOrderId;
         document.getElementById('orderMeta').textContent = currentAccount;
+        renderPreviewItems();
+      }
 
+      function renderPreviewItems() {
         var list = document.getElementById('previewItemsList');
         list.innerHTML = '';
-        currentItems.forEach(function(item) {
+        currentItems.forEach(function(item, idx) {
           var div = document.createElement('div');
-          div.className = 'preview-item';
-          div.innerHTML = '<div><div class="preview-item-name">' + (item.name || item.sku) + '</div>' +
+          div.className = 'preview-item' + (editMode ? ' editing' : '');
+
+          var topRow = document.createElement('div');
+          topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;width:100%;';
+          topRow.innerHTML = '<div><div class="preview-item-name">' + (item.name || item.sku) + '</div>' +
             '<div class="preview-item-sku">' + (item.sku || '') + '</div></div>' +
             '<div class="preview-item-qty">x' + item.quantity + '</div>';
+          div.appendChild(topRow);
+
+          // Edit controls (only visible in edit mode)
+          var actions = document.createElement('div');
+          actions.className = 'preview-item-actions';
+
+          var delBtn = document.createElement('button');
+          delBtn.className = 'preview-delete-btn';
+          delBtn.textContent = '\u00D7';
+          delBtn.title = 'Eliminar';
+          delBtn.setAttribute('data-idx', idx);
+          delBtn.onclick = function(e) {
+            e.stopPropagation();
+            var i = parseInt(this.getAttribute('data-idx'));
+            var it = currentItems[i];
+            if (!confirm('Eliminar "' + (it.name || it.sku) + '"?')) return;
+            currentItems.splice(i, 1);
+            // Reindex unitMethods
+            var newMethods = {};
+            for (var k = 0; k < currentItems.length; k++) {
+              newMethods[k] = k < i ? (unitMethods[k] || []) : (unitMethods[k + 1] || []);
+            }
+            unitMethods = newMethods;
+            renderPreviewItems();
+          };
+          actions.appendChild(delBtn);
+
+          var minusBtn = document.createElement('button');
+          minusBtn.className = 'qty-btn';
+          minusBtn.textContent = '\u2212';
+          minusBtn.setAttribute('data-idx', idx);
+          minusBtn.onclick = function(e) {
+            e.stopPropagation();
+            var i = parseInt(this.getAttribute('data-idx'));
+            if (currentItems[i].quantity > 1) {
+              currentItems[i].quantity--;
+              var methods = unitMethods[i] || [];
+              if (methods.length > currentItems[i].quantity) {
+                unitMethods[i] = methods.slice(0, currentItems[i].quantity);
+              }
+              renderPreviewItems();
+            }
+          };
+          actions.appendChild(minusBtn);
+
+          var qtyLabel = document.createElement('span');
+          qtyLabel.className = 'qty-display';
+          qtyLabel.textContent = item.quantity;
+          actions.appendChild(qtyLabel);
+
+          var plusBtn = document.createElement('button');
+          plusBtn.className = 'qty-btn';
+          plusBtn.textContent = '+';
+          plusBtn.setAttribute('data-idx', idx);
+          plusBtn.onclick = function(e) {
+            e.stopPropagation();
+            var i = parseInt(this.getAttribute('data-idx'));
+            currentItems[i].quantity++;
+            renderPreviewItems();
+          };
+          actions.appendChild(plusBtn);
+
+          div.appendChild(actions);
           list.appendChild(div);
         });
       }
+
+      editModeBtn.onclick = function() {
+        editMode = !editMode;
+        editModeBtn.textContent = editMode ? 'Listo' : 'Editar';
+        editModeBtn.classList.toggle('active', editMode);
+        if (editMode) { addItemBtn.classList.add('show'); } else { addItemBtn.classList.remove('show'); }
+        renderPreviewItems();
+      };
+
+      // Modal agregar producto
+      var addItemModalOverlay = document.getElementById('addItemModalOverlay');
+      var addItemSkuInput = document.getElementById('addItemSku');
+      var addItemNameInput = document.getElementById('addItemName');
+      var addItemQtyInput = document.getElementById('addItemQty');
+
+      addItemBtn.onclick = function() {
+        addItemSkuInput.value = '';
+        addItemNameInput.value = '';
+        addItemQtyInput.value = '1';
+        addItemModalOverlay.classList.add('show');
+        addItemSkuInput.focus();
+      };
+
+      document.getElementById('addItemCancel').onclick = function() {
+        addItemModalOverlay.classList.remove('show');
+      };
+
+      document.getElementById('addItemConfirm').onclick = function() {
+        var sku = addItemSkuInput.value.trim();
+        var name = addItemNameInput.value.trim();
+        var qty = parseInt(addItemQtyInput.value) || 1;
+        if (qty < 1) qty = 1;
+        if (!sku && !name) {
+          showStatus('Ingresa al menos un SKU o nombre', 'error');
+          return;
+        }
+        currentItems.push({
+          sku: sku,
+          name: name || sku,
+          quantity: qty,
+          inconsistencia: '',
+          resolucionInfo: null
+        });
+        unitMethods[currentItems.length - 1] = [];
+        addItemModalOverlay.classList.remove('show');
+        renderPreviewItems();
+        showStatus('Producto agregado', 'success');
+      };
 
       document.getElementById('startFastBtn').onclick = function() {
         timestampInicio = new Date().toISOString();
@@ -1761,6 +1914,15 @@
         }
       };
       document.getElementById('seqNextBtn').onclick = seqNext;
+
+      // Volver a escaneo rápido desde secuencial
+      document.getElementById('seqToFastBtn').onclick = function() {
+        if (verificationPath === 'sequential') verificationPath = 'mixed';
+        switchScreen('fast-path');
+        renderFastPath();
+      };
+
+      document.getElementById('seqPanelBtn').onclick = function() { openPanel(); };
 
       // ============================================
       // PANEL OVERLAY
