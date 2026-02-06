@@ -165,13 +165,13 @@ async function ensureMayoristaSheetExists(sheetName) {
           }
         });
 
-        // Header: Fecha | Hora | OrderID | Cuenta | Cliente | Items | Estado | HoraVerif | Metodo
+        // Header: Fecha | Hora | OrderID | Cuenta | Cliente | Items | Estado | HoraVerif | Metodo | EstadoVerif | Camino | TimestampInicio | CodigosDesconocidos
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: sheetName + '!A1:I1',
+          range: sheetName + '!A1:M1',
           valueInputOption: 'USER_ENTERED',
           resource: {
-            values: [['Fecha', 'Hora', 'OrderID', 'Cuenta', 'Cliente', 'Items', 'Estado', 'HoraVerif', 'Metodo']]
+            values: [['Fecha', 'Hora', 'OrderID', 'Cuenta', 'Cliente', 'Items', 'Estado', 'HoraVerif', 'Metodo', 'EstadoVerif', 'Camino', 'TimestampInicio', 'CodigosDesconocidos']]
           }
         });
 
@@ -216,7 +216,7 @@ async function clearMayoristaSheet(sheetName) {
               sheetId: sheetId,
               startRowIndex: 1,
               startColumnIndex: 0,
-              endColumnIndex: 9
+              endColumnIndex: 13
             },
             fields: 'userEnteredValue'
           }
@@ -288,7 +288,7 @@ async function getOrdersFromSheet(sheetName) {
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:M'
     });
 
     var rows = response.data.values || [];
@@ -309,7 +309,11 @@ async function getOrdersFromSheet(sheetName) {
         items: row[5] || '',
         estado: row[6] || 'Pendiente',
         horaVerif: row[7] || '',
-        metodo: row[8] || ''
+        metodo: row[8] || '',
+        estadoVerif: row[9] || 'pending_verification',
+        camino: row[10] || '',
+        timestampInicio: row[11] || '',
+        codigosDesconocidos: row[12] || ''
       });
     }
 
@@ -325,13 +329,13 @@ async function getOrdersFromSheet(sheetName) {
   }
 }
 
-async function markOrderVerified(sheetName, orderId, metodo) {
+async function markOrderVerified(sheetName, orderId, metodo, extraData) {
   if (!sheets || !SHEET_ID) return false;
 
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!A:I'
+      range: sheetName + '!A:M'
     });
 
     var rows = response.data.values || [];
@@ -351,13 +355,21 @@ async function markOrderVerified(sheetName, orderId, metodo) {
 
     var horaVerif = getArgentinaTime().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Actualizar columnas G (Estado), H (HoraVerif), I (Metodo)
+    var estadoVerif = (extraData && extraData.estado) || 'verified_sequential';
+    var camino = (extraData && extraData.camino) || metodo || 'manual';
+    var timestampInicio = (extraData && extraData.timestampInicio) || '';
+    var codigosDesconocidos = '';
+    if (extraData && extraData.codigosDesconocidos && extraData.codigosDesconocidos.length > 0) {
+      codigosDesconocidos = JSON.stringify(extraData.codigosDesconocidos);
+    }
+
+    // Actualizar columnas G (Estado) hasta M (CodigosDesconocidos)
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!G' + rowIndex + ':I' + rowIndex,
+      range: sheetName + '!G' + rowIndex + ':M' + rowIndex,
       valueInputOption: 'USER_ENTERED',
       resource: {
-        values: [['Verificado', horaVerif, metodo || 'manual']]
+        values: [['Verificado', horaVerif, metodo || 'manual', estadoVerif, camino, timestampInicio, codigosDesconocidos]]
       }
     });
 
@@ -398,13 +410,13 @@ async function ensureMayoristaItemsSheetExists() {
           }
         });
 
-        // Header: Fecha | OrderID | Cuenta | SKU | Nombre | Cantidad | Verificados | Metodo | UltimaVerif
+        // Header: Fecha | OrderID | Cuenta | SKU | Nombre | Cantidad | Verificados | Metodo | UltimaVerif | MetodoPorUnidad | Inconsistencia | ResolucionInfo
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: ITEMS_SHEET_NAME + '!A1:I1',
+          range: ITEMS_SHEET_NAME + '!A1:L1',
           valueInputOption: 'USER_ENTERED',
           resource: {
-            values: [['Fecha', 'OrderID', 'Cuenta', 'SKU', 'Nombre', 'Cantidad', 'Verificados', 'Metodo', 'UltimaVerif']]
+            values: [['Fecha', 'OrderID', 'Cuenta', 'SKU', 'Nombre', 'Cantidad', 'Verificados', 'Metodo', 'UltimaVerif', 'MetodoPorUnidad', 'Inconsistencia', 'ResolucionInfo']]
           }
         });
 
@@ -428,7 +440,7 @@ async function clearMayoristaItemsForDate(fecha) {
     // Leer todos los datos
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: ITEMS_SHEET_NAME + '!A:I'
+      range: ITEMS_SHEET_NAME + '!A:L'
     });
 
     var rows = response.data.values || [];
@@ -452,7 +464,7 @@ async function clearMayoristaItemsForDate(fecha) {
     // Limpiar toda la hoja y reescribir
     await sheets.spreadsheets.values.clear({
       spreadsheetId: SHEET_ID,
-      range: ITEMS_SHEET_NAME + '!A:I'
+      range: ITEMS_SHEET_NAME + '!A:L'
     });
 
     if (rowsToKeep.length > 0) {
@@ -520,7 +532,7 @@ async function getOrderItemsFromSheet(orderId) {
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: ITEMS_SHEET_NAME + '!A:I'
+      range: ITEMS_SHEET_NAME + '!A:L'
     });
 
     var rows = response.data.values || [];
@@ -529,6 +541,18 @@ async function getOrderItemsFromSheet(orderId) {
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
       if (row[1] && row[1].toString() === orderId.toString()) {
+        // Parsear MetodoPorUnidad (JSON array)
+        var metodoPorUnidad = [];
+        try {
+          if (row[9]) metodoPorUnidad = JSON.parse(row[9]);
+        } catch (e) { metodoPorUnidad = []; }
+
+        // Parsear ResolucionInfo (JSON object)
+        var resolucionInfo = null;
+        try {
+          if (row[11]) resolucionInfo = JSON.parse(row[11]);
+        } catch (e) { resolucionInfo = null; }
+
         items.push({
           rowIndex: i + 1,
           fecha: row[0] || '',
@@ -539,7 +563,10 @@ async function getOrderItemsFromSheet(orderId) {
           cantidad: parseInt(row[5]) || 1,
           verificados: parseInt(row[6]) || 0,
           metodo: row[7] || '',
-          ultimaVerif: row[8] || ''
+          ultimaVerif: row[8] || '',
+          metodoPorUnidad: metodoPorUnidad,
+          inconsistencia: row[10] || '',
+          resolucionInfo: resolucionInfo
         });
       }
     }
@@ -551,13 +578,13 @@ async function getOrderItemsFromSheet(orderId) {
   }
 }
 
-async function updateItemVerification(orderId, sku, verificados, metodo) {
+async function updateItemVerification(orderId, sku, verificados, metodo, metodoPorUnidad) {
   if (!sheets || !SHEET_ID) return false;
 
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: ITEMS_SHEET_NAME + '!A:I'
+      range: ITEMS_SHEET_NAME + '!A:L'
     });
 
     var rows = response.data.values || [];
@@ -579,15 +606,27 @@ async function updateItemVerification(orderId, sku, verificados, metodo) {
 
     var horaVerif = getArgentinaTime().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Actualizar columnas G (Verificados), H (Metodo), I (UltimaVerif)
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID,
-      range: ITEMS_SHEET_NAME + '!G' + rowIndex + ':I' + rowIndex,
-      valueInputOption: 'USER_ENTERED',
-      resource: {
-        values: [[verificados, metodo || 'manual', horaVerif]]
-      }
-    });
+    // Si viene metodoPorUnidad, escribir hasta J (G:J)
+    if (metodoPorUnidad && Array.isArray(metodoPorUnidad)) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: ITEMS_SHEET_NAME + '!G' + rowIndex + ':J' + rowIndex,
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [[verificados, metodo || 'manual', horaVerif, JSON.stringify(metodoPorUnidad)]]
+        }
+      });
+    } else {
+      // Backward compatible: solo G:I
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: ITEMS_SHEET_NAME + '!G' + rowIndex + ':I' + rowIndex,
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [[verificados, metodo || 'manual', horaVerif]]
+        }
+      });
+    }
 
     // Verificar si la orden está completa
     await checkAndUpdateOrderStatus(orderId);
@@ -605,22 +644,55 @@ async function checkAndUpdateOrderStatus(orderId) {
     if (items.length === 0) return;
 
     var todosVerificados = true;
+    var tieneInconsistenciaPendiente = false;
+    var tieneFaltanteConfirmado = false;
     var metodoUsado = '';
+    var metodos = {};
 
     for (var i = 0; i < items.length; i++) {
+      // Items con inconsistencia pendiente bloquean cierre
+      if (items[i].inconsistencia === 'pendiente') {
+        tieneInconsistenciaPendiente = true;
+      }
+      // Faltantes confirmados no bloquean pero marcan orden como parcial
+      if (items[i].inconsistencia === 'faltante_confirmado') {
+        tieneFaltanteConfirmado = true;
+        continue; // No cuenta como no verificado
+      }
+
       if (items[i].verificados < items[i].cantidad) {
         todosVerificados = false;
-        break;
       }
       if (items[i].metodo) {
+        metodos[items[i].metodo] = true;
         metodoUsado = items[i].metodo;
       }
     }
 
+    // Si hay inconsistencias pendientes, no cerrar
+    if (tieneInconsistenciaPendiente) {
+      console.log('Jumpseller: Orden ' + orderId + ' bloqueada por inconsistencias pendientes');
+      return;
+    }
+
     if (todosVerificados) {
       var sheetName = getTodayMayoristaSheetName();
-      await markOrderVerified(sheetName, orderId, metodoUsado || 'mixed');
-      console.log('Jumpseller: Orden ' + orderId + ' completada automáticamente');
+      // Determinar camino basado en métodos usados
+      var metodosUsados = Object.keys(metodos);
+      var camino = 'manual';
+      if (metodosUsados.length === 1 && metodosUsados[0] === 'scan') {
+        camino = 'scan_only';
+      } else if (metodosUsados.length > 1 || (metodosUsados.length === 1 && metodosUsados[0] !== 'scan')) {
+        camino = 'sequential';
+      }
+
+      var estadoFinal = tieneFaltanteConfirmado ? 'parcial' : (camino === 'scan_only' ? 'verified_scan_only' : 'verified_sequential');
+
+      await markOrderVerified(sheetName, orderId, metodoUsado || 'mixed', {
+        estado: estadoFinal,
+        camino: camino
+      });
+      console.log('Jumpseller: Orden ' + orderId + ' completada automáticamente (' + estadoFinal + ')');
     }
   } catch (error) {
     console.error('Jumpseller: Error verificando estado de orden:', error.message);
@@ -890,8 +962,16 @@ router.post('/api/mayorista/order/:id/verificado', async function(req, res) {
     var orderId = req.params.id;
     var metodo = req.body.metodo || 'manual';
 
+    // Datos extendidos v2
+    var extraData = {
+      estado: req.body.estado || '',
+      camino: req.body.camino || '',
+      timestampInicio: req.body.timestampInicio || '',
+      codigosDesconocidos: req.body.codigosDesconocidos || []
+    };
+
     var sheetName = getTodayMayoristaSheetName();
-    var result = await markOrderVerified(sheetName, orderId, metodo);
+    var result = await markOrderVerified(sheetName, orderId, metodo, extraData);
 
     if (result) {
       res.json({ success: true, mensaje: 'Orden marcada como verificada' });
@@ -910,12 +990,13 @@ router.get('/api/mayorista/order/:id/items', async function(req, res) {
     var orderId = req.params.id;
     var items = await getOrderItemsFromSheet(orderId);
 
+    // Leer estado del pedido desde la hoja del día
+    var sheetName = getTodayMayoristaSheetName();
+    var orders = await getOrdersFromSheet(sheetName);
+    var orderInSheet = orders.find(function(o) { return o.orderId === orderId; });
+
     // Si no hay items en la hoja, intentar traerlos de Jumpseller
     if (items.length === 0) {
-      var sheetName = getTodayMayoristaSheetName();
-      var orders = await getOrdersFromSheet(sheetName);
-      var orderInSheet = orders.find(function(o) { return o.orderId === orderId; });
-
       if (orderInSheet) {
         var account = jumpsellerAccounts.find(function(a) { return a.name === orderInSheet.cuenta; });
         if (account) {
@@ -930,6 +1011,9 @@ router.get('/api/mayorista/order/:id/items', async function(req, res) {
                 cantidad: p.qty || 1,
                 verificados: 0,
                 metodo: '',
+                metodoPorUnidad: [],
+                inconsistencia: '',
+                resolucionInfo: null,
                 fromApi: true
               };
             });
@@ -938,7 +1022,18 @@ router.get('/api/mayorista/order/:id/items', async function(req, res) {
       }
     }
 
-    res.json({ success: true, items: items });
+    var orderState = null;
+    if (orderInSheet) {
+      orderState = {
+        estado: orderInSheet.estado,
+        estadoVerif: orderInSheet.estadoVerif,
+        camino: orderInSheet.camino,
+        timestampInicio: orderInSheet.timestampInicio,
+        codigosDesconocidos: orderInSheet.codigosDesconocidos
+      };
+    }
+
+    res.json({ success: true, items: items, orderState: orderState });
   } catch (error) {
     console.error('Jumpseller: Error obteniendo items:', error.message);
     res.status(500).json({ success: false, error: error.message });
@@ -952,12 +1047,13 @@ router.post('/api/mayorista/order/:id/item/verificar', async function(req, res) 
     var sku = req.body.sku;
     var verificados = req.body.verificados;
     var metodo = req.body.metodo || 'manual';
+    var metodoPorUnidad = req.body.metodoPorUnidad || null;
 
     if (!sku || verificados === undefined) {
       return res.status(400).json({ success: false, error: 'Faltan parámetros: sku, verificados' });
     }
 
-    var result = await updateItemVerification(orderId, sku, verificados, metodo);
+    var result = await updateItemVerification(orderId, sku, verificados, metodo, metodoPorUnidad);
 
     if (result) {
       res.json({ success: true, mensaje: 'Item actualizado' });
@@ -966,6 +1062,152 @@ router.post('/api/mayorista/order/:id/item/verificar', async function(req, res) 
     }
   } catch (error) {
     console.error('Jumpseller: Error actualizando item:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/mayorista/order/:id/state - Actualizar estado de verificación del pedido
+router.post('/api/mayorista/order/:id/state', async function(req, res) {
+  try {
+    var orderId = req.params.id;
+    var estado = req.body.estado;
+    var camino = req.body.camino || '';
+    var timestampInicio = req.body.timestampInicio || '';
+    var codigosDesconocidos = req.body.codigosDesconocidos || [];
+
+    if (!estado) {
+      return res.status(400).json({ success: false, error: 'Falta parámetro: estado' });
+    }
+
+    // Validar estados válidos
+    var estadosValidos = ['pending_verification', 'verifying_scan_only', 'verifying_sequential', 'verified_scan_only', 'verified_sequential', 'blocked_inconsistency'];
+    if (estadosValidos.indexOf(estado) === -1) {
+      return res.status(400).json({ success: false, error: 'Estado no válido: ' + estado });
+    }
+
+    var sheetName = getTodayMayoristaSheetName();
+    var response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:M'
+    });
+
+    var rows = response.data.values || [];
+    var rowIndex = -1;
+
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][2] && rows[i][2].toString() === orderId.toString()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Orden no encontrada' });
+    }
+
+    var codigosStr = codigosDesconocidos.length > 0 ? JSON.stringify(codigosDesconocidos) : '';
+
+    // Escribir columnas J-M (EstadoVerif, Camino, TimestampInicio, CodigosDesconocidos)
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!J' + rowIndex + ':M' + rowIndex,
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [[estado, camino, timestampInicio, codigosStr]]
+      }
+    });
+
+    console.log('Jumpseller: Orden ' + orderId + ' estado → ' + estado);
+    res.json({ success: true, mensaje: 'Estado actualizado', estado: estado });
+  } catch (error) {
+    console.error('Jumpseller: Error actualizando estado:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/mayorista/order/:id/item/inconsistencia - Marcar/resolver inconsistencia de un item
+router.post('/api/mayorista/order/:id/item/inconsistencia', async function(req, res) {
+  try {
+    var orderId = req.params.id;
+    var sku = req.body.sku;
+    var accion = req.body.accion; // 'marcar' | 'resolver' | 'confirmar_faltante'
+    var nota = req.body.nota || '';
+    var quien = req.body.quien || 'user';
+
+    if (!sku || !accion) {
+      return res.status(400).json({ success: false, error: 'Faltan parámetros: sku, accion' });
+    }
+
+    var accionesValidas = ['marcar', 'resolver', 'confirmar_faltante'];
+    if (accionesValidas.indexOf(accion) === -1) {
+      return res.status(400).json({ success: false, error: 'Acción no válida: ' + accion });
+    }
+
+    // Buscar la fila del item
+    var itemsResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: ITEMS_SHEET_NAME + '!A:L'
+    });
+
+    var rows = itemsResponse.data.values || [];
+    var rowIndex = -1;
+
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (row[1] && row[1].toString() === orderId.toString() &&
+          row[3] && row[3].toString() === sku.toString()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Item no encontrado' });
+    }
+
+    var inconsistencia = '';
+    var resolucionInfo = '';
+
+    if (accion === 'marcar') {
+      inconsistencia = 'pendiente';
+    } else if (accion === 'resolver') {
+      inconsistencia = 'resuelta';
+      resolucionInfo = JSON.stringify({
+        accion: 'resolver',
+        nota: nota,
+        quien: quien,
+        cuando: formatArgentinaTimestamp()
+      });
+    } else if (accion === 'confirmar_faltante') {
+      inconsistencia = 'faltante_confirmado';
+      resolucionInfo = JSON.stringify({
+        accion: 'confirmar_faltante',
+        nota: nota,
+        quien: quien,
+        cuando: formatArgentinaTimestamp()
+      });
+    }
+
+    // Escribir columnas K-L (Inconsistencia, ResolucionInfo)
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: ITEMS_SHEET_NAME + '!K' + rowIndex + ':L' + rowIndex,
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [[inconsistencia, resolucionInfo]]
+      }
+    });
+
+    console.log('Jumpseller: Item ' + sku + ' de orden ' + orderId + ' → inconsistencia: ' + inconsistencia);
+
+    // Después de resolver: verificar si la orden puede cerrarse
+    if (accion === 'resolver' || accion === 'confirmar_faltante') {
+      await checkAndUpdateOrderStatus(orderId);
+    }
+
+    res.json({ success: true, mensaje: 'Inconsistencia actualizada', inconsistencia: inconsistencia });
+  } catch (error) {
+    console.error('Jumpseller: Error con inconsistencia:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });

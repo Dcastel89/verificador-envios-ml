@@ -215,13 +215,151 @@
     .app-switch a { color: #7c3aed; font-size: 13px; text-decoration: none; }
     .app-switch a:hover { text-decoration: underline; }
 
-    /* Botón de pack para FT y VF */
-    .pack-btn { display: inline-flex; align-items: center; gap: 6px; background: #059669; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: all 0.2s; }
-    .pack-btn:hover { background: #047857; }
-    .pack-btn:active { transform: scale(0.95); }
-    .pack-btn:disabled { background: #9ca3af; cursor: not-allowed; }
-    .pack-btn .pack-icon { font-size: 16px; }
-    .pack-info { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    /* ====== V2 SCREENS ====== */
+    .v2-screen { display: none; }
+    .v2-screen.active { display: block; }
+
+    /* Order loaded screen */
+    .order-header-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .order-header-card h2 { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+    .order-header-card .order-meta { font-size: 13px; color: #6b7280; }
+    .order-items-preview { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .order-items-preview h3 { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 12px; }
+    .preview-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
+    .preview-item:last-child { border-bottom: none; }
+    .preview-item-name { font-size: 14px; color: #111827; font-weight: 500; }
+    .preview-item-sku { font-size: 12px; color: #6b7280; font-family: monospace; }
+    .preview-item-qty { font-size: 14px; font-weight: 700; color: #7c3aed; background: #f5f3ff; padding: 4px 10px; border-radius: 6px; }
+    .start-buttons { display: flex; gap: 12px; }
+    .start-btn { flex: 1; padding: 16px; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .start-btn.fast { background: #059669; color: white; }
+    .start-btn.fast:hover { background: #047857; }
+    .start-btn.seq { background: #7c3aed; color: white; }
+    .start-btn.seq:hover { background: #6d28d9; }
+
+    /* Fast path screen */
+    .fast-header { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .fast-header h2 { font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+    .fast-progress { display: flex; align-items: center; gap: 12px; }
+    .fast-progress-bar { flex: 1; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .fast-progress-fill { height: 100%; background: #22c55e; border-radius: 4px; transition: width 0.3s; }
+    .fast-progress-text { font-size: 14px; font-weight: 700; color: #374151; white-space: nowrap; }
+    .scan-indicator { text-align: center; padding: 32px 16px; }
+    .scan-indicator .scan-anim { font-size: 64px; animation: scanPulse 1.5s ease-in-out infinite; }
+    @keyframes scanPulse { 0%,100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.1); opacity: 1; } }
+    .scan-indicator p { font-size: 14px; color: #6b7280; margin-top: 8px; }
+    .fast-items-list { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .fast-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #f3f4f6; }
+    .fast-item:last-child { border-bottom: none; }
+    .fast-item.complete { background: #f0fdf4; }
+    .fast-item-status { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .fast-item-status.pending { background: #f3f4f6; color: #9ca3af; }
+    .fast-item-status.partial { background: #fef3c7; color: #d97706; }
+    .fast-item-status.done { background: #dcfce7; color: #16a34a; }
+    .fast-item-info { flex: 1; min-width: 0; }
+    .fast-item-name { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fast-item-progress { font-size: 12px; color: #6b7280; }
+    .fast-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .fast-action-btn { flex: 1; padding: 14px; border: 2px solid #e5e7eb; background: white; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; color: #374151; }
+    .fast-action-btn:hover { border-color: #7c3aed; background: #f5f3ff; }
+
+    /* Sequential screen */
+    .seq-header { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .seq-progress-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .seq-progress-bar { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+    .seq-progress-fill { height: 100%; background: #7c3aed; border-radius: 3px; transition: width 0.3s; }
+    .seq-progress-text { font-size: 13px; font-weight: 600; color: #374151; }
+    .seq-item-card { background: white; border-radius: 16px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 2px solid #e5e7eb; }
+    .seq-item-card.complete { border-color: #22c55e; background: #f0fdf4; }
+    .seq-item-card.inconsistent { border-color: #f59e0b; background: #fffbeb; }
+    .seq-item-sku { font-family: monospace; font-size: 14px; color: #6b7280; margin-bottom: 4px; }
+    .seq-item-name { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 12px; line-height: 1.3; }
+    .seq-units { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .seq-unit { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; border: 2px solid #e5e7eb; background: white; color: #9ca3af; }
+    .seq-unit.verified { border-color: #22c55e; background: #dcfce7; color: #16a34a; }
+    .seq-unit.verified.scan { border-color: #3b82f6; background: #dbeafe; color: #2563eb; }
+    .seq-unit.verified.ia { border-color: #f59e0b; background: #fef3c7; color: #d97706; }
+    .seq-unit.verified.manual { border-color: #8b5cf6; background: #ede9fe; color: #7c3aed; }
+    .seq-methods { display: flex; gap: 8px; margin-bottom: 12px; }
+    .seq-method-btn { flex: 1; padding: 14px 8px; border: 2px solid #e5e7eb; background: white; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.2s; color: #374151; }
+    .seq-method-btn:hover { border-color: #7c3aed; }
+    .seq-method-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .seq-method-btn .method-icon { display: block; font-size: 24px; margin-bottom: 4px; }
+    .seq-inconsistency-btn { width: 100%; padding: 10px; border: 2px dashed #f59e0b; background: #fffbeb; color: #d97706; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 12px; }
+    .seq-nav { display: flex; gap: 12px; }
+    .seq-nav-btn { flex: 1; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .seq-nav-btn.prev { background: #f3f4f6; color: #374151; }
+    .seq-nav-btn.next { background: #7c3aed; color: white; }
+    .seq-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .seq-confirm-btn { width: 100%; padding: 14px; background: #22c55e; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 12px; }
+
+    /* Swipe confirm */
+    .swipe-container { position: relative; height: 56px; background: #f3f4f6; border-radius: 28px; overflow: hidden; margin-bottom: 12px; display: none; }
+    .swipe-container.active { display: block; }
+    .swipe-track { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; }
+    .swipe-track-text { font-size: 14px; color: #9ca3af; font-weight: 600; }
+    .swipe-thumb { position: absolute; top: 4px; left: 4px; width: 48px; height: 48px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; cursor: grab; touch-action: none; transition: left 0.1s; z-index: 2; }
+    .swipe-thumb.confirmed { background: #22c55e; }
+
+    /* Panel overlay */
+    .panel-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 300; }
+    .panel-overlay.show { display: flex; flex-direction: column; justify-content: flex-end; }
+    .panel-sheet { background: white; border-radius: 16px 16px 0 0; max-height: 80vh; overflow-y: auto; padding: 20px; padding-bottom: 32px; }
+    .panel-handle { width: 40px; height: 4px; background: #d1d5db; border-radius: 2px; margin: 0 auto 16px; }
+    .panel-title { font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 16px; }
+    .panel-progress { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .panel-progress-bar { flex: 1; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .panel-progress-fill { height: 100%; background: #22c55e; border-radius: 4px; transition: width 0.3s; }
+    .panel-progress-pct { font-size: 14px; font-weight: 700; color: #374151; }
+    .panel-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 10px; margin-bottom: 8px; cursor: pointer; transition: background 0.2s; }
+    .panel-item:hover { background: #f9fafb; }
+    .panel-item.done { background: #f0fdf4; }
+    .panel-item.partial { background: #fffbeb; }
+    .panel-item.inconsistent { background: #fef2f2; }
+    .panel-item-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .panel-item-dot.green { background: #22c55e; }
+    .panel-item-dot.yellow { background: #f59e0b; }
+    .panel-item-dot.red { background: #ef4444; }
+    .panel-item-dot.gray { background: #d1d5db; }
+    .panel-item-info { flex: 1; min-width: 0; }
+    .panel-item-name { font-size: 13px; font-weight: 600; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .panel-item-detail { font-size: 12px; color: #6b7280; }
+    .panel-item-methods { display: flex; gap: 4px; }
+    .panel-resolve-btn { padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .panel-btn-open { position: fixed; bottom: 70px; right: 16px; width: 48px; height: 48px; background: #7c3aed; color: white; border: none; border-radius: 50%; font-size: 20px; cursor: pointer; z-index: 95; box-shadow: 0 4px 12px rgba(124,58,237,0.4); display: none; }
+    .panel-btn-open.show { display: flex; align-items: center; justify-content: center; }
+
+    /* Resolve modal */
+    .resolve-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 400; align-items: center; justify-content: center; padding: 20px; }
+    .resolve-modal.show { display: flex; }
+    .resolve-modal .modal { max-width: 400px; }
+    .resolve-options { display: flex; gap: 8px; margin-bottom: 12px; }
+    .resolve-option { flex: 1; padding: 10px; border: 2px solid #e5e7eb; background: white; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; }
+    .resolve-option.selected { border-color: #7c3aed; background: #f5f3ff; }
+    .resolve-textarea { width: 100%; min-height: 80px; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; resize: vertical; margin-bottom: 12px; }
+    .resolve-textarea:focus { outline: none; border-color: #7c3aed; }
+    .resolve-char-count { font-size: 12px; color: #9ca3af; margin-bottom: 12px; }
+
+    /* Complete screen */
+    .complete-card { background: white; border-radius: 16px; padding: 32px 24px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .complete-icon { font-size: 64px; margin-bottom: 16px; }
+    .complete-title { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+    .complete-subtitle { font-size: 14px; color: #6b7280; margin-bottom: 24px; }
+    .complete-stats { display: flex; gap: 12px; margin-bottom: 24px; justify-content: center; }
+    .complete-stat { text-align: center; padding: 12px 16px; background: #f9fafb; border-radius: 10px; min-width: 80px; }
+    .complete-stat-val { font-size: 20px; font-weight: 700; color: #7c3aed; }
+    .complete-stat-label { font-size: 11px; color: #6b7280; margin-top: 2px; }
+    .complete-faltantes { text-align: left; background: #fef2f2; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+    .complete-faltantes h4 { font-size: 14px; color: #dc2626; margin-bottom: 8px; }
+    .complete-faltante-item { font-size: 13px; color: #374151; padding: 4px 0; }
+    .complete-close-btn { width: 100%; padding: 16px; background: #22c55e; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 700; cursor: pointer; }
+    .complete-close-btn:hover { background: #16a34a; }
+
+    /* Camera in v2 */
+    .v2-camera-container { position: relative; margin-bottom: 16px; border-radius: 12px; overflow: hidden; background: black; }
+    .v2-camera-container video { width: 100%; display: block; }
+    .v2-camera-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; }
+    .v2-camera-container.frozen canvas { display: block; }
 
     /* Importar pedido específico */
     .import-section { background: #f9fafb; border-radius: 8px; padding: 12px; margin-top: 16px; border: 1px dashed #d1d5db; }
@@ -321,51 +459,105 @@
       </div>
     </div>
 
-    <!-- Vista Verificar -->
+    <!-- Vista Verificar V2 -->
     <div class="view-section" id="viewVerificar">
-      <div class="scan-section">
-        <div class="scan-input-group">
-          <input type="text" id="orderInput" class="scan-input" placeholder="Numero de orden...">
-          <button type="button" id="searchBtn" class="scan-btn">Buscar</button>
-        </div>
-        <div class="camera-container" id="cameraContainer">
-          <video id="video" playsinline></video>
-          <canvas id="capturedOverlay"></canvas>
-          <div class="photo-thumbnails" id="photoThumbnails"></div>
-          <button type="button" class="close-camera" id="closeCamera">X</button>
-          <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar con IA</button>
-        </div>
-        <div class="multi-photo-bar" id="multiPhotoBar">
-          <button type="button" class="btn-otra-foto" id="btnOtraFoto">+ Otra foto</button>
-          <button type="button" class="btn-enviar-analisis" id="btnEnviarAnalisis">Enviar analisis</button>
-        </div>
-        <div class="vision-result hidden" id="visionResult">
-          <div><strong>Resultado:</strong></div>
-          <div class="vision-result-text" id="visionText"></div>
-          <div class="vision-result-colors" id="visionColors"></div>
-        </div>
-      </div>
-      <div class="scan-mode-indicator" id="scanModeIndicator">Modo escaneo de productos activo</div>
       <div class="status-message" id="statusMessage"></div>
-      <div class="items-section hidden" id="itemsSection">
-        <div class="items-header">
-          <h2>Productos a verificar</h2>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="items-count" id="itemsCount">0/0</span>
-            <button type="button" class="edit-mode-btn" id="editModeBtn">Editar</button>
+
+      <!-- Screen: Buscar orden -->
+      <div class="v2-screen active" id="screenOrderSearch">
+        <div class="scan-section">
+          <div class="scan-input-group">
+            <input type="text" id="orderInput" class="scan-input" placeholder="Numero de orden...">
+            <button type="button" id="searchBtn" class="scan-btn">Buscar</button>
           </div>
         </div>
-        <div id="itemsList"></div>
-        <button type="button" class="add-item-btn" id="addItemBtn">+ Agregar producto</button>
       </div>
-      <button type="button" class="reset-btn hidden" id="resetBtn">Nueva orden</button>
+
+      <!-- Screen: Orden cargada -->
+      <div class="v2-screen" id="screenOrderLoaded">
+        <div class="order-header-card">
+          <h2 id="orderTitle">Orden #---</h2>
+          <div class="order-meta" id="orderMeta"></div>
+        </div>
+        <div class="order-items-preview" id="orderItemsPreview">
+          <h3>Items del pedido</h3>
+          <div id="previewItemsList"></div>
+        </div>
+        <div class="start-buttons">
+          <button type="button" class="start-btn fast" id="startFastBtn">Escaneo rapido</button>
+          <button type="button" class="start-btn seq" id="startSeqBtn">Secuencial</button>
+        </div>
+        <button type="button" class="reset-btn" id="resetBtn" style="margin-top:12px">Cambiar orden</button>
+      </div>
+
+      <!-- Screen: Fast path -->
+      <div class="v2-screen" id="screenFastPath">
+        <div class="fast-header">
+          <h2 id="fastTitle">Escaneo rapido</h2>
+          <div class="fast-progress">
+            <div class="fast-progress-bar"><div class="fast-progress-fill" id="fastProgressFill" style="width:0%"></div></div>
+            <span class="fast-progress-text" id="fastProgressText">0/0</span>
+          </div>
+        </div>
+        <div class="scan-indicator" id="fastScanIndicator">
+          <div class="scan-anim">&#128225;</div>
+          <p>Escaneá productos con camara o lector USB</p>
+        </div>
+        <div class="fast-items-list" id="fastItemsList"></div>
+        <div class="fast-actions">
+          <button type="button" class="fast-action-btn" id="fastToSeqBtn">Ir a secuencial</button>
+          <button type="button" class="fast-action-btn" id="fastPanelBtn">Panel</button>
+        </div>
+      </div>
+
+      <!-- Screen: Sequential -->
+      <div class="v2-screen" id="screenSequential">
+        <div class="seq-header">
+          <div class="seq-progress-row">
+            <div class="seq-progress-bar"><div class="seq-progress-fill" id="seqProgressFill" style="width:0%"></div></div>
+            <span class="seq-progress-text" id="seqProgressText">Item 1/1</span>
+          </div>
+        </div>
+        <div id="seqItemContainer"></div>
+        <div class="seq-nav">
+          <button type="button" class="seq-nav-btn prev" id="seqPrevBtn">Anterior</button>
+          <button type="button" class="seq-nav-btn next" id="seqNextBtn">Siguiente</button>
+        </div>
+      </div>
+
+      <!-- Screen: Complete -->
+      <div class="v2-screen" id="screenComplete">
+        <div class="complete-card">
+          <div class="complete-icon">&#9989;</div>
+          <div class="complete-title">Pedido verificado</div>
+          <div class="complete-subtitle" id="completeSubtitle">Todos los items fueron verificados</div>
+          <div class="complete-stats" id="completeStats"></div>
+          <div class="complete-faltantes hidden" id="completeFaltantes">
+            <h4>Faltantes confirmados</h4>
+            <div id="completeFaltantesList"></div>
+          </div>
+          <button type="button" class="complete-close-btn" id="completeCloseBtn">Cerrar pedido</button>
+        </div>
+      </div>
+
+      <!-- Camera container (shared) -->
+      <div class="camera-container" id="cameraContainer">
+        <video id="video" playsinline></video>
+        <canvas id="capturedOverlay"></canvas>
+        <div class="photo-thumbnails" id="photoThumbnails"></div>
+        <button type="button" class="close-camera" id="closeCamera">X</button>
+        <button type="button" class="capture-photo-btn" id="capturePhotoBtn">Analizar con IA</button>
+      </div>
+      <div class="multi-photo-bar" id="multiPhotoBar">
+        <button type="button" class="btn-otra-foto" id="btnOtraFoto">+ Otra foto</button>
+        <button type="button" class="btn-enviar-analisis" id="btnEnviarAnalisis">Enviar analisis</button>
+      </div>
     </div>
   </div>
-  <div class="complete-banner" id="completeBanner">Orden verificada correctamente</div>
 
   <!-- Banner de escaneo exitoso -->
   <div class="scan-success-banner" id="scanSuccessBanner">
-    <div class="scan-icon">✓</div>
+    <div class="scan-icon">&#10003;</div>
     <div class="scan-text" id="scanSuccessText">Escaneado</div>
     <div class="scan-sku" id="scanSuccessSku"></div>
     <div class="scan-count" id="scanSuccessCount"></div>
@@ -373,15 +565,31 @@
 
   <!-- Banner de error de escaneo -->
   <div class="scan-error-banner" id="scanErrorBanner">
-    <div class="scan-icon">✗</div>
+    <div class="scan-icon">&#10007;</div>
     <div class="scan-text" id="scanErrorText">Error</div>
   </div>
+
+  <!-- USB Scanner -->
   <input type="text" id="usbScannerInput" class="usb-scanner-input hidden" placeholder="Esperando lector USB..." autocomplete="off">
   <div class="usb-toggle-container">
     <span class="usb-toggle-label">Lector USB</span>
     <button type="button" id="usbToggle" class="usb-toggle" title="Alternar lector USB externo"></button>
   </div>
-  <button type="button" id="cameraBtn" class="camera-btn">Escanear orden</button>
+  <button type="button" id="cameraBtn" class="camera-btn hidden">Escanear</button>
+
+  <!-- Panel overlay (bottom sheet) -->
+  <button type="button" class="panel-btn-open" id="panelBtnOpen">&#9776;</button>
+  <div class="panel-overlay" id="panelOverlay">
+    <div class="panel-sheet">
+      <div class="panel-handle"></div>
+      <div class="panel-title">Estado del pedido</div>
+      <div class="panel-progress">
+        <div class="panel-progress-bar"><div class="panel-progress-fill" id="panelProgressFill" style="width:0%"></div></div>
+        <span class="panel-progress-pct" id="panelProgressPct">0%</span>
+      </div>
+      <div id="panelItemsList"></div>
+    </div>
+  </div>
 
   <!-- Modal para guardar barcode -->
   <div class="modal-overlay" id="modalOverlay">
@@ -397,21 +605,20 @@
     </div>
   </div>
 
-  <!-- Modal para agregar producto -->
-  <div class="modal-overlay" id="addItemModalOverlay">
+  <!-- Modal resolver inconsistencia -->
+  <div class="resolve-modal" id="resolveModal">
     <div class="modal">
-      <h3>Agregar producto</h3>
-      <div style="display:flex;flex-direction:column;gap:12px;">
-        <input type="text" id="addItemSku" class="login-input" placeholder="SKU (ej: FT-A15)" style="font-family:monospace;">
-        <input type="text" id="addItemName" class="login-input" placeholder="Nombre del producto">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <label style="font-size:14px;color:#374151;font-weight:600;">Cantidad:</label>
-          <input type="number" id="addItemQty" class="login-input" value="1" min="1" style="width:80px;text-align:center;">
-        </div>
+      <h3 id="resolveTitle">Resolver inconsistencia</h3>
+      <p id="resolveItemInfo"></p>
+      <div class="resolve-options">
+        <button type="button" class="resolve-option selected" id="resolveOptResolve" data-action="resolver">Resolver</button>
+        <button type="button" class="resolve-option" id="resolveOptFaltante" data-action="confirmar_faltante">Confirmar faltante</button>
       </div>
-      <div class="modal-buttons" style="margin-top:16px;">
-        <button type="button" class="modal-btn secondary" id="addItemCancel">Cancelar</button>
-        <button type="button" class="modal-btn primary" id="addItemConfirm">Agregar</button>
+      <textarea class="resolve-textarea" id="resolveNota" placeholder="Escribe una nota (minimo 10 caracteres)..."></textarea>
+      <div class="resolve-char-count" id="resolveCharCount">0/10</div>
+      <div class="modal-buttons">
+        <button type="button" class="modal-btn secondary" id="resolveCancelBtn">Cancelar</button>
+        <button type="button" class="modal-btn primary" id="resolveConfirmBtn" disabled>Confirmar</button>
       </div>
     </div>
   </div>
@@ -537,19 +744,26 @@
         });
       }
 
-      var currentOrder = null;
-      var currentItems = [];
-      var unitChecks = {};
-      var codeReader = null;
-      var isScanning = false;
+      // ============================================
+      // ESTADO V2
+      // ============================================
       var currentOrderId = '';
       var currentAccount = '';
-      var alreadySaved = false;
-      var scanMode = 'order'; // 'order' o 'product'
+      var currentItems = [];          // items del pedido
+      var unitMethods = {};           // unitMethods[itemIdx] = ['scan','scan','ia','manual']
+      var orderState = 'pending_verification';
+      var verificationPath = null;    // scan_only | sequential | mixed
+      var timestampInicio = null;
+      var codigosDesconocidos = [];
+      var currentScreen = 'order-search';
+      var sequentialIndex = 0;
+      var codeReader = null;
+      var isScanning = false;
       var pendingBarcode = null;
       var selectedSkuForModal = null;
-      var editMode = false;
+      var productoAVerificar = null;
 
+      // DOM refs
       var orderInput = document.getElementById('orderInput');
       var searchBtn = document.getElementById('searchBtn');
       var cameraBtn = document.getElementById('cameraBtn');
@@ -557,12 +771,7 @@
       var closeCameraBtn = document.getElementById('closeCamera');
       var video = document.getElementById('video');
       var statusMessage = document.getElementById('statusMessage');
-      var itemsSection = document.getElementById('itemsSection');
-      var itemsList = document.getElementById('itemsList');
-      var itemsCount = document.getElementById('itemsCount');
-      var completeBanner = document.getElementById('completeBanner');
       var resetBtn = document.getElementById('resetBtn');
-      var scanModeIndicator = document.getElementById('scanModeIndicator');
 
       var navPanel = document.getElementById('navPanel');
       var navVerificar = document.getElementById('navVerificar');
@@ -576,12 +785,20 @@
       var modalCancel = document.getElementById('modalCancel');
       var modalSave = document.getElementById('modalSave');
 
-      // Vision/IA elements
+      // Vision/IA
       var capturePhotoBtn = document.getElementById('capturePhotoBtn');
-      var visionResult = document.getElementById('visionResult');
-      var visionText = document.getElementById('visionText');
-      var visionColors = document.getElementById('visionColors');
-      var productoAVerificar = null;
+
+      // V2 screens
+      var screens = {
+        'order-search': document.getElementById('screenOrderSearch'),
+        'order-loaded': document.getElementById('screenOrderLoaded'),
+        'fast-path': document.getElementById('screenFastPath'),
+        'sequential': document.getElementById('screenSequential'),
+        'complete': document.getElementById('screenComplete')
+      };
+
+      var panelBtnOpen = document.getElementById('panelBtnOpen');
+      var panelOverlay = document.getElementById('panelOverlay');
 
       // ============================================
       // NAVEGACION
@@ -594,12 +811,34 @@
           navPanel.classList.add('active');
           navVerificar.classList.remove('active');
           cameraBtn.classList.add('hidden');
+          panelBtnOpen.classList.remove('show');
         } else {
           viewPanel.classList.remove('active');
           viewVerificar.classList.add('active');
           navPanel.classList.remove('active');
           navVerificar.classList.add('active');
-          cameraBtn.classList.remove('hidden');
+        }
+      }
+
+      function switchScreen(name) {
+        currentScreen = name;
+        Object.keys(screens).forEach(function(k) {
+          if (screens[k]) screens[k].classList.remove('active');
+        });
+        if (screens[name]) screens[name].classList.add('active');
+
+        // Show/hide camera btn and panel btn based on screen
+        var showCamera = (name === 'fast-path' || name === 'sequential');
+        var showPanel = (name === 'fast-path' || name === 'sequential');
+        if (showCamera) { cameraBtn.classList.remove('hidden'); } else { cameraBtn.classList.add('hidden'); }
+        if (showPanel) { panelBtnOpen.classList.add('show'); } else { panelBtnOpen.classList.remove('show'); }
+
+        if (name === 'fast-path') {
+          cameraBtn.textContent = 'Escanear producto';
+          cameraBtn.className = 'camera-btn product-mode';
+        } else if (name === 'sequential') {
+          cameraBtn.textContent = 'Escanear / Foto IA';
+          cameraBtn.className = 'camera-btn product-mode';
         }
       }
 
@@ -809,457 +1048,97 @@
         statusMessage.className = 'status-message';
       }
 
-      function isItemComplete(index) {
-        var item = currentItems[index];
-        var checks = unitChecks[index] || [];
-        for (var i = 0; i < item.quantity; i++) {
-          var check = checks[i];
-          var isChecked = check && (check === true || check.checked === true);
-          if (!isChecked) return false;
+      function getVerifiedCount(itemIndex) {
+        var methods = unitMethods[itemIndex] || [];
+        return methods.length;
+      }
+
+      function isItemComplete(itemIndex) {
+        var item = currentItems[itemIndex];
+        return getVerifiedCount(itemIndex) >= item.quantity;
+      }
+
+      function getTotalVerifiedUnits() {
+        var total = 0;
+        for (var i = 0; i < currentItems.length; i++) {
+          total += getVerifiedCount(i);
+        }
+        return total;
+      }
+
+      function getTotalUnits() {
+        var total = 0;
+        for (var i = 0; i < currentItems.length; i++) {
+          total += currentItems[i].quantity;
+        }
+        return total;
+      }
+
+      function allItemsComplete() {
+        for (var i = 0; i < currentItems.length; i++) {
+          if (!isItemComplete(i) && currentItems[i].inconsistencia !== 'faltante_confirmado') return false;
         }
         return true;
       }
 
-      function countCompletedItems() {
-        var count = 0;
-        for (var i = 0; i < currentItems.length; i++) {
-          if (isItemComplete(i)) count++;
+      // ============================================
+      // STATE MACHINE
+      // ============================================
+      function transitionState(newState) {
+        var valid = {
+          'pending_verification': ['verifying_scan_only', 'verifying_sequential'],
+          'verifying_scan_only': ['verifying_sequential', 'verified_scan_only'],
+          'verifying_sequential': ['verified_sequential', 'blocked_inconsistency'],
+          'blocked_inconsistency': ['verified_sequential']
+        };
+
+        var allowed = valid[orderState] || [];
+        if (allowed.indexOf(newState) === -1) {
+          console.warn('Transicion no valida: ' + orderState + ' -> ' + newState);
+          return;
         }
-        return count;
-      }
 
-      function getCheckedCount(index) {
-        var checks = unitChecks[index] || [];
-        var count = 0;
-        for (var i = 0; i < checks.length; i++) {
-          var check = checks[i];
-          if (check && (check === true || check.checked === true)) count++;
-        }
-        return count;
-      }
+        orderState = newState;
 
-      function saveVerification() {
-        if (alreadySaved) return;
-        alreadySaved = true;
-
-        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/verificado', {
+        // Sync to backend
+        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/state', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metodo: 'scanner' })
-        })
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-          cargarResumenDia();
-        })
-        .catch(function(err) {
-          console.error('Error guardando verificacion:', err);
-        });
-      }
+          body: JSON.stringify({
+            estado: orderState,
+            camino: verificationPath || '',
+            timestampInicio: timestampInicio || '',
+            codigosDesconocidos: codigosDesconocidos
+          })
+        }).catch(function(err) { console.error('Error syncing state:', err); });
 
-      function updateItemsCount() {
-        var total = currentItems.length;
-        var checked = countCompletedItems();
-        itemsCount.textContent = checked + '/' + total;
-        if (checked === total && total > 0) {
-          completeBanner.classList.add('show');
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          saveVerification();
-          setScanMode('order');
-        } else {
-          completeBanner.classList.remove('show');
+        // Update UI based on new state
+        if (newState === 'verified_scan_only' || newState === 'verified_sequential') {
+          showCompleteScreen();
+        } else if (newState === 'blocked_inconsistency') {
+          showStatus('Pedido bloqueado: hay inconsistencias pendientes', 'error');
         }
-      }
-
-      function updateCard(index) {
-        var card = document.querySelector('.item-card[data-index="' + index + '"]');
-        if (!card) return;
-        var mainCheckbox = card.querySelector('.item-main-checkbox');
-        var complete = isItemComplete(index);
-        mainCheckbox.checked = complete;
-        card.className = 'item-card' + (complete ? ' checked' : '');
-        updateItemsCount();
-      }
-
-      function highlightCard(index) {
-        var card = document.querySelector('.item-card[data-index="' + index + '"]');
-        if (!card) return;
-        card.classList.add('just-scanned');
-        setTimeout(function() {
-          card.classList.remove('just-scanned');
-        }, 2000);
       }
 
       // ============================================
-      // PACKS - FT (10 unidades) y VF (25 unidades)
+      // SAVE ITEM VERIFICATION
       // ============================================
-      function getPackSize(sku) {
-        if (!sku) return 0;
-        var skuUpper = sku.toUpperCase();
-        if (skuUpper.indexOf('FT') === 0) return 10; // Fundas transparentes: pack de 10
-        if (skuUpper.indexOf('VF') === 0) return 25; // Vidrios: pack de 25
-        return 0;
-      }
-
-      function marcarPack(itemIndex) {
-        var item = currentItems[itemIndex];
-        if (!item) return;
-
-        var packSize = getPackSize(item.sku);
-        if (packSize === 0) return;
-
-        if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-
-        // Contar cuántas unidades faltan por verificar
-        var unitsToMark = 0;
-        var startUnit = -1;
-        for (var j = 0; j < item.quantity && unitsToMark < packSize; j++) {
-          var check = unitChecks[itemIndex][j];
-          var isChecked = check && (check === true || check.checked === true);
-          if (!isChecked) {
-            if (startUnit === -1) startUnit = j;
-            unitsToMark++;
-          }
-        }
-
-        if (unitsToMark === 0) {
-          showStatus('Ya están todas las unidades verificadas', 'error');
-          return;
-        }
-
-        // Marcar las unidades del pack
-        var marked = 0;
-        for (var j = 0; j < item.quantity && marked < packSize; j++) {
-          var check = unitChecks[itemIndex][j];
-          var isChecked = check && (check === true || check.checked === true);
-          if (!isChecked) {
-            unitChecks[itemIndex][j] = { checked: true, method: 'pack' };
-            // Actualizar checkbox en UI
-            var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
-            if (checkbox) {
-              checkbox.checked = true;
-              checkbox.classList.add('scanned');
-            }
-            marked++;
-          }
-        }
-
-        // Limpiar efecto visual después de un momento
-        setTimeout(function() {
-          var checkboxes = document.querySelectorAll('.unit-checkbox[data-item="' + itemIndex + '"].scanned');
-          checkboxes.forEach(function(cb) { cb.classList.remove('scanned'); });
-        }, 2000);
-
-        updateCard(itemIndex);
-        highlightCard(itemIndex);
-        showStatus('Pack de ' + marked + ' unidades verificado', 'success');
-        if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
-
-        // Guardar verificación
-        saveItemVerification(itemIndex, 'pack');
-      }
-
-      // ============================================
-      // MODO EDICION
-      // ============================================
-      var editModeBtn = document.getElementById('editModeBtn');
-      var addItemBtn = document.getElementById('addItemBtn');
-
-      function toggleEditMode() {
-        editMode = !editMode;
-        editModeBtn.textContent = editMode ? 'Listo' : 'Editar';
-        editModeBtn.classList.toggle('active', editMode);
-        itemsSection.classList.toggle('editing', editMode);
-      }
-
-      function deleteItem(index) {
-        var item = currentItems[index];
-        var nombre = item.name || item.sku || 'este producto';
-        var verificados = getCheckedCount(index);
-        var msg = 'Eliminar "' + nombre + '"?';
-        if (verificados > 0) {
-          msg += '\n(tiene ' + verificados + ' unidad(es) verificada(s))';
-        }
-        if (!confirm(msg)) return;
-
-        currentItems.splice(index, 1);
-
-        // Reordenar unitChecks
-        var newChecks = {};
-        for (var i = 0; i < currentItems.length; i++) {
-          if (i < index) {
-            newChecks[i] = unitChecks[i] || [];
-          } else {
-            newChecks[i] = unitChecks[i + 1] || [];
-          }
-        }
-        unitChecks = newChecks;
-
-        renderItems();
-      }
-
-      function changeQuantity(index, delta) {
-        var item = currentItems[index];
-        var newQty = item.quantity + delta;
-        if (newQty < 1) return;
-
-        var verificados = getCheckedCount(index);
-
-        if (delta < 0 && newQty < verificados) {
-          if (!confirm('Reducir cantidad va a desmarcar unidades verificadas. Continuar?')) return;
-          // Truncar unitChecks
-          unitChecks[index] = (unitChecks[index] || []).slice(0, newQty);
-        }
-
-        item.quantity = newQty;
-        renderItems();
-      }
-
-      // Modal agregar producto
-      var addItemModalOverlay = document.getElementById('addItemModalOverlay');
-      var addItemSkuInput = document.getElementById('addItemSku');
-      var addItemNameInput = document.getElementById('addItemName');
-      var addItemQtyInput = document.getElementById('addItemQty');
-      var addItemCancel = document.getElementById('addItemCancel');
-      var addItemConfirm = document.getElementById('addItemConfirm');
-
-      function showAddItemModal() {
-        addItemSkuInput.value = '';
-        addItemNameInput.value = '';
-        addItemQtyInput.value = '1';
-        addItemModalOverlay.classList.add('show');
-        addItemSkuInput.focus();
-      }
-
-      function addNewItem() {
-        var sku = addItemSkuInput.value.trim();
-        var name = addItemNameInput.value.trim();
-        var qty = parseInt(addItemQtyInput.value) || 1;
-        if (qty < 1) qty = 1;
-
-        if (!sku && !name) {
-          showStatus('Ingresa al menos un SKU o nombre', 'error');
-          return;
-        }
-
-        currentItems.push({
-          sku: sku,
-          name: name || sku,
-          quantity: qty,
-          verificados: 0,
-          metodo: ''
-        });
-
-        unitChecks[currentItems.length - 1] = [];
-        addItemModalOverlay.classList.remove('show');
-        renderItems();
-        showStatus('Producto agregado', 'success');
-      }
-
-      addItemBtn.onclick = showAddItemModal;
-      editModeBtn.onclick = toggleEditMode;
-      addItemCancel.onclick = function() { addItemModalOverlay.classList.remove('show'); };
-      addItemConfirm.onclick = addNewItem;
-
-      // ============================================
-      // RENDER ITEMS
-      // ============================================
-      function renderItems() {
-        itemsList.innerHTML = '';
-        for (var i = 0; i < currentItems.length; i++) {
-          var item = currentItems[i];
-          // No reiniciar unitChecks si ya tiene datos (verificación parcial)
-          if (!unitChecks[i]) unitChecks[i] = [];
-
-          var card = document.createElement('div');
-          card.className = 'item-card';
-          card.setAttribute('data-index', i);
-          card.setAttribute('data-sku', item.sku || '');
-
-          // Verificar si este item está completo
-          var itemComplete = isItemComplete(i);
-          if (itemComplete) card.classList.add('checked');
-
-          var mainCheckbox = document.createElement('input');
-          mainCheckbox.type = 'checkbox';
-          mainCheckbox.className = 'item-main-checkbox';
-          mainCheckbox.checked = itemComplete;
-
-          var info = document.createElement('div');
-          info.className = 'item-info';
-
-          var descDiv = document.createElement('div');
-          descDiv.className = 'item-description';
-          descDiv.textContent = item.name || item.description || item.sku || 'Sin nombre';
-
-          var skuDiv = document.createElement('div');
-          skuDiv.className = 'item-sku';
-          skuDiv.textContent = item.sku ? 'SKU: ' + item.sku : 'Sin SKU';
-
-          var qtyDiv = document.createElement('div');
-          qtyDiv.className = 'item-quantity';
-          var verificados = item.verificados || 0;
-          if (verificados > 0 && verificados < item.quantity) {
-            qtyDiv.textContent = 'Cantidad: ' + item.quantity + ' (' + verificados + ' verificados)';
-          } else {
-            qtyDiv.textContent = 'Cantidad: ' + item.quantity;
-          }
-
-          var unitsDiv = document.createElement('div');
-          unitsDiv.className = 'unit-checkboxes';
-
-          for (var j = 0; j < item.quantity; j++) {
-            var unitCb = document.createElement('input');
-            unitCb.type = 'checkbox';
-            unitCb.className = 'unit-checkbox';
-            unitCb.setAttribute('data-item', i);
-            unitCb.setAttribute('data-unit', j);
-            // Restaurar estado de verificación
-            var check = unitChecks[i][j];
-            if (check && (check === true || check.checked === true)) {
-              unitCb.checked = true;
-            }
-            unitsDiv.appendChild(unitCb);
-          }
-
-          info.appendChild(descDiv);
-          info.appendChild(skuDiv);
-          info.appendChild(qtyDiv);
-          info.appendChild(unitsDiv);
-
-          // Botón de pack para SKUs FT (fundas) y VF (vidrios)
-          var packSize = getPackSize(item.sku);
-          if (packSize > 0 && item.quantity >= packSize) {
-            var packContainer = document.createElement('div');
-
-            var packBtn = document.createElement('button');
-            packBtn.type = 'button';
-            packBtn.className = 'pack-btn';
-            packBtn.setAttribute('data-index', i);
-            packBtn.innerHTML = '<span class="pack-icon">📦</span> Marcar pack (' + packSize + ')';
-            packBtn.onclick = function(e) {
-              e.stopPropagation();
-              var idx = parseInt(this.getAttribute('data-index'));
-              marcarPack(idx);
-            };
-            packContainer.appendChild(packBtn);
-
-            var packInfo = document.createElement('div');
-            packInfo.className = 'pack-info';
-            var packsTotal = Math.floor(item.quantity / packSize);
-            var sueltas = item.quantity % packSize;
-            var infoText = packsTotal + ' pack(s)';
-            if (sueltas > 0) infoText += ' + ' + sueltas + ' sueltas';
-            packInfo.textContent = infoText;
-            packContainer.appendChild(packInfo);
-
-            info.appendChild(packContainer);
-          }
-
-          card.appendChild(mainCheckbox);
-          card.appendChild(info);
-
-          // Botón para verificar con foto/IA
-          var verifyBtn = document.createElement('button');
-          verifyBtn.className = 'verify-photo-btn';
-          verifyBtn.textContent = '📷';
-          verifyBtn.title = 'Verificar con foto';
-          verifyBtn.setAttribute('data-index', i);
-          verifyBtn.onclick = function(e) {
-            e.stopPropagation();
-            var idx = parseInt(this.getAttribute('data-index'));
-            iniciarVerificacionFoto(idx);
-          };
-          card.appendChild(verifyBtn);
-
-          // Controles de edición (solo visibles en modo edición)
-          var deleteBtn = document.createElement('button');
-          deleteBtn.type = 'button';
-          deleteBtn.className = 'edit-controls edit-delete-btn';
-          deleteBtn.textContent = '\u00D7';
-          deleteBtn.title = 'Eliminar producto';
-          deleteBtn.setAttribute('data-index', i);
-          deleteBtn.onclick = function(e) {
-            e.stopPropagation();
-            deleteItem(parseInt(this.getAttribute('data-index')));
-          };
-          card.appendChild(deleteBtn);
-
-          var qtyCtrl = document.createElement('div');
-          qtyCtrl.className = 'edit-controls qty-controls';
-          var minusBtn = document.createElement('button');
-          minusBtn.type = 'button';
-          minusBtn.className = 'qty-btn';
-          minusBtn.textContent = '\u2212';
-          minusBtn.setAttribute('data-index', i);
-          minusBtn.onclick = function(e) {
-            e.stopPropagation();
-            changeQuantity(parseInt(this.getAttribute('data-index')), -1);
-          };
-          var qtyLabel = document.createElement('span');
-          qtyLabel.className = 'qty-display';
-          qtyLabel.textContent = item.quantity;
-          var plusBtn = document.createElement('button');
-          plusBtn.type = 'button';
-          plusBtn.className = 'qty-btn';
-          plusBtn.textContent = '+';
-          plusBtn.setAttribute('data-index', i);
-          plusBtn.onclick = function(e) {
-            e.stopPropagation();
-            changeQuantity(parseInt(this.getAttribute('data-index')), 1);
-          };
-          qtyCtrl.appendChild(minusBtn);
-          qtyCtrl.appendChild(qtyLabel);
-          qtyCtrl.appendChild(plusBtn);
-          info.appendChild(qtyCtrl);
-
-          itemsList.appendChild(card);
-        }
-        updateItemsCount();
-      }
-
-      itemsList.addEventListener('click', function(e) {
-        if (e.target.classList.contains('unit-checkbox')) {
-          var itemIndex = parseInt(e.target.getAttribute('data-item'));
-          var unitIndex = parseInt(e.target.getAttribute('data-unit'));
-          if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-          unitChecks[itemIndex][unitIndex] = e.target.checked ? { checked: true, method: 'manual' } : null;
-          updateCard(itemIndex);
-
-          // Guardar verificación parcial en servidor
-          saveItemVerification(itemIndex, 'manual');
-        }
-      });
-
       function saveItemVerification(itemIndex, metodo) {
         var item = currentItems[itemIndex];
         if (!item || !currentOrderId) return;
 
-        // Contar verificados
-        var checks = unitChecks[itemIndex] || [];
-        var verificados = 0;
-        for (var i = 0; i < item.quantity; i++) {
-          var check = checks[i];
-          if (check && (check === true || check.checked === true)) verificados++;
-        }
+        var methods = unitMethods[itemIndex] || [];
 
         authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/item/verificar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sku: item.sku,
-            verificados: verificados,
-            metodo: metodo
+            verificados: methods.length,
+            metodo: metodo,
+            metodoPorUnidad: methods
           })
-        })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          if (!data.success) {
-            console.error('Error guardando verificación:', data.error);
-          }
-        })
-        .catch(function(err) {
-          console.error('Error guardando verificación:', err);
-        });
+        }).catch(function(err) { console.error('Error guardando verificacion:', err); });
       }
 
       // ============================================
@@ -1274,7 +1153,6 @@
         searchBtn.disabled = true;
         searchBtn.textContent = '...';
 
-        // Usar el endpoint de items que trae el estado de verificación
         authFetch(API_URL + '/api/mayorista/order/' + orderId.trim() + '/items')
           .then(function(response) {
             return response.json().then(function(data) {
@@ -1288,46 +1166,68 @@
 
             currentOrderId = orderId.trim();
             currentAccount = data.items[0].cuenta || '';
-            alreadySaved = false;
 
-            // Construir items con estado de verificación
+            // Build items and restore state
             currentItems = [];
-            unitChecks = {};
+            unitMethods = {};
 
             data.items.forEach(function(item, index) {
               currentItems.push({
                 sku: item.sku || '',
                 name: item.nombre || item.name || '',
                 quantity: item.cantidad || 1,
-                verificados: item.verificados || 0,
-                metodo: item.metodo || ''
+                inconsistencia: item.inconsistencia || '',
+                resolucionInfo: item.resolucionInfo || null
               });
 
-              // Restaurar estado de verificación
-              unitChecks[index] = [];
-              var verificados = item.verificados || 0;
-              for (var j = 0; j < verificados; j++) {
-                unitChecks[index][j] = { checked: true, method: item.metodo || 'restored' };
+              // Restore per-unit methods
+              if (item.metodoPorUnidad && item.metodoPorUnidad.length > 0) {
+                unitMethods[index] = item.metodoPorUnidad.slice();
+              } else {
+                // Fallback: fill from verificados count
+                unitMethods[index] = [];
+                var v = item.verificados || 0;
+                for (var j = 0; j < v; j++) {
+                  unitMethods[index].push(item.metodo || 'restored');
+                }
               }
             });
 
+            // Restore order state
+            if (data.orderState) {
+              orderState = data.orderState.estadoVerif || 'pending_verification';
+              verificationPath = data.orderState.camino || null;
+              timestampInicio = data.orderState.timestampInicio || null;
+              try {
+                codigosDesconocidos = data.orderState.codigosDesconocidos ? JSON.parse(data.orderState.codigosDesconocidos) : [];
+              } catch(e) { codigosDesconocidos = []; }
+            } else {
+              orderState = 'pending_verification';
+              verificationPath = null;
+              timestampInicio = null;
+              codigosDesconocidos = [];
+            }
+
+            sequentialIndex = 0;
             hideStatus();
-            itemsSection.classList.remove('hidden');
-            resetBtn.classList.remove('hidden');
-            renderItems();
             stopCamera();
-            setScanMode('product');
             switchView('verificar');
 
-            // Mostrar si es parcial
-            var totalVerif = currentItems.reduce(function(sum, it) { return sum + (it.verificados || 0); }, 0);
-            if (totalVerif > 0) {
-              showStatus('Orden con verificación parcial - continuá donde quedaste', 'success');
+            // Decide which screen to show based on restored state
+            if (orderState === 'verified_scan_only' || orderState === 'verified_sequential') {
+              showCompleteScreen();
+            } else if (orderState === 'verifying_scan_only') {
+              switchScreen('fast-path');
+              renderFastPath();
+            } else if (orderState === 'verifying_sequential' || orderState === 'blocked_inconsistency') {
+              switchScreen('sequential');
+              renderSequentialItem();
+            } else {
+              showOrderLoadedScreen();
             }
           })
           .catch(function(error) {
             showStatus(error.message, 'error');
-            itemsSection.classList.add('hidden');
           })
           .finally(function() {
             searchBtn.disabled = false;
@@ -1335,71 +1235,145 @@
           });
       }
 
-      searchBtn.onclick = function() {
-        searchOrder(orderInput.value);
-      };
-
+      searchBtn.onclick = function() { searchOrder(orderInput.value); };
       orderInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-          searchOrder(orderInput.value);
-        }
+        if (e.key === 'Enter') searchOrder(orderInput.value);
       });
 
       // ============================================
-      // SCAN MODE
+      // ORDER LOADED SCREEN
       // ============================================
-      function setScanMode(mode) {
-        scanMode = mode;
-        if (mode === 'product') {
-          cameraBtn.textContent = 'Escanear producto';
-          cameraBtn.classList.add('product-mode');
-          scanModeIndicator.classList.add('show');
-        } else {
-          cameraBtn.textContent = 'Escanear orden';
-          cameraBtn.classList.remove('product-mode');
-          scanModeIndicator.classList.remove('show');
+      function showOrderLoadedScreen() {
+        switchScreen('order-loaded');
+        document.getElementById('orderTitle').textContent = 'Orden #' + currentOrderId;
+        document.getElementById('orderMeta').textContent = currentAccount;
+
+        var list = document.getElementById('previewItemsList');
+        list.innerHTML = '';
+        currentItems.forEach(function(item) {
+          var div = document.createElement('div');
+          div.className = 'preview-item';
+          div.innerHTML = '<div><div class="preview-item-name">' + (item.name || item.sku) + '</div>' +
+            '<div class="preview-item-sku">' + (item.sku || '') + '</div></div>' +
+            '<div class="preview-item-qty">x' + item.quantity + '</div>';
+          list.appendChild(div);
+        });
+      }
+
+      document.getElementById('startFastBtn').onclick = function() {
+        timestampInicio = new Date().toISOString();
+        verificationPath = 'scan_only';
+        transitionState('verifying_scan_only');
+        switchScreen('fast-path');
+        renderFastPath();
+      };
+
+      document.getElementById('startSeqBtn').onclick = function() {
+        timestampInicio = new Date().toISOString();
+        verificationPath = 'sequential';
+        transitionState('verifying_sequential');
+        sequentialIndex = 0;
+        switchScreen('sequential');
+        renderSequentialItem();
+      };
+
+      resetBtn.onclick = function() {
+        currentItems = [];
+        unitMethods = {};
+        currentOrderId = '';
+        currentAccount = '';
+        orderState = 'pending_verification';
+        verificationPath = null;
+        timestampInicio = null;
+        codigosDesconocidos = [];
+        sequentialIndex = 0;
+        productoAVerificar = null;
+        orderInput.value = '';
+        hideStatus();
+        stopCamera();
+        switchScreen('order-search');
+      };
+
+      // ============================================
+      // FAST PATH
+      // ============================================
+      function renderFastPath() {
+        var verified = getTotalVerifiedUnits();
+        var total = getTotalUnits();
+        var pct = total > 0 ? Math.round(verified / total * 100) : 0;
+
+        document.getElementById('fastProgressFill').style.width = pct + '%';
+        document.getElementById('fastProgressText').textContent = verified + '/' + total;
+
+        var list = document.getElementById('fastItemsList');
+        list.innerHTML = '';
+        currentItems.forEach(function(item, idx) {
+          var v = getVerifiedCount(idx);
+          var complete = v >= item.quantity;
+          var div = document.createElement('div');
+          div.className = 'fast-item' + (complete ? ' complete' : '');
+
+          var statusCls = complete ? 'done' : (v > 0 ? 'partial' : 'pending');
+          var statusIcon = complete ? '&#10003;' : (v > 0 ? v : '');
+
+          div.innerHTML = '<div class="fast-item-status ' + statusCls + '">' + statusIcon + '</div>' +
+            '<div class="fast-item-info"><div class="fast-item-name">' + (item.name || item.sku) + '</div>' +
+            '<div class="fast-item-progress">' + v + '/' + item.quantity + '</div></div>';
+          list.appendChild(div);
+        });
+
+        // Check if all complete
+        if (allItemsComplete()) {
+          transitionState('verified_scan_only');
         }
       }
 
-      // ============================================
-      // SCANNER
-      // ============================================
-      function findItemBySku(sku) {
-        for (var i = 0; i < currentItems.length; i++) {
-          if (currentItems[i].sku === sku) {
-            return i;
-          }
+      document.getElementById('fastToSeqBtn').onclick = function() {
+        if (verificationPath === 'scan_only') verificationPath = 'mixed';
+        orderState = 'verifying_scan_only'; // allow transition
+        transitionState('verifying_sequential');
+        sequentialIndex = 0;
+        // Skip already-complete items
+        while (sequentialIndex < currentItems.length && isItemComplete(sequentialIndex)) {
+          sequentialIndex++;
         }
-        return -1;
-      }
+        if (sequentialIndex >= currentItems.length) sequentialIndex = 0;
+        switchScreen('sequential');
+        renderSequentialItem();
+      };
 
-      // Busca un item cuyo SKU coincida exacto o esté contenido en un SKU compuesto
+      document.getElementById('fastPanelBtn').onclick = function() { openPanel(); };
+
+      // ============================================
+      // SCANNER (shared by fast & sequential)
+      // ============================================
       function findItemBySkuFlexible(sku) {
-        var idx = findItemBySku(sku);
-        if (idx >= 0) return idx;
-
+        for (var i = 0; i < currentItems.length; i++) {
+          if (currentItems[i].sku === sku) return i;
+        }
         for (var i = 0; i < currentItems.length; i++) {
           var itemSku = currentItems[i].sku;
-          if (itemSku && sku.toUpperCase().indexOf(itemSku.toUpperCase()) !== -1) {
-            return i;
-          }
+          if (itemSku && sku.toUpperCase().indexOf(itemSku.toUpperCase()) !== -1) return i;
         }
         return -1;
       }
 
-      function findNextUncheckedUnit(itemIndex) {
-        var item = currentItems[itemIndex];
-        var checks = unitChecks[itemIndex] || [];
-        for (var i = 0; i < item.quantity; i++) {
-          var check = checks[i];
-          var isChecked = check && (check === true || check.checked === true);
-          if (!isChecked) return i;
+      // FIFO: find first item with pending units for a given SKU
+      function findFirstPendingForSku(sku) {
+        var idx = -1;
+        for (var i = 0; i < currentItems.length; i++) {
+          var itemSku = (currentItems[i].sku || '').toUpperCase();
+          var skuUp = sku.toUpperCase();
+          if (itemSku === skuUp || itemSku.indexOf(skuUp) !== -1 || skuUp.indexOf(itemSku) !== -1) {
+            if (!isItemComplete(i)) { idx = i; break; }
+            if (idx === -1) idx = i; // fallback to first match even if complete
+          }
         }
-        return -1;
+        return idx;
       }
 
       // ============================================
-      // FEEDBACK DE ESCANEO
+      // FEEDBACK
       // ============================================
       var scanSuccessBanner = document.getElementById('scanSuccessBanner');
       var scanSuccessText = document.getElementById('scanSuccessText');
@@ -1410,94 +1384,78 @@
 
       var lastScannedBarcode = null;
       var lastScanTime = 0;
-      var SCAN_DEBOUNCE_MS = 2000; // 2 segundos entre escaneos del mismo código
+      var SCAN_DEBOUNCE_MS = 2000;
 
       function showScanSuccess(productName, sku, checkedCount, totalCount) {
         scanSuccessText.textContent = productName || 'Escaneado';
         scanSuccessSku.textContent = sku || '';
         scanSuccessCount.textContent = checkedCount + ' / ' + totalCount;
-
-        // Remover y re-agregar clase para reiniciar animación
         scanSuccessBanner.classList.remove('show');
-        void scanSuccessBanner.offsetWidth; // Forzar reflow
+        void scanSuccessBanner.offsetWidth;
         scanSuccessBanner.classList.add('show');
-
-        // Sin vibración en éxito (solo visual)
-
-        setTimeout(function() {
-          scanSuccessBanner.classList.remove('show');
-        }, 500);
+        setTimeout(function() { scanSuccessBanner.classList.remove('show'); }, 500);
       }
 
       function showScanError(message) {
         scanErrorText.textContent = message || 'Error';
-
         scanErrorBanner.classList.remove('show');
         void scanErrorBanner.offsetWidth;
         scanErrorBanner.classList.add('show');
-
-        // Vibración de error
         if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-
-        setTimeout(function() {
-          scanErrorBanner.classList.remove('show');
-        }, 2000);
+        setTimeout(function() { scanErrorBanner.classList.remove('show'); }, 2000);
       }
 
       function markProductByBarcode(barcode) {
-        // Debounce: evitar escaneos múltiples del mismo código
         var now = Date.now();
-        if (barcode === lastScannedBarcode && (now - lastScanTime) < SCAN_DEBOUNCE_MS) {
-          console.log('Debounce: ignorando escaneo repetido de', barcode);
-          return;
-        }
+        if (barcode === lastScannedBarcode && (now - lastScanTime) < SCAN_DEBOUNCE_MS) return;
         lastScannedBarcode = barcode;
         lastScanTime = now;
 
-        // Buscar en la base de barcodes
         authFetch(API_URL + '/api/barcode/' + encodeURIComponent(barcode))
           .then(function(response) { return response.json(); })
           .then(function(data) {
             if (data.found && data.sku) {
-              var itemIndex = findItemBySkuFlexible(data.sku);
+              var itemIndex = findFirstPendingForSku(data.sku);
               if (itemIndex >= 0) {
                 var item = currentItems[itemIndex];
-                var unitIndex = findNextUncheckedUnit(itemIndex);
-                if (unitIndex >= 0) {
-                  if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-                  unitChecks[itemIndex][unitIndex] = { checked: true, method: 'scanned' };
-
-                  var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + unitIndex + '"]');
-                  if (checkbox) {
-                    checkbox.checked = true;
-                    checkbox.classList.add('scanned');
-                    setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
-                  }
-
-                  updateCard(itemIndex);
-                  highlightCard(itemIndex);
-
-                  // Contar verificados para mostrar progreso
-                  var checkedCount = 0;
-                  var checks = unitChecks[itemIndex] || [];
-                  for (var c = 0; c < item.quantity; c++) {
-                    if (checks[c] && (checks[c] === true || checks[c].checked === true)) checkedCount++;
-                  }
-
-                  // Mostrar banner de éxito grande
-                  showScanSuccess(item.name || item.sku, data.sku, checkedCount, item.quantity);
-
-                  // Guardar verificación parcial en servidor
-                  saveItemVerification(itemIndex, 'scanned');
-                } else {
+                if (isItemComplete(itemIndex)) {
                   showScanError('YA COMPLETO: ' + (item.name || data.sku));
+                  return;
+                }
+                if (!unitMethods[itemIndex]) unitMethods[itemIndex] = [];
+                unitMethods[itemIndex].push('scan');
+                saveItemVerification(itemIndex, 'scan');
+
+                showScanSuccess(item.name || item.sku, data.sku, getVerifiedCount(itemIndex), item.quantity);
+                if (navigator.vibrate) navigator.vibrate(50);
+
+                // Refresh current screen
+                if (currentScreen === 'fast-path') {
+                  renderFastPath();
+                } else if (currentScreen === 'sequential') {
+                  renderSequentialItem();
+                  checkSequentialCompletion();
                 }
               } else {
                 showScanError('NO EN ESTA ORDEN: ' + data.sku);
               }
             } else {
-              // Barcode no registrado, mostrar modal
-              showBarcodeModal(barcode);
+              // Unknown barcode
+              if (currentScreen === 'fast-path') {
+                // Invalidate fast path
+                codigosDesconocidos.push(barcode);
+                showScanError('Codigo desconocido - cambiando a secuencial');
+                if (verificationPath === 'scan_only') verificationPath = 'mixed';
+                orderState = 'verifying_scan_only';
+                transitionState('verifying_sequential');
+                sequentialIndex = 0;
+                while (sequentialIndex < currentItems.length && isItemComplete(sequentialIndex)) sequentialIndex++;
+                if (sequentialIndex >= currentItems.length) sequentialIndex = 0;
+                switchScreen('sequential');
+                renderSequentialItem();
+              } else {
+                showBarcodeModal(barcode);
+              }
             }
           })
           .catch(function(err) {
@@ -1512,11 +1470,10 @@
         modalSkuList.innerHTML = '';
         selectedSkuForModal = null;
 
-        currentItems.forEach(function(item, index) {
+        currentItems.forEach(function(item) {
           if (!item.sku) return;
           var option = document.createElement('div');
           option.className = 'modal-sku-option';
-          option.setAttribute('data-sku', item.sku);
           option.innerHTML = '<div class="modal-sku-name">' + item.sku + '</div>' +
             '<div class="modal-sku-desc">' + (item.name || '') + '</div>';
           option.onclick = function() {
@@ -1543,31 +1500,22 @@
         }
 
         var item = currentItems.find(function(i) { return i.sku === selectedSkuForModal; });
-        var description = item ? item.name : '';
-
-        // Guardar valores antes de cerrar
         var barcodeToSave = pendingBarcode;
         var skuToSave = selectedSkuForModal;
 
         authFetch(API_URL + '/api/barcode', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            barcode: barcodeToSave,
-            sku: skuToSave,
-            description: description
-          })
+          body: JSON.stringify({ barcode: barcodeToSave, sku: skuToSave, description: item ? item.name : '' })
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data.success) {
             showScanSuccess('Codigo guardado: ' + skuToSave, barcodeToSave, '', '');
-            // Marcar el producto con el barcode guardado
             markProductByBarcode(barcodeToSave);
           } else {
             showScanError('Error guardando codigo');
           }
-          // Cerrar modal después de completar
           modalOverlay.classList.remove('show');
           pendingBarcode = null;
           selectedSkuForModal = null;
@@ -1581,11 +1529,493 @@
       };
 
       // ============================================
-      // CAMARA
+      // SEQUENTIAL PATH
+      // ============================================
+      function renderSequentialItem() {
+        var container = document.getElementById('seqItemContainer');
+        container.innerHTML = '';
+
+        if (currentItems.length === 0) return;
+
+        // Global progress
+        var totalV = getTotalVerifiedUnits();
+        var totalU = getTotalUnits();
+        var pct = totalU > 0 ? Math.round(totalV / totalU * 100) : 0;
+        document.getElementById('seqProgressFill').style.width = pct + '%';
+        document.getElementById('seqProgressText').textContent = 'Item ' + (sequentialIndex + 1) + '/' + currentItems.length;
+
+        var item = currentItems[sequentialIndex];
+        var verified = getVerifiedCount(sequentialIndex);
+        var complete = isItemComplete(sequentialIndex);
+        var methods = unitMethods[sequentialIndex] || [];
+
+        var card = document.createElement('div');
+        card.className = 'seq-item-card' + (complete ? ' complete' : '') + (item.inconsistencia === 'pendiente' ? ' inconsistent' : '');
+
+        // SKU and name
+        card.innerHTML = '<div class="seq-item-sku">' + (item.sku || 'Sin SKU') + '</div>' +
+          '<div class="seq-item-name">' + (item.name || item.sku || 'Sin nombre') + '</div>';
+
+        // Unit indicators
+        var unitsDiv = document.createElement('div');
+        unitsDiv.className = 'seq-units';
+        for (var j = 0; j < item.quantity; j++) {
+          var unit = document.createElement('div');
+          var m = methods[j] || '';
+          unit.className = 'seq-unit' + (m ? ' verified ' + (m === 'scan' ? 'scan' : (m === 'ia' || m === 'claude' ? 'ia' : 'manual')) : '');
+          unit.textContent = m ? (m === 'scan' ? 'S' : (m === 'ia' || m === 'claude' ? 'IA' : 'M')) : (j + 1);
+          unitsDiv.appendChild(unit);
+        }
+        card.appendChild(unitsDiv);
+
+        if (complete) {
+          // Already verified - show confirm button
+          var confirmBtn = document.createElement('button');
+          confirmBtn.className = 'seq-confirm-btn';
+          confirmBtn.textContent = 'Verificado - Siguiente';
+          confirmBtn.onclick = function() { seqNext(); };
+          card.appendChild(confirmBtn);
+        } else if (item.inconsistencia === 'pendiente') {
+          var incNote = document.createElement('div');
+          incNote.style.cssText = 'background:#fef3c7;padding:12px;border-radius:8px;margin-bottom:12px;font-size:14px;color:#92400e;';
+          incNote.textContent = 'Marcado como inconsistencia pendiente';
+          card.appendChild(incNote);
+        } else {
+          // Methods buttons
+          var methodsDiv = document.createElement('div');
+          methodsDiv.className = 'seq-methods';
+
+          var scanBtn = document.createElement('button');
+          scanBtn.className = 'seq-method-btn';
+          scanBtn.innerHTML = '<span class="method-icon">&#128225;</span>Escanear';
+          scanBtn.onclick = function() {
+            startCamera();
+            cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          };
+          methodsDiv.appendChild(scanBtn);
+
+          var iaBtn = document.createElement('button');
+          iaBtn.className = 'seq-method-btn';
+          iaBtn.innerHTML = '<span class="method-icon">&#128247;</span>Foto IA';
+          iaBtn.onclick = function() {
+            productoAVerificar = {
+              index: sequentialIndex,
+              item: currentItems[sequentialIndex],
+              descripcion: currentItems[sequentialIndex].name || currentItems[sequentialIndex].sku,
+              fotosMinimas: 1
+            };
+            startCamera();
+            cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          };
+          methodsDiv.appendChild(iaBtn);
+
+          var manualBtn = document.createElement('button');
+          manualBtn.className = 'seq-method-btn';
+          manualBtn.innerHTML = '<span class="method-icon">&#9995;</span>Manual';
+          manualBtn.onclick = function() { showSwipeConfirm(sequentialIndex); };
+          methodsDiv.appendChild(manualBtn);
+
+          card.appendChild(methodsDiv);
+
+          // Inconsistency button
+          var incBtn = document.createElement('button');
+          incBtn.className = 'seq-inconsistency-btn';
+          incBtn.textContent = 'Marcar inconsistencia';
+          incBtn.onclick = function() { markInconsistency(sequentialIndex); };
+          card.appendChild(incBtn);
+        }
+
+        container.appendChild(card);
+
+        // Swipe container (hidden by default)
+        var swipeDiv = document.createElement('div');
+        swipeDiv.className = 'swipe-container';
+        swipeDiv.id = 'swipeContainer';
+        swipeDiv.innerHTML = '<div class="swipe-track"><span class="swipe-track-text">Desliza para confirmar</span></div>' +
+          '<div class="swipe-thumb" id="swipeThumb">&#8594;</div>';
+        container.appendChild(swipeDiv);
+
+        // Nav buttons state
+        document.getElementById('seqPrevBtn').disabled = (sequentialIndex === 0);
+        var canNext = complete || item.inconsistencia === 'pendiente' || item.inconsistencia === 'faltante_confirmado';
+        document.getElementById('seqNextBtn').disabled = !canNext;
+        document.getElementById('seqNextBtn').textContent = (sequentialIndex === currentItems.length - 1) ? 'Finalizar' : 'Siguiente';
+      }
+
+      function showSwipeConfirm(itemIndex) {
+        var swipe = document.getElementById('swipeContainer');
+        if (!swipe) return;
+        swipe.classList.add('active');
+        initSwipe(itemIndex);
+      }
+
+      function initSwipe(itemIndex) {
+        var thumb = document.getElementById('swipeThumb');
+        var container = document.getElementById('swipeContainer');
+        if (!thumb || !container) return;
+
+        var startX = 0;
+        var currentX = 0;
+        var maxX = 0;
+
+        function onStart(e) {
+          startX = e.touches ? e.touches[0].clientX : e.clientX;
+          maxX = container.offsetWidth - thumb.offsetWidth - 8;
+        }
+
+        function onMove(e) {
+          var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+          currentX = Math.max(0, Math.min(clientX - startX, maxX));
+          thumb.style.left = (4 + currentX) + 'px';
+
+          if (currentX >= maxX * 0.85) {
+            thumb.classList.add('confirmed');
+          } else {
+            thumb.classList.remove('confirmed');
+          }
+        }
+
+        function onEnd() {
+          if (currentX >= maxX * 0.85) {
+            // Confirmed
+            if (!unitMethods[itemIndex]) unitMethods[itemIndex] = [];
+            unitMethods[itemIndex].push('manual');
+            saveItemVerification(itemIndex, 'manual');
+            if (navigator.vibrate) navigator.vibrate(50);
+            container.classList.remove('active');
+            renderSequentialItem();
+            checkSequentialCompletion();
+          } else {
+            thumb.style.left = '4px';
+            thumb.classList.remove('confirmed');
+          }
+          currentX = 0;
+        }
+
+        thumb.addEventListener('touchstart', onStart);
+        thumb.addEventListener('touchmove', onMove);
+        thumb.addEventListener('touchend', onEnd);
+        thumb.addEventListener('mousedown', function(e) {
+          onStart(e);
+          function mm(ev) { onMove(ev); }
+          function mu(ev) { onEnd(); document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); }
+          document.addEventListener('mousemove', mm);
+          document.addEventListener('mouseup', mu);
+        });
+      }
+
+      function markInconsistency(itemIndex) {
+        var item = currentItems[itemIndex];
+        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/item/inconsistencia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sku: item.sku, accion: 'marcar' })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) {
+            currentItems[itemIndex].inconsistencia = 'pendiente';
+            showStatus('Inconsistencia marcada', 'success');
+            renderSequentialItem();
+          }
+        })
+        .catch(function(err) { showStatus('Error: ' + err.message, 'error'); });
+      }
+
+      function seqNext() {
+        if (sequentialIndex < currentItems.length - 1) {
+          sequentialIndex++;
+          renderSequentialItem();
+        } else {
+          checkSequentialCompletion();
+        }
+      }
+
+      function checkSequentialCompletion() {
+        var hasInconsistenciaPendiente = currentItems.some(function(it) { return it.inconsistencia === 'pendiente'; });
+
+        if (hasInconsistenciaPendiente) {
+          if (allItemsComplete()) {
+            transitionState('blocked_inconsistency');
+          }
+          return;
+        }
+
+        if (allItemsComplete()) {
+          if (orderState === 'verifying_scan_only') {
+            transitionState('verified_scan_only');
+          } else {
+            transitionState('verified_sequential');
+          }
+        }
+      }
+
+      document.getElementById('seqPrevBtn').onclick = function() {
+        if (sequentialIndex > 0) {
+          sequentialIndex--;
+          renderSequentialItem();
+        }
+      };
+      document.getElementById('seqNextBtn').onclick = seqNext;
+
+      // ============================================
+      // PANEL OVERLAY
+      // ============================================
+      function openPanel() {
+        renderPanel();
+        panelOverlay.classList.add('show');
+      }
+
+      function closePanel() {
+        panelOverlay.classList.remove('show');
+      }
+
+      panelBtnOpen.onclick = openPanel;
+      panelOverlay.onclick = function(e) {
+        if (e.target === panelOverlay) closePanel();
+      };
+
+      function renderPanel() {
+        var totalV = getTotalVerifiedUnits();
+        var totalU = getTotalUnits();
+        var pct = totalU > 0 ? Math.round(totalV / totalU * 100) : 0;
+        document.getElementById('panelProgressFill').style.width = pct + '%';
+        document.getElementById('panelProgressPct').textContent = pct + '%';
+
+        var list = document.getElementById('panelItemsList');
+        list.innerHTML = '';
+
+        currentItems.forEach(function(item, idx) {
+          var v = getVerifiedCount(idx);
+          var complete = isItemComplete(idx);
+          var methods = unitMethods[idx] || [];
+
+          var statusClass = 'gray';
+          var itemClass = '';
+          if (item.inconsistencia === 'pendiente') { statusClass = 'red'; itemClass = 'inconsistent'; }
+          else if (complete) { statusClass = 'green'; itemClass = 'done'; }
+          else if (v > 0) { statusClass = 'yellow'; itemClass = 'partial'; }
+
+          var div = document.createElement('div');
+          div.className = 'panel-item ' + itemClass;
+
+          var methodIcons = methods.map(function(m) {
+            if (m === 'scan') return 'S';
+            if (m === 'ia' || m === 'claude') return 'IA';
+            return 'M';
+          }).join(' ');
+
+          div.innerHTML = '<div class="panel-item-dot ' + statusClass + '"></div>' +
+            '<div class="panel-item-info">' +
+            '<div class="panel-item-name">' + (item.name || item.sku) + '</div>' +
+            '<div class="panel-item-detail">' + (item.sku || '') + ' - ' + v + '/' + item.quantity + (methodIcons ? ' [' + methodIcons + ']' : '') + '</div></div>';
+
+          // Resolve button for inconsistencies
+          if (item.inconsistencia === 'pendiente') {
+            var resolveBtn = document.createElement('button');
+            resolveBtn.className = 'panel-resolve-btn';
+            resolveBtn.textContent = 'Resolver';
+            resolveBtn.setAttribute('data-idx', idx);
+            resolveBtn.onclick = function(e) {
+              e.stopPropagation();
+              openResolveModal(parseInt(this.getAttribute('data-idx')));
+            };
+            div.appendChild(resolveBtn);
+          }
+
+          // Click to navigate to item in sequential
+          div.setAttribute('data-idx', idx);
+          div.onclick = function() {
+            var i = parseInt(this.getAttribute('data-idx'));
+            closePanel();
+            if (currentScreen === 'sequential') {
+              sequentialIndex = i;
+              renderSequentialItem();
+            }
+          };
+
+          list.appendChild(div);
+        });
+      }
+
+      // ============================================
+      // RESOLVE MODAL
+      // ============================================
+      var resolveModal = document.getElementById('resolveModal');
+      var resolveNota = document.getElementById('resolveNota');
+      var resolveCharCount = document.getElementById('resolveCharCount');
+      var resolveConfirmBtn = document.getElementById('resolveConfirmBtn');
+      var resolveItemInfo = document.getElementById('resolveItemInfo');
+      var resolveAction = 'resolver';
+      var resolveItemIdx = -1;
+
+      function openResolveModal(itemIdx) {
+        resolveItemIdx = itemIdx;
+        var item = currentItems[itemIdx];
+        resolveItemInfo.textContent = (item.sku || '') + ' - ' + (item.name || '');
+        resolveNota.value = '';
+        resolveCharCount.textContent = '0/10';
+        resolveConfirmBtn.disabled = true;
+        resolveAction = 'resolver';
+        document.getElementById('resolveOptResolve').classList.add('selected');
+        document.getElementById('resolveOptFaltante').classList.remove('selected');
+        resolveModal.classList.add('show');
+      }
+
+      document.getElementById('resolveOptResolve').onclick = function() {
+        resolveAction = 'resolver';
+        this.classList.add('selected');
+        document.getElementById('resolveOptFaltante').classList.remove('selected');
+      };
+
+      document.getElementById('resolveOptFaltante').onclick = function() {
+        resolveAction = 'confirmar_faltante';
+        this.classList.add('selected');
+        document.getElementById('resolveOptResolve').classList.remove('selected');
+      };
+
+      resolveNota.oninput = function() {
+        var len = resolveNota.value.length;
+        resolveCharCount.textContent = len + '/10';
+        resolveConfirmBtn.disabled = (len < 10);
+      };
+
+      document.getElementById('resolveCancelBtn').onclick = function() {
+        resolveModal.classList.remove('show');
+      };
+
+      resolveConfirmBtn.onclick = function() {
+        if (resolveItemIdx < 0) return;
+        var item = currentItems[resolveItemIdx];
+
+        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/item/inconsistencia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sku: item.sku,
+            accion: resolveAction,
+            nota: resolveNota.value,
+            quien: 'user'
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) {
+            currentItems[resolveItemIdx].inconsistencia = data.inconsistencia;
+            resolveModal.classList.remove('show');
+            showStatus('Inconsistencia ' + (resolveAction === 'resolver' ? 'resuelta' : 'confirmada como faltante'), 'success');
+            renderPanel();
+
+            // Check if all inconsistencies resolved
+            var pendientes = currentItems.filter(function(it) { return it.inconsistencia === 'pendiente'; });
+            if (pendientes.length === 0 && allItemsComplete()) {
+              closePanel();
+              transitionState('verified_sequential');
+            }
+          }
+        })
+        .catch(function(err) { showStatus('Error: ' + err.message, 'error'); });
+      };
+
+      // ============================================
+      // COMPLETE SCREEN
+      // ============================================
+      function showCompleteScreen() {
+        switchScreen('complete');
+
+        var scanCount = 0, iaCount = 0, manualCount = 0;
+        for (var i = 0; i < currentItems.length; i++) {
+          var methods = unitMethods[i] || [];
+          methods.forEach(function(m) {
+            if (m === 'scan') scanCount++;
+            else if (m === 'ia' || m === 'claude') iaCount++;
+            else manualCount++;
+          });
+        }
+
+        var elapsed = '';
+        if (timestampInicio) {
+          var diff = Math.round((Date.now() - new Date(timestampInicio).getTime()) / 1000);
+          var mins = Math.floor(diff / 60);
+          var secs = diff % 60;
+          elapsed = mins + 'm ' + secs + 's';
+        }
+
+        document.getElementById('completeSubtitle').textContent =
+          verificationPath === 'scan_only' ? 'Verificado por escaneo rapido' :
+          verificationPath === 'mixed' ? 'Verificado con metodo mixto' : 'Verificado secuencialmente';
+
+        var stats = document.getElementById('completeStats');
+        stats.innerHTML = '';
+        if (scanCount > 0) stats.innerHTML += '<div class="complete-stat"><div class="complete-stat-val">' + scanCount + '</div><div class="complete-stat-label">SCAN</div></div>';
+        if (iaCount > 0) stats.innerHTML += '<div class="complete-stat"><div class="complete-stat-val">' + iaCount + '</div><div class="complete-stat-label">IA</div></div>';
+        if (manualCount > 0) stats.innerHTML += '<div class="complete-stat"><div class="complete-stat-val">' + manualCount + '</div><div class="complete-stat-label">MANUAL</div></div>';
+        if (elapsed) stats.innerHTML += '<div class="complete-stat"><div class="complete-stat-val">' + elapsed + '</div><div class="complete-stat-label">TIEMPO</div></div>';
+
+        // Faltantes
+        var faltantes = currentItems.filter(function(it) { return it.inconsistencia === 'faltante_confirmado'; });
+        var faltantesDiv = document.getElementById('completeFaltantes');
+        var faltantesList = document.getElementById('completeFaltantesList');
+        if (faltantes.length > 0) {
+          faltantesDiv.classList.remove('hidden');
+          faltantesList.innerHTML = '';
+          faltantes.forEach(function(it) {
+            var d = document.createElement('div');
+            d.className = 'complete-faltante-item';
+            d.textContent = (it.sku || '') + ' - ' + (it.name || '');
+            faltantesList.appendChild(d);
+          });
+        } else {
+          faltantesDiv.classList.add('hidden');
+        }
+      }
+
+      document.getElementById('completeCloseBtn').onclick = function() {
+        var scanCount = 0, iaCount = 0, manualCount = 0;
+        for (var i = 0; i < currentItems.length; i++) {
+          (unitMethods[i] || []).forEach(function(m) {
+            if (m === 'scan') scanCount++;
+            else if (m === 'ia' || m === 'claude') iaCount++;
+            else manualCount++;
+          });
+        }
+
+        var faltantes = currentItems.filter(function(it) { return it.inconsistencia === 'faltante_confirmado'; });
+        var estadoFinal = faltantes.length > 0 ? 'parcial' : orderState;
+
+        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId + '/verificado', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            metodo: verificationPath || 'manual',
+            estado: estadoFinal,
+            camino: verificationPath || 'manual',
+            timestampInicio: timestampInicio || '',
+            timestampCierre: new Date().toISOString(),
+            codigosDesconocidos: codigosDesconocidos,
+            totalUnidades: getTotalUnits(),
+            resumen: { scan: scanCount, ia: iaCount, manual: manualCount }
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showStatus('Pedido cerrado correctamente', 'success');
+            cargarResumenDia();
+          }
+        })
+        .catch(function(err) { showStatus('Error: ' + err.message, 'error'); });
+
+        // Reset and go to panel
+        resetBtn.onclick();
+        switchView('panel');
+      };
+
+      // ============================================
+      // CAMERA
       // ============================================
       function startCamera() {
         if (isScanning) return;
-
         cameraContainer.classList.add('active');
         isScanning = true;
 
@@ -1597,8 +2027,7 @@
           if (result) {
             var codigo = result.getText();
             if (navigator.vibrate) navigator.vibrate(50);
-
-            if (scanMode === 'order') {
+            if (currentScreen === 'order-search' && !currentOrderId) {
               orderInput.value = codigo;
               searchOrder(codigo);
               stopCamera();
@@ -1610,19 +2039,15 @@
       }
 
       function stopCamera() {
-        if (codeReader) {
-          codeReader.reset();
-        }
+        if (codeReader) codeReader.reset();
         cameraContainer.classList.remove('active');
         isScanning = false;
-        visionResult.classList.add('hidden');
         unfreezeCamera();
       }
 
       // ============================================
       // FREEZE & MULTI-FOTO
       // ============================================
-
       var capturedImages = [];
       var capturedOverlay = document.getElementById('capturedOverlay');
       var multiPhotoBar = document.getElementById('multiPhotoBar');
@@ -1633,8 +2058,7 @@
       function freezeCamera(canvas) {
         capturedOverlay.width = canvas.width;
         capturedOverlay.height = canvas.height;
-        var overlayCtx = capturedOverlay.getContext('2d');
-        overlayCtx.drawImage(canvas, 0, 0);
+        capturedOverlay.getContext('2d').drawImage(canvas, 0, 0);
         cameraContainer.classList.add('frozen');
       }
 
@@ -1645,18 +2069,9 @@
         photoThumbnails.innerHTML = '';
       }
 
-      function addThumbnail(imageBase64) {
-        var img = document.createElement('img');
-        img.src = imageBase64;
-        img.className = 'photo-thumb';
-        photoThumbnails.appendChild(img);
-      }
-
       function showMultiPhotoBar() {
         capturePhotoBtn.style.display = 'none';
         multiPhotoBar.classList.add('active');
-
-        // Evaluar fotos mínimas
         var minFotos = (productoAVerificar && productoAVerificar.fotosMinimas) || 1;
         var faltan = minFotos - capturedImages.length;
         if (faltan > 0) {
@@ -1671,7 +2086,6 @@
       function hideMultiPhotoBar() {
         multiPhotoBar.classList.remove('active');
         capturePhotoBtn.style.display = '';
-        // Restaurar estado del botón
         btnEnviarAnalisis.disabled = false;
         btnEnviarAnalisis.textContent = 'Enviar analisis';
       }
@@ -1683,9 +2097,7 @@
         capturePhotoBtn.textContent = 'Tomar otra foto';
       };
 
-      btnEnviarAnalisis.onclick = function() {
-        sendImagesToAnalyze(capturedImages);
-      };
+      btnEnviarAnalisis.onclick = function() { sendImagesToAnalyze(capturedImages); };
 
       function sendImagesToAnalyze(images) {
         hideMultiPhotoBar();
@@ -1715,16 +2127,25 @@
 
           if (data.success) {
             if (productoAVerificar && data.correcto !== undefined) {
-              mostrarResultadoVerificacion(data);
-            } else {
-              showVisionResult(data);
-              if (scanMode === 'product') {
-                if (data.skuVinculado) {
-                  tryMatchBySku(data.skuVinculado, data.codigoRotuladora);
-                } else if (data.modeloDetectado || data.tipoProducto) {
-                  tryMatchModelWithItems(data.modeloDetectado, data.colorDetectado, data.tipoProducto);
+              stopCamera();
+              if (data.correcto) {
+                showStatus('CORRECTO: ' + data.productoDetectado, 'success');
+                var idx = productoAVerificar.index;
+                if (!unitMethods[idx]) unitMethods[idx] = [];
+                unitMethods[idx].push('ia');
+                saveItemVerification(idx, 'ia');
+                if (currentScreen === 'sequential') {
+                  renderSequentialItem();
+                  checkSequentialCompletion();
+                } else if (currentScreen === 'fast-path') {
+                  renderFastPath();
                 }
+              } else {
+                showStatus('INCORRECTO: ' + (data.motivo || 'No coincide'), 'error');
               }
+              productoAVerificar = null;
+            } else {
+              showStatus('Analisis completado', 'success');
             }
           } else {
             showStatus('Error: ' + (data.error || 'Error desconocido'), 'error');
@@ -1735,24 +2156,39 @@
           capturePhotoBtn.textContent = 'Analizar con IA';
           unfreezeCamera();
           showStatus('Error de conexion', 'error');
-          console.error(err);
         });
       }
 
-      cameraBtn.onclick = function() {
-        if (isScanning) {
-          stopCamera();
-        } else {
-          startCamera();
+      capturePhotoBtn.onclick = function() {
+        if (!video.srcObject) { showStatus('Camara no activa', 'error'); return; }
+        var canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        var imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        freezeCamera(canvas);
+        capturedImages.push(imageBase64);
+        var img = document.createElement('img');
+        img.src = imageBase64;
+        img.className = 'photo-thumb';
+        photoThumbnails.appendChild(img);
+
+        var maxFotos = productoAVerificar && productoAVerificar.fotosMaximas;
+        if (maxFotos && capturedImages.length >= maxFotos) {
+          sendImagesToAnalyze(capturedImages);
+          return;
         }
+        showMultiPhotoBar();
+        showStatus('Foto ' + capturedImages.length + ' capturada', 'success');
       };
 
-      closeCameraBtn.onclick = function() {
-        stopCamera();
+      cameraBtn.onclick = function() {
+        if (isScanning) { stopCamera(); } else { startCamera(); }
       };
+      closeCameraBtn.onclick = function() { stopCamera(); };
 
       // ============================================
-      // LECTOR USB EXTERNO
+      // USB SCANNER
       // ============================================
       var usbToggle = document.getElementById('usbToggle');
       var usbScannerInput = document.getElementById('usbScannerInput');
@@ -1778,13 +2214,12 @@
           if (!codigo) return;
           usbScannerInput.value = '';
 
-          if (scanMode === 'order' || !currentItems || currentItems.length === 0) {
+          if (currentScreen === 'order-search' && !currentOrderId) {
             orderInput.value = codigo;
             searchOrder(codigo);
           } else {
             markProductByBarcode(codigo);
           }
-
           setTimeout(function() { usbScannerInput.focus(); }, 100);
         }
       });
@@ -1792,7 +2227,7 @@
       usbScannerInput.addEventListener('blur', function() {
         if (usbModeActive) {
           setTimeout(function() {
-            if (usbModeActive && !document.querySelector('.modal-overlay.show')) {
+            if (usbModeActive && !document.querySelector('.modal-overlay.show') && !document.querySelector('.resolve-modal.show')) {
               usbScannerInput.focus();
             }
           }, 200);
@@ -1800,272 +2235,10 @@
       });
 
       // ============================================
-      // VISION API - Verificación con Claude
+      // INIT
       // ============================================
-
-      function iniciarVerificacionFoto(itemIndex) {
-        productoAVerificar = {
-          index: itemIndex,
-          item: currentItems[itemIndex],
-          descripcion: currentItems[itemIndex].name || currentItems[itemIndex].sku,
-          fotosMinimas: 1
-        };
-        showStatus('Verificando: ' + productoAVerificar.descripcion, 'loading');
-
-        // Consultar fotos mínimas para este tipo de producto
-        var sku = productoAVerificar.item ? productoAVerificar.item.sku : '';
-        var desc = productoAVerificar.descripcion;
-        authFetch(API_URL + '/api/product-config?sku=' + encodeURIComponent(sku) + '&descripcion=' + encodeURIComponent(desc))
-          .then(function(r) { return r.json(); })
-          .then(function(cfg) {
-            if (productoAVerificar) {
-              productoAVerificar.fotosMinimas = cfg.fotosMinimas || 1;
-              if (cfg.fotosMaximas) productoAVerificar.fotosMaximas = cfg.fotosMaximas;
-            }
-          })
-          .catch(function() {}); // Si falla, queda en 1
-
-        scanMode = 'product';
-        startCamera();
-
-        setTimeout(function() {
-          cameraContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      }
-
-      function capturePhoto() {
-        if (!video.srcObject) {
-          showStatus('Camara no activa', 'error');
-          return;
-        }
-
-        var canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-
-        var imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-
-        // Congelar cámara con la foto capturada
-        freezeCamera(canvas);
-
-        // Guardar imagen en el array
-        capturedImages.push(imageBase64);
-        addThumbnail(imageBase64);
-
-        // Si el producto tiene fotosMaximas y ya se alcanzó, enviar directo
-        var maxFotos = productoAVerificar && productoAVerificar.fotosMaximas;
-        if (maxFotos && capturedImages.length >= maxFotos) {
-          showStatus('Foto capturada, enviando a analizar...', 'success');
-          sendImagesToAnalyze(capturedImages);
-          return;
-        }
-
-        // Mostrar botones multi-foto
-        showMultiPhotoBar();
-        showStatus('Foto ' + capturedImages.length + ' capturada', 'success');
-      }
-
-      function mostrarResultadoVerificacion(data) {
-        stopCamera();
-
-        if (data.correcto) {
-          showStatus('CORRECTO: ' + data.productoDetectado, 'success');
-          marcarProductoVerificado(productoAVerificar.index, 'claude');
-        } else {
-          showStatus('INCORRECTO: ' + (data.motivo || 'No coincide'), 'error');
-        }
-
-        visionText.textContent = 'Modelo: ' + (data.modeloDetectado || '?') + ' | Color: ' + (data.colorDetectado || '?');
-        visionColors.innerHTML = '<strong>Confianza:</strong> ' + (data.confianza || 'media');
-        visionResult.classList.remove('hidden');
-
-        productoAVerificar = null;
-      }
-
-      function marcarProductoVerificado(itemIndex, method) {
-        var item = currentItems[itemIndex];
-        if (!unitChecks[itemIndex]) unitChecks[itemIndex] = [];
-
-        for (var j = 0; j < item.quantity; j++) {
-          if (!unitChecks[itemIndex][j] || !unitChecks[itemIndex][j].checked) {
-            unitChecks[itemIndex][j] = { checked: true, method: method };
-            var checkbox = document.querySelector('.unit-checkbox[data-item="' + itemIndex + '"][data-unit="' + j + '"]');
-            if (checkbox) {
-              checkbox.checked = true;
-              checkbox.classList.add('scanned');
-              setTimeout(function() { checkbox.classList.remove('scanned'); }, 2000);
-            }
-            break;
-          }
-        }
-
-        updateCard(itemIndex);
-        highlightCard(itemIndex);
-        updateItemsCount();
-        saveItemVerification(itemIndex, method);
-      }
-
-      function tryMatchBySku(skuVinculado, codigoRotuladora) {
-        var skuUpper = skuVinculado.toUpperCase();
-
-        for (var i = 0; i < currentItems.length; i++) {
-          var item = currentItems[i];
-          if (isItemComplete(i)) continue;
-
-          var itemSku = (item.sku || '').toUpperCase();
-
-          // Ignorar items sin SKU
-          if (!itemSku || itemSku.length < 3) continue;
-
-          // Buscar coincidencia exacta o parcial del SKU (ambos deben tener contenido)
-          if (itemSku === skuUpper || itemSku.indexOf(skuUpper) !== -1 || skuUpper.indexOf(itemSku) !== -1) {
-            showScanSuccess(item.name, item.sku, getCheckedCount(i) + 1, item.quantity);
-            marcarProductoVerificado(i, 'rotuladora');
-            return;
-          }
-        }
-
-        // No encontró match
-        showScanError('SKU ' + skuVinculado + ' (código ' + codigoRotuladora + ') no está en el pedido');
-      }
-
-      function tryMatchModelWithItems(modelo, color, tipoProducto) {
-        if (!modelo && !tipoProducto) {
-          showScanError('No se pudo detectar el producto');
-          return;
-        }
-
-        var modeloUpper = (modelo || '').toUpperCase();
-        var colorUpper = (color || '').toUpperCase();
-        var tipoUpper = (tipoProducto || '').toUpperCase();
-        var mejorMatch = null;
-        var mejorScore = 0;
-
-        for (var i = 0; i < currentItems.length; i++) {
-          var item = currentItems[i];
-          // Saltar items ya completados
-          if (isItemComplete(i)) continue;
-
-          var nombre = (item.name || '').toUpperCase();
-          var sku = (item.sku || '').toUpperCase();
-          var score = 0;
-
-          // Buscar modelo en nombre o SKU
-          if (modeloUpper) {
-            // Match exacto del modelo en el nombre o SKU
-            if (nombre.indexOf(modeloUpper) !== -1) score += 50;
-            if (sku.indexOf(modeloUpper) !== -1) score += 50;
-
-            // Match parcial - palabras del modelo
-            var palabrasModelo = modeloUpper.split(/[\s\-\_]+/);
-            for (var p = 0; p < palabrasModelo.length; p++) {
-              if (palabrasModelo[p].length > 2) {
-                if (nombre.indexOf(palabrasModelo[p]) !== -1) score += 10;
-                if (sku.indexOf(palabrasModelo[p]) !== -1) score += 10;
-              }
-            }
-          }
-
-          // Buscar color
-          if (colorUpper && colorUpper !== 'TRANSPARENTE') {
-            if (nombre.indexOf(colorUpper) !== -1) score += 20;
-            if (sku.indexOf(colorUpper) !== -1) score += 15;
-          }
-
-          // Buscar tipo de producto (funda, vidrio, smartband, auriculares, etc.)
-          if (tipoUpper) {
-            if (tipoUpper.indexOf('FUNDA') !== -1 || tipoUpper.indexOf('CASE') !== -1) {
-              if (sku.indexOf('FT') === 0 || sku.indexOf('FD') === 0 || sku.indexOf('FA') === 0) score += 30;
-            }
-            if (tipoUpper.indexOf('VIDRIO') !== -1 || tipoUpper.indexOf('GLASS') !== -1) {
-              if (sku.indexOf('VF') === 0 || sku.indexOf('VT') === 0) score += 30;
-            }
-            if (tipoUpper.indexOf('SMARTBAND') !== -1 || tipoUpper.indexOf('PULSERA') !== -1 || tipoUpper.indexOf('BAND') !== -1) {
-              if (nombre.indexOf('BAND') !== -1 || nombre.indexOf('SMARTBAND') !== -1 || nombre.indexOf('PULSERA') !== -1) score += 30;
-            }
-            if (tipoUpper.indexOf('AURICULAR') !== -1 || tipoUpper.indexOf('EARBUDS') !== -1 || tipoUpper.indexOf('BUDS') !== -1) {
-              if (nombre.indexOf('AURICULAR') !== -1 || nombre.indexOf('BUDS') !== -1 || nombre.indexOf('EARBUDS') !== -1) score += 30;
-            }
-            if (tipoUpper.indexOf('CARGADOR') !== -1 || tipoUpper.indexOf('FUENTE') !== -1) {
-              if (nombre.indexOf('CARGADOR') !== -1 || nombre.indexOf('FUENTE') !== -1 || nombre.indexOf('CHARGER') !== -1) score += 30;
-            }
-            if (tipoUpper.indexOf('CABLE') !== -1) {
-              if (nombre.indexOf('CABLE') !== -1) score += 30;
-            }
-            if (tipoUpper.indexOf('RELOJ') !== -1 || tipoUpper.indexOf('SMARTWATCH') !== -1 || tipoUpper.indexOf('WATCH') !== -1) {
-              if (nombre.indexOf('RELOJ') !== -1 || nombre.indexOf('SMARTWATCH') !== -1 || nombre.indexOf('WATCH') !== -1) score += 30;
-            }
-          }
-
-          if (score > mejorScore) {
-            mejorScore = score;
-            mejorMatch = { index: i, item: item, score: score };
-          }
-        }
-
-        // Requiere score mínimo de 30 para considerar un match
-        if (mejorMatch && mejorMatch.score >= 30) {
-          stopCamera();
-          var item = mejorMatch.item;
-          var checkedCount = 0;
-          var checks = unitChecks[mejorMatch.index] || [];
-          for (var c = 0; c < item.quantity; c++) {
-            if (checks[c] && (checks[c] === true || checks[c].checked === true)) checkedCount++;
-          }
-
-          showScanSuccess(item.name || item.sku, item.sku, checkedCount + 1, item.quantity);
-          marcarProductoVerificado(mejorMatch.index, 'claude-auto');
-        } else {
-          var detectado = modelo || tipoProducto || 'producto';
-          showScanError('No encontrado: ' + detectado);
-        }
-      }
-
-      function showVisionResult(data) {
-        var info = [];
-        if (data.modeloDetectado) info.push('Modelo: ' + data.modeloDetectado);
-        if (data.colorDetectado) info.push('Color: ' + data.colorDetectado);
-        if (data.tipoProducto) info.push('Tipo: ' + data.tipoProducto);
-
-        visionText.textContent = info.length > 0 ? info.join(' | ') : '(sin datos)';
-        visionColors.innerHTML = data.confianza ? '<strong>Confianza:</strong> ' + data.confianza : '';
-
-        visionResult.classList.remove('hidden');
-        hideStatus();
-      }
-
-      capturePhotoBtn.onclick = capturePhoto;
-
-      // ============================================
-      // RESET
-      // ============================================
-      resetBtn.onclick = function() {
-        currentOrder = null;
-        currentItems = [];
-        unitChecks = {};
-        currentOrderId = '';
-        currentAccount = '';
-        alreadySaved = false;
-        productoAVerificar = null;
-        editMode = false;
-        editModeBtn.textContent = 'Editar';
-        editModeBtn.classList.remove('active');
-        itemsSection.classList.remove('editing');
-        orderInput.value = '';
-        itemsSection.classList.add('hidden');
-        resetBtn.classList.add('hidden');
-        completeBanner.classList.remove('show');
-        visionResult.classList.add('hidden');
-        setScanMode('order');
-        hideStatus();
-      };
-
-      // Iniciar en modo order
-      setScanMode('order');
       switchView('panel');
-      cameraBtn.classList.add('hidden');
+      switchScreen('order-search');
     }
   </script>
 </body>
