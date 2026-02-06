@@ -511,7 +511,10 @@
           <button type="button" class="start-btn fast" id="startFastBtn">Escaneo rapido</button>
           <button type="button" class="start-btn seq" id="startSeqBtn">Secuencial</button>
         </div>
-        <button type="button" class="reset-btn" id="resetBtn" style="margin-top:12px">Cambiar orden</button>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button type="button" class="reset-btn" id="resetBtn" style="flex:1;margin-top:0">Cambiar orden</button>
+          <button type="button" class="reset-btn" id="deleteOrderBtn" style="flex:1;margin-top:0;background:#dc2626">Eliminar orden</button>
+        </div>
       </div>
 
       <!-- Screen: Fast path -->
@@ -1476,7 +1479,7 @@
         renderSequentialItem();
       };
 
-      resetBtn.onclick = function() {
+      function resetOrder() {
         currentItems = [];
         unitMethods = {};
         currentOrderId = '';
@@ -1491,6 +1494,25 @@
         hideStatus();
         stopCamera();
         switchScreen('order-search');
+      }
+
+      resetBtn.onclick = resetOrder;
+
+      document.getElementById('deleteOrderBtn').onclick = function() {
+        if (!currentOrderId) return;
+        if (!confirm('Eliminar orden #' + currentOrderId + ' y todos sus items del registro?')) return;
+        showStatus('Eliminando orden...', 'loading');
+        authFetch(API_URL + '/api/mayorista/order/' + currentOrderId, { method: 'DELETE' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.success) {
+              showStatus('Orden eliminada', 'success');
+              resetOrder();
+            } else {
+              showStatus('Error: ' + (data.error || 'No se pudo eliminar'), 'error');
+            }
+          })
+          .catch(function(err) { showStatus('Error: ' + err.message, 'error'); });
       };
 
       // ============================================

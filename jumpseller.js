@@ -638,6 +638,70 @@ async function updateItemVerification(orderId, sku, verificados, metodo, metodoP
   }
 }
 
+async function deleteOrder(orderId) {
+  if (!sheets || !SHEET_ID) return false;
+
+  try {
+    var sheetName = getTodayMayoristaSheetName();
+
+    // 1. Borrar la fila de la orden en Mayorista_[Day]
+    var orderRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:M'
+    });
+    var orderRows = orderRes.data.values || [];
+    var keepOrderRows = [orderRows[0]]; // header
+    for (var i = 1; i < orderRows.length; i++) {
+      if (orderRows[i][2] !== orderId.toString()) {
+        keepOrderRows.push(orderRows[i]);
+      }
+    }
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEET_ID,
+      range: sheetName + '!A:M'
+    });
+    if (keepOrderRows.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: sheetName + '!A1',
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: keepOrderRows }
+      });
+    }
+
+    // 2. Borrar items de la orden en Mayorista_Items
+    var itemsRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: ITEMS_SHEET_NAME + '!A:L'
+    });
+    var itemRows = itemsRes.data.values || [];
+    var keepItemRows = [itemRows[0]]; // header
+    for (var j = 1; j < itemRows.length; j++) {
+      if (itemRows[j][1] !== orderId.toString()) {
+        keepItemRows.push(itemRows[j]);
+      }
+    }
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SHEET_ID,
+      range: ITEMS_SHEET_NAME + '!A:L'
+    });
+    if (keepItemRows.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: ITEMS_SHEET_NAME + '!A1',
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: keepItemRows }
+      });
+    }
+
+    console.log('Jumpseller: Orden ' + orderId + ' eliminada');
+    return true;
+  } catch (error) {
+    console.error('Jumpseller: Error eliminando orden:', error.message);
+    return false;
+  }
+}
+
 async function checkAndUpdateOrderStatus(orderId) {
   try {
     var items = await getOrderItemsFromSheet(orderId);
@@ -1062,6 +1126,23 @@ router.post('/api/mayorista/order/:id/item/verificar', async function(req, res) 
     }
   } catch (error) {
     console.error('Jumpseller: Error actualizando item:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/mayorista/order/:id - Eliminar orden y sus items
+router.delete('/api/mayorista/order/:id', async function(req, res) {
+  try {
+    var orderId = req.params.id;
+    var result = await deleteOrder(orderId);
+
+    if (result) {
+      res.json({ success: true, mensaje: 'Orden eliminada' });
+    } else {
+      res.status(500).json({ success: false, error: 'No se pudo eliminar la orden' });
+    }
+  } catch (error) {
+    console.error('Jumpseller: Error eliminando orden:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
