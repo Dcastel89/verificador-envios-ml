@@ -1782,7 +1782,7 @@ app.post('/api/vision/analyze', async function(req, res) {
     contentBlocks.push({ type: 'text', text: prompt });
 
     var response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: imageCount > 1 ? 500 : 400,
       messages: [{
         role: 'user',
