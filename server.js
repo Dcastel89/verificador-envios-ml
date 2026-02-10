@@ -337,6 +337,21 @@ function getArgentinaDate(date) {
   return new Date(date.getTime() + (localOffset + argentinaOffset) * 60000);
 }
 
+function formatDate(date) {
+  var d = date || getArgentinaTime();
+  var day = String(d.getDate()).padStart(2, '0');
+  var month = String(d.getMonth() + 1).padStart(2, '0');
+  var year = d.getFullYear();
+  return day + '/' + month + '/' + year;
+}
+
+function formatTime(date) {
+  var d = date || getArgentinaTime();
+  var hours = String(d.getHours()).padStart(2, '0');
+  var minutes = String(d.getMinutes()).padStart(2, '0');
+  return hours + ':' + minutes;
+}
+
 function getDaySheetName(date) {
   var days = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
   var argDate = date ? getArgentinaDate(new Date(date)) : getArgentinaTime();
@@ -727,14 +742,15 @@ async function clearDaySheet(sheetName) {
 }
 
 async function shouldClearOldRecords(sheetName) {
-  // Verifica si hay registros con fecha promesa anterior a hoy
-  // Retorna true si hay que limpiar, false si no hay registros o todos son de hoy
+  // Verifica si los registros son de una semana anterior usando columna A (Fecha de creación)
+  // Retorna true SOLO si TODOS los registros tienen fecha anterior a hoy
+  // (no usa columna Promesa porque envíos demorados siempre tienen promesa vieja)
   if (!sheets || !SHEET_ID) return false;
 
   try {
     var response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: sheetName + '!K2:K1000'
+      range: sheetName + '!A2:A1000'
     });
 
     var rows = response.data.values || [];
@@ -742,22 +758,21 @@ async function shouldClearOldRecords(sheetName) {
       return false;
     }
 
-    // Fecha de hoy en formato ISO (YYYY-MM-DD) para comparar con columna Promesa
-    var argNow = getArgentinaTime();
-    var todayISO = argNow.getFullYear() + '-' +
-      String(argNow.getMonth() + 1).padStart(2, '0') + '-' +
-      String(argNow.getDate()).padStart(2, '0');
+    // Fecha de hoy en formato DD/MM/YYYY para comparar con columna Fecha
+    var todayStr = formatDate(getArgentinaTime());
 
-    // Revisar si hay algún registro con fecha promesa anterior a hoy
+    // Solo limpiar si NINGÚN registro tiene fecha de hoy
+    // (es decir, todos son de la semana pasada)
     for (var i = 0; i < rows.length; i++) {
-      var promesa = rows[i][0];
-      if (promesa && promesa < todayISO) {
-        console.log('Encontrado registro con promesa ' + promesa + ' (hoy es ' + todayISO + '). Limpiando hoja.');
-        return true;
+      var fecha = rows[i][0];
+      if (fecha && fecha === todayStr) {
+        // Hay registros de hoy, NO limpiar
+        return false;
       }
     }
 
-    return false;
+    console.log('Todos los registros son de semana anterior (ninguno con fecha ' + todayStr + '). Limpiando hoja.');
+    return true;
   } catch (error) {
     console.error('Error verificando fecha de registros:', error.message);
     return false;
@@ -948,8 +963,8 @@ async function addPendingShipments(shipments, sheetName) {
 
     var rows = uniqueShipments.map(function(s) {
       var argentinaDate = getArgentinaDate(new Date(s.dateCreated));
-      var fecha = argentinaDate.toLocaleDateString('es-AR');
-      var hora = argentinaDate.toLocaleTimeString('es-AR');
+      var fecha = formatDate(argentinaDate);
+      var hora = formatTime(argentinaDate);
 
       // Formatear promesa de envío (solo fecha, sin hora)
       var promesa = '';
@@ -966,7 +981,7 @@ async function addPendingShipments(shipments, sheetName) {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: sheetName + '!A1',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       resource: { values: rows }
     });
@@ -1002,8 +1017,8 @@ async function markAsVerified(shipmentId, items, verificacionDetalle, isParcial)
     }
 
     var argentinaTime = getArgentinaTime();
-    var fecha = argentinaTime.toLocaleDateString('es-AR');
-    var hora = argentinaTime.toLocaleTimeString('es-AR');
+    var fecha = formatDate(argentinaTime);
+    var hora = formatTime(argentinaTime);
 
     // Construir string de SKUs con estado de verificación
     var itemsStr = '';
@@ -1057,7 +1072,7 @@ async function markAsVerified(shipmentId, items, verificacionDetalle, isParcial)
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: sheetName + '!A1',
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         resource: { values: [[fecha, hora, shipmentId, '', '', itemsStr, estado, hora, metodoStr, '', '', '']] }
       });
@@ -1065,7 +1080,7 @@ async function markAsVerified(shipmentId, items, verificacionDetalle, isParcial)
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: sheetName + '!F' + rowIndex + ':I' + rowIndex,
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW',
         resource: { values: [[itemsStr, estado, hora, metodoStr]] }
       });
     }
@@ -1112,12 +1127,12 @@ async function markAsDespachado(shipmentId, estadoML) {
     }
 
     var argentinaTime = getArgentinaTime();
-    var hora = argentinaTime.toLocaleTimeString('es-AR');
+    var hora = formatTime(argentinaTime);
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: sheetName + '!G' + rowIndex + ':I' + rowIndex,
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       resource: { values: [[estadoML, hora, 'Sin escanear']] }
     });
 
@@ -1938,13 +1953,13 @@ app.post('/api/auth/token', async function(req, res) {
 });
 
 // Endpoint unificado para sincronizar envíos y actualizar estados
+// Usa sync incremental (no borra registros existentes ni verificaciones)
 app.get('/api/sync-morning', async function(req, res) {
   try {
     var sheetName = getTodaySheetName();
 
-    // 1. Sincronizar envíos nuevos desde ML
-    lastMorningSyncDate = null;
-    await syncMorningShipments();
+    // 1. Sincronizar envíos nuevos desde ML (incremental, preserva existentes)
+    await syncPendingShipments();
 
     // 2. Actualizar estados de envíos existentes
     var actualizados = await actualizarEstadosEnvios();
@@ -2349,14 +2364,14 @@ async function saveSkuError(sku, descripcion, nota, envioId, cuenta, itemId) {
     }
 
     // Agregar el error
-    var now = new Date();
-    var fecha = now.toLocaleDateString('es-AR');
-    var hora = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    var now = getArgentinaTime();
+    var fecha = formatDate(now);
+    var hora = formatTime(now);
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: 'Errores_SKU!A:H',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       resource: {
         values: [[fecha, hora, sku, descripcion || '', nota || '', envioId || '', cuenta || '', itemId || '']]
       }
