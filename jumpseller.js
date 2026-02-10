@@ -43,6 +43,21 @@ function getArgentinaTime() {
   return new Date(now.getTime() + (localOffset + argentinaOffset) * 60000);
 }
 
+function formatDate(date) {
+  var d = date || getArgentinaTime();
+  var day = String(d.getDate()).padStart(2, '0');
+  var month = String(d.getMonth() + 1).padStart(2, '0');
+  var year = d.getFullYear();
+  return day + '/' + month + '/' + year;
+}
+
+function formatTime(date) {
+  var d = date || getArgentinaTime();
+  var hours = String(d.getHours()).padStart(2, '0');
+  var minutes = String(d.getMinutes()).padStart(2, '0');
+  return hours + ':' + minutes;
+}
+
 function getMayoristaDaySheetName(date) {
   var days = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
   var argDate = date ? new Date(date) : getArgentinaTime();
@@ -240,8 +255,8 @@ async function saveAllOrdersToSheet(sheetName, orders) {
     await ensureMayoristaSheetExists(sheetName);
 
     var argTime = getArgentinaTime();
-    var fecha = argTime.toLocaleDateString('es-AR');
-    var hora = argTime.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    var fecha = formatDate(argTime);
+    var hora = formatTime(argTime);
 
     // Construir todas las filas de una vez
     var rows = orders.map(function(order) {
@@ -270,7 +285,7 @@ async function saveAllOrdersToSheet(sheetName, orders) {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
       range: sheetName + '!A:I',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       resource: { values: rows }
     });
 
@@ -353,7 +368,7 @@ async function markOrderVerified(sheetName, orderId, metodo, extraData) {
       return false;
     }
 
-    var horaVerif = getArgentinaTime().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var horaVerif = formatTime(getArgentinaTime());
 
     var estadoVerif = (extraData && extraData.estado) || 'verified_sequential';
     var camino = (extraData && extraData.camino) || metodo || 'manual';
@@ -367,7 +382,7 @@ async function markOrderVerified(sheetName, orderId, metodo, extraData) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: sheetName + '!G' + rowIndex + ':M' + rowIndex,
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       resource: {
         values: [['Verificado', horaVerif, metodo || 'manual', estadoVerif, camino, timestampInicio, codigosDesconocidos]]
       }
@@ -604,14 +619,14 @@ async function updateItemVerification(orderId, sku, verificados, metodo, metodoP
       return false;
     }
 
-    var horaVerif = getArgentinaTime().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var horaVerif = formatTime(getArgentinaTime());
 
     // Si viene metodoPorUnidad, escribir hasta J (G:J)
     if (metodoPorUnidad && Array.isArray(metodoPorUnidad)) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: ITEMS_SHEET_NAME + '!G' + rowIndex + ':J' + rowIndex,
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW',
         resource: {
           values: [[verificados, metodo || 'manual', horaVerif, JSON.stringify(metodoPorUnidad)]]
         }
@@ -621,7 +636,7 @@ async function updateItemVerification(orderId, sku, verificados, metodo, metodoP
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
         range: ITEMS_SHEET_NAME + '!G' + rowIndex + ':I' + rowIndex,
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW',
         resource: {
           values: [[verificados, metodo || 'manual', horaVerif]]
         }
@@ -909,7 +924,7 @@ async function syncJumpsellerOrders() {
   var saved = await saveAllOrdersToSheet(sheetName, allOrders);
 
   // Guardar items en hoja separada para verificación parcial
-  var fecha = getArgentinaTime().toLocaleDateString('es-AR');
+  var fecha = formatDate(getArgentinaTime());
   await clearMayoristaItemsForDate(fecha);
   var itemsSaved = await saveAllItemsToSheet(allOrders, fecha);
 
@@ -945,7 +960,7 @@ router.get('/api/mayorista/orders', async function(req, res) {
 
     res.json({
       success: true,
-      fecha: getArgentinaTime().toLocaleDateString('es-AR'),
+      fecha: formatDate(getArgentinaTime()),
       hoja: sheetName,
       estadisticas: {
         total: total,
@@ -1396,7 +1411,7 @@ router.post('/api/mayorista/import/:id', async function(req, res) {
     var saved = await saveAllOrdersToSheet(sheetName, ordersToSave);
 
     // Guardar items
-    var fecha = getArgentinaTime().toLocaleDateString('es-AR');
+    var fecha = formatDate(getArgentinaTime());
     var itemsSaved = await saveAllItemsToSheet(ordersToSave, fecha);
 
     console.log('Jumpseller: Orden ' + orderId + ' importada exitosamente');
@@ -1453,7 +1468,7 @@ router.get('/api/mayorista/resumen', async function(req, res) {
 
     res.json({
       success: true,
-      fecha: getArgentinaTime().toLocaleDateString('es-AR'),
+      fecha: formatDate(getArgentinaTime()),
       estadisticas: {
         total: total,
         verificados: verificados,
