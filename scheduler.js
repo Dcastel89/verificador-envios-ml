@@ -3,7 +3,7 @@ var cron = require('node-cron');
 var scheduledTasks = [];
 
 function initScheduler(tasks) {
-  // tasks = { syncMorning: fn, copyHistory: fn }
+  // tasks = { syncMorning: fn, copyHistory: fn, midnightBackup: fn }
 
   // Sync matutino a las 8:30 de lunes a viernes
   var morningTask = cron.schedule('30 8 * * 1-5', async function() {
@@ -31,7 +31,22 @@ function initScheduler(tasks) {
   });
   scheduledTasks.push(historyTask);
 
-  console.log('Scheduler iniciado: sync 8:30, historial 19:00 (lunes a viernes)');
+  // Backup nocturno a medianoche, todos los días
+  if (tasks.midnightBackup) {
+    var backupTask = cron.schedule('0 0 * * *', async function() {
+      console.log('=== CRON: Ejecutando backup nocturno 00:00 ===');
+      try {
+        await tasks.midnightBackup();
+      } catch (error) {
+        console.error('Error en backup nocturno:', error.message);
+      }
+    }, {
+      timezone: 'America/Argentina/Buenos_Aires'
+    });
+    scheduledTasks.push(backupTask);
+  }
+
+  console.log('Scheduler iniciado: sync 8:30, historial 19:00, backup 00:00');
 }
 
 function stopScheduler() {

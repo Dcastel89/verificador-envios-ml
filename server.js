@@ -10,6 +10,7 @@ const { buildVerificationPrompt, buildExtractionPrompt, buildConfigDescriptionPr
 const jumpsellerRouter = require('./jumpseller');
 const auth = require('./auth');
 const barcodesRouter = require('./barcodes');
+const midnightBackup = require('./midnight-backup');
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -50,6 +51,9 @@ app.use(jumpsellerRouter);
 // Configurar y montar el módulo de Barcodes
 barcodesRouter.configure(sheets, SHEET_ID, auth.requireAuth);
 app.use(barcodesRouter);
+
+// Configurar backup nocturno (ML sheet + Mayorista sheet)
+midnightBackup.configure(sheets, SHEET_ID, '1Z9L_9X0Z7UlFgRm65uIBFrGYkRmLy-OL2GTDqnFAi3M');
 
 // Cuentas de MercadoLibre - los tokens se actualizan desde Google Sheets
 const accounts = [
@@ -1291,12 +1295,6 @@ async function syncMorningShipments() {
 
   await ensureDaySheetExists(sheetName);
 
-  // Verificar si los registros son de una semana anterior y limpiarlos
-  var needsClear = await shouldClearOldRecords(sheetName);
-  if (needsClear) {
-    await clearDaySheet(sheetName);
-  }
-
   // Obtener IDs existentes para no duplicar y preservar sus estados
   var existingIds = await getExistingShipmentIds(sheetName);
   console.log('Envíos existentes en hoja: ' + existingIds.length);
@@ -2496,6 +2494,17 @@ app.post('/api/copiar-historial', async function(req, res) {
   }
 });
 
+// Endpoint para ejecutar backup nocturno manualmente
+app.post('/api/backup-nocturno', async function(req, res) {
+  try {
+    var results = await midnightBackup.runMidnightBackup();
+    res.json({ success: true, results: results });
+  } catch (error) {
+    console.error('Error en backup nocturno manual:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Endpoint para limpiar duplicados de la hoja del día
 app.post('/api/limpiar-duplicados', async function(req, res) {
   if (!sheets || !SHEET_ID) {
@@ -2974,15 +2983,16 @@ async function initializeServer() {
     console.error('Error cargando datos:', error.message);
   }
 
-  // Iniciar tareas programadas (8:30 sync, 19:00 historial)
+  // Iniciar tareas programadas (8:30 sync, 19:00 historial, 00:00 backup)
   scheduler.initScheduler({
     syncMorning: syncMorningShipments,
-    copyHistory: copyDailyToHistory
+    copyHistory: copyDailyToHistory,
+    midnightBackup: midnightBackup.runMidnightBackup
   });
 
   app.listen(PORT, function() {
     console.log('Servidor corriendo en puerto ' + PORT);
-    // Sync automático deshabilitado - solo manual o programado (8:30 y 19:00)
+    // Sync automático deshabilitado - solo manual o programado (8:30, 19:00, 00:00)
   });
 }
 
