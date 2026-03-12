@@ -223,14 +223,14 @@ async function insertErroresSku(rows) {
 async function runMidnightBackup() {
   console.log('=== BACKUP NOCTURNO: Iniciando ===');
 
-  if (!db.isConfigured()) {
-    console.log('BACKUP: DATABASE_URL no configurada, saltando backup');
-    return { skipped: true, reason: 'DATABASE_URL no configurada' };
+  if (!sheets) {
+    console.log('BACKUP: Google Sheets no configurado, saltando');
+    return { skipped: true, reason: 'Sheets no configurado' };
   }
 
-  if (!sheets) {
-    console.log('BACKUP: Google Sheets no configurado, saltando backup');
-    return { skipped: true, reason: 'Sheets no configurado' };
+  var dbAvailable = db.isConfigured();
+  if (!dbAvailable) {
+    console.log('BACKUP: DATABASE_URL no configurada, se limpiarán hojas sin backup a DB');
   }
 
   var yesterday = getYesterdayInfo();
@@ -239,118 +239,104 @@ async function runMidnightBackup() {
   var results = {};
 
   // --- ENVÍOS ML ---
+  var enviosSheet = 'Envios_' + yesterday.dayName;
   try {
-    var enviosSheet = 'Envios_' + yesterday.dayName;
     var enviosRows = await readSheet(ML_SHEET_ID, enviosSheet + '!A2:L1000');
     console.log('BACKUP: Envíos leídos: ' + enviosRows.length + ' filas');
 
-    if (enviosRows.length > 0) {
-      var enviosResult = await insertEnvios(enviosRows, yesterday.fechaISO);
-      results.envios = { ok: true, read: enviosRows.length, inserted: enviosResult.count };
-      console.log('BACKUP: Envíos insertados: ' + enviosResult.count);
-
-      await clearSheet(ML_SHEET_ID, enviosSheet + '!A2:L1000');
-      console.log('BACKUP: Hoja ' + enviosSheet + ' limpiada');
+    if (enviosRows.length > 0 && dbAvailable) {
+      try {
+        var enviosResult = await insertEnvios(enviosRows, yesterday.fechaISO);
+        results.envios = { ok: true, read: enviosRows.length, inserted: enviosResult.count };
+        console.log('BACKUP: Envíos insertados: ' + enviosResult.count);
+      } catch (dbError) {
+        console.error('BACKUP DB ERROR envíos:', dbError.message);
+        results.envios = { ok: false, error: dbError.message };
+      }
     } else {
-      results.envios = { ok: true, read: 0, inserted: 0 };
+      results.envios = { ok: true, read: enviosRows.length, inserted: 0 };
     }
+
+    await clearSheet(ML_SHEET_ID, enviosSheet + '!A2:L1000');
+    console.log('BACKUP: Hoja ' + enviosSheet + ' limpiada');
   } catch (error) {
-    console.error('BACKUP ERROR envíos:', error.message);
+    console.error('BACKUP ERROR envíos (sheets):', error.message);
     results.envios = { ok: false, error: error.message };
   }
 
   // --- MAYORISTA ÓRDENES ---
+  var mayoristaSheet = 'Mayorista_' + yesterday.dayName;
   try {
-    var mayoristaSheet = 'Mayorista_' + yesterday.dayName;
     var mayoristaRows = await readSheet(MAYORISTA_SHEET_ID, mayoristaSheet + '!A2:M1000');
     console.log('BACKUP: Mayorista leídos: ' + mayoristaRows.length + ' filas');
 
-    if (mayoristaRows.length > 0) {
-      var mayoristaResult = await insertMayorista(mayoristaRows, yesterday.fechaISO);
-      results.mayorista = { ok: true, read: mayoristaRows.length, inserted: mayoristaResult.count };
-      console.log('BACKUP: Mayorista insertados: ' + mayoristaResult.count);
-
-      await clearSheet(MAYORISTA_SHEET_ID, mayoristaSheet + '!A2:M1000');
-      console.log('BACKUP: Hoja ' + mayoristaSheet + ' limpiada');
+    if (mayoristaRows.length > 0 && dbAvailable) {
+      try {
+        var mayoristaResult = await insertMayorista(mayoristaRows, yesterday.fechaISO);
+        results.mayorista = { ok: true, read: mayoristaRows.length, inserted: mayoristaResult.count };
+        console.log('BACKUP: Mayorista insertados: ' + mayoristaResult.count);
+      } catch (dbError) {
+        console.error('BACKUP DB ERROR mayorista:', dbError.message);
+        results.mayorista = { ok: false, error: dbError.message };
+      }
     } else {
-      results.mayorista = { ok: true, read: 0, inserted: 0 };
+      results.mayorista = { ok: true, read: mayoristaRows.length, inserted: 0 };
     }
+
+    await clearSheet(MAYORISTA_SHEET_ID, mayoristaSheet + '!A2:M1000');
+    console.log('BACKUP: Hoja ' + mayoristaSheet + ' limpiada');
   } catch (error) {
-    console.error('BACKUP ERROR mayorista:', error.message);
+    console.error('BACKUP ERROR mayorista (sheets):', error.message);
     results.mayorista = { ok: false, error: error.message };
   }
 
-  // --- MAYORISTA ITEMS (filtrado por fecha de ayer) ---
+  // --- MAYORISTA ITEMS (limpiar todo) ---
   try {
     var allItems = await readSheet(MAYORISTA_SHEET_ID, 'Mayorista_Items!A2:L5000');
-    var yesterdayItems = allItems.filter(function(row) {
-      return row[0] === yesterday.fechaStr;
-    });
-    console.log('BACKUP: Mayorista Items del día: ' + yesterdayItems.length + ' de ' + allItems.length + ' total');
+    console.log('BACKUP: Mayorista Items: ' + allItems.length + ' filas');
 
-    if (yesterdayItems.length > 0) {
-      var itemsResult = await insertMayoristaItems(yesterdayItems);
-      results.mayoristaItems = { ok: true, read: yesterdayItems.length, inserted: itemsResult.count };
-      console.log('BACKUP: Mayorista Items insertados: ' + itemsResult.count);
-
-      // Reescribir solo las filas que NO son de ayer
-      var remainingItems = allItems.filter(function(row) {
-        return row[0] !== yesterday.fechaStr;
-      });
-
-      await clearSheet(MAYORISTA_SHEET_ID, 'Mayorista_Items!A2:L5000');
-
-      if (remainingItems.length > 0) {
-        await sheets.spreadsheets.values.update({
-          spreadsheetId: MAYORISTA_SHEET_ID,
-          range: 'Mayorista_Items!A2:L' + (remainingItems.length + 1),
-          valueInputOption: 'RAW',
-          resource: { values: remainingItems }
-        });
+    if (allItems.length > 0 && dbAvailable) {
+      try {
+        var itemsResult = await insertMayoristaItems(allItems);
+        results.mayoristaItems = { ok: true, read: allItems.length, inserted: itemsResult.count };
+        console.log('BACKUP: Mayorista Items insertados: ' + itemsResult.count);
+      } catch (dbError) {
+        console.error('BACKUP DB ERROR mayorista items:', dbError.message);
+        results.mayoristaItems = { ok: false, error: dbError.message };
       }
-      console.log('BACKUP: Mayorista Items limpiados (quedan ' + remainingItems.length + ' de otros días)');
     } else {
-      results.mayoristaItems = { ok: true, read: 0, inserted: 0 };
+      results.mayoristaItems = { ok: true, read: allItems.length, inserted: 0 };
     }
+
+    await clearSheet(MAYORISTA_SHEET_ID, 'Mayorista_Items!A2:L5000');
+    console.log('BACKUP: Mayorista Items limpiados');
   } catch (error) {
-    console.error('BACKUP ERROR mayorista items:', error.message);
+    console.error('BACKUP ERROR mayorista items (sheets):', error.message);
     results.mayoristaItems = { ok: false, error: error.message };
   }
 
-  // --- ERRORES SKU (filtrado por fecha de ayer) ---
+  // --- ERRORES SKU (limpiar todo) ---
   try {
     var allErrors = await readSheet(ML_SHEET_ID, 'Errores_SKU!A2:H5000');
-    var yesterdayErrors = allErrors.filter(function(row) {
-      return row[0] === yesterday.fechaStr;
-    });
-    console.log('BACKUP: Errores SKU del día: ' + yesterdayErrors.length + ' de ' + allErrors.length + ' total');
+    console.log('BACKUP: Errores SKU: ' + allErrors.length + ' filas');
 
-    if (yesterdayErrors.length > 0) {
-      var errorsResult = await insertErroresSku(yesterdayErrors);
-      results.erroresSku = { ok: true, read: yesterdayErrors.length, inserted: errorsResult.count };
-      console.log('BACKUP: Errores SKU insertados: ' + errorsResult.count);
-
-      // Reescribir solo las filas que NO son de ayer
-      var remainingErrors = allErrors.filter(function(row) {
-        return row[0] !== yesterday.fechaStr;
-      });
-
-      await clearSheet(ML_SHEET_ID, 'Errores_SKU!A2:H5000');
-
-      if (remainingErrors.length > 0) {
-        await sheets.spreadsheets.values.update({
-          spreadsheetId: ML_SHEET_ID,
-          range: 'Errores_SKU!A2:H' + (remainingErrors.length + 1),
-          valueInputOption: 'RAW',
-          resource: { values: remainingErrors }
-        });
+    if (allErrors.length > 0 && dbAvailable) {
+      try {
+        var errorsResult = await insertErroresSku(allErrors);
+        results.erroresSku = { ok: true, read: allErrors.length, inserted: errorsResult.count };
+        console.log('BACKUP: Errores SKU insertados: ' + errorsResult.count);
+      } catch (dbError) {
+        console.error('BACKUP DB ERROR errores sku:', dbError.message);
+        results.erroresSku = { ok: false, error: dbError.message };
       }
-      console.log('BACKUP: Errores SKU limpiados (quedan ' + remainingErrors.length + ' de otros días)');
     } else {
-      results.erroresSku = { ok: true, read: 0, inserted: 0 };
+      results.erroresSku = { ok: true, read: allErrors.length, inserted: 0 };
     }
+
+    await clearSheet(ML_SHEET_ID, 'Errores_SKU!A2:H5000');
+    console.log('BACKUP: Errores SKU limpiados');
   } catch (error) {
-    console.error('BACKUP ERROR errores sku:', error.message);
+    console.error('BACKUP ERROR errores sku (sheets):', error.message);
     results.erroresSku = { ok: false, error: error.message };
   }
 
